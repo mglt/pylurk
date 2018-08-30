@@ -8,22 +8,20 @@ from time import time
 TLS12Status = Enum( Byte, 
     request = 0, 
     success = 1, 
-    undefined_error = 3, 
+    undefined_error = 2, 
     invalid_payload_format = 3, 
     ## code points for rsa authentication
     invalid_key_id_type = 4, 
     invalid_key_id = 5, 
-    invalid_tls_version = 6, 
-    invalid_tls_random = 7, 
-    invalid_prf = 8, 
-    invalid_encrypted_premaster = 9, 
+    invalid_tls_random = 6, 
+    invalid_freshness_funct = 7, 
+    invalid_encrypted_premaster = 8,
+    invalid_finished = 9,
     ## code points for ecdhe authentication
     invalid_ec_type = 10,
-    invalid_ec_basistype = 11, 
-    invalid_ec_curve = 12,
-    invalid_ec_point_format = 13,
-    invalid_poo_prf = 138,
-    invalid_poo = 139
+    invalid_ec_curve = 11,
+    invalid_poo_prf = 12,
+    invalid_poo = 13
 )
 
 
@@ -31,8 +29,9 @@ TLS12Type = Enum( Byte,
        capabilities = 0, 
        ping = 1, 
        rsa_master = 2, 
-       rsa_extended_master = 3, 
-       ecdhe = 4
+       rsa_master_with_poh = 3, 
+       rsa_extended_master = 4, 
+       ecdhe = 5
 )
 
 ############# LURKTLSCapabilitiesResponse
@@ -62,7 +61,7 @@ ProtocolVersionMajor = Enum( BytesInteger(1),
     TLS12M = 3,
 )
 ProtocolVersionMinor = Enum( BytesInteger(1),
-    TLS11m = 3,
+    TLS11m = 2,
     TLS12m = 3,
 )
 
@@ -76,22 +75,20 @@ ProtocolVersionList = Prefixed(
     GreedyRange(ProtocolVersion)    
 )
 
-PRFAlgorithm = Enum( BytesInteger(1),
-    sha256_null = 0,
-    sha256_sha256 = 1, 
-    intrinsic_null = 2, 
-    intrinsic_sha256 = 2, 
+FreshnessFunct = Enum( BytesInteger(1),
+    sha256 = 0,
+    null = 255, 
 )
 
-PRFAlgorithmList = Prefixed(
+FreshnessFunctList = Prefixed(
     BytesInteger(1),
-    GreedyRange(PRFAlgorithm)
+    GreedyRange(FreshnessFunct)
 )
 
 TLS12RSACapability = Struct( 
     "key_id_type" / KeyPairIDTypeList, 
     "tls_version" / ProtocolVersionList,
-    "prf" / PRFAlgorithmList,
+    "freshness_funct" / FreshnessFunctList,
     "cert" / Certificate, 
 )
 
@@ -160,7 +157,7 @@ TLS12ECDHECapability = Struct(
     "poo_prf" / POOPRFList
 )
 
-Void = Struct()
+#Void = Struct()
 
 
 TLS12Capability = Prefixed( 
@@ -217,16 +214,20 @@ PreMaster = Struct(
 
 
 
-TLS12Base = Struct(
-    "key_id" / KeyPairID , 
-    "client_random" / Random,
-    "server_random" / Random,
-    "tls_version" /  ProtocolVersion, 
-    "prf" / PRFAlgorithm
-)
+#TLS12Base = Struct(
+#    "key_id" / KeyPairID , 
+#    "client_random" / Random,
+#    "server_random" / Random,
+#    "tls_version" /  ProtocolVersion, 
+#    "freshness_funct" / FreshnessFunct
+#)
 
 TLS12RSAMasterRequestPayload = Struct(
-    Embedded(TLS12Base),
+##    Embedded(TLS12Base),
+    "key_id" / KeyPairID, 
+    "freshness_funct" / FreshnessFunct,
+    "client_random" / Random,
+    "server_random" / Random,
     "encrypted_premaster" / GreedyBytes
 )
 
@@ -236,20 +237,199 @@ TLS12RSAMasterResponsePayload = Struct(
                                 ).parse(b"") )
 )
 
+## handshake message
+
+## The necessary structure for the handshake are defined 
+## in RFC5246
+##
+## Client                                               Server
+## 
+## ClientHello                  -------->
+##                                                 ServerHello
+##                                                Certificate*
+##                                          ServerKeyExchange*
+##                                         CertificateRequest*
+##                              <--------      ServerHelloDone
+## Certificate*
+## ClientKeyExchange
+## CertificateVerify*
+## [ChangeCipherSpec]
+## Finished                     -------->
+##                                          [ChangeCipherSpec]
+##                              <--------             Finished
+## Application Data             <------->     Application Data
+## 
+##              Figure 1.  Message flow for a full handshake
+
+### ClientHello
+
+SessionID = Prefixed( 
+    BytesInteger(1),
+    GreedyBytes
+)
+
+CipherSuite = Enum ( BytesInteger(2),
+    TLS_RSA_WITH_AES_128_GCM_SHA256 = 156, #9c, 
+    TLS_RSA_WITH_AES_256_GCM_SHA384 = 157, #9d,
+    TLS_DHE_RSA_WITH_AES_128_GCM_SHA256 = 158, #9e, 
+    TLS_DHE_RSA_WITH_AES_256_GCM_SHA384 = 159, #9f, 
+    TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 = 49195, #c0 2b, 
+    TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 = 49196, #c0 2c, 
+    TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 =  49197, #c0 2f,
+    TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 =  49212, #c0 3c, 
+)
+
+CipherSuites = Prefixed(
+    BytesInteger(2),
+    GreedyRange(CipherSuite)
+)
+
+CompressionMethod = Enum ( BytesInteger(2),
+    null = 0,
+)
+
+CompressionMethods = Prefixed(
+    BytesInteger(2),
+    GreedyRange(CompressionMethod)
+)
+
+ExtensionType = Enum ( BytesInteger(2),
+    elliptic_curves = 10, 
+    ec_point_formats = 11,
+    extended_master_secret = 23,
+)
+
+ExtensionData = Prefixed(
+    BytesInteger(2),
+    GreedyBytes
+)
+
+Extension = Struct(
+    "extension_type" / ExtensionType,
+    "extension_data" / ExtensionData
+)
+
+Extensions = Prefixed(
+    BytesInteger(2),
+    GreedyRange( Extension )
+)
+
+ClientHello = Struct(
+    "client_version" / ProtocolVersion,
+    "random" / Random, 
+    "session_id" / SessionID,
+    "cipher_suites" / CipherSuites,
+    "compression_methods" / CompressionMethods, 
+    "extensions" / Extensions
+)
+
+### ServerHello
+
+ServerHello = Struct(
+    "server_version" / ProtocolVersion, 
+    "random" / Random, 
+    "session_id" / SessionID, 
+    "cipher_suite" / CipherSuite, 
+    "compression_method" / CompressionMethod, 
+    "extensions" / GreedyRange( Extension )
+)
+
+## Certificate 
+## already defined 
+
+## ServerKeyExchange
+## not sent in the case of RSA
+ServerKeyExchange = Const(b"")
+
+## CertificateRequest*
+## not provides when the client is not authenticated.
+#CertificateRequest = Const(b"")
+
+ServerHelloDone = Const(b"")
+
+### Client Key Exchange
+
+##Certificate*
+## already defined
+
+## ClientKeyExchange
+## rsa: greedyBytes for EncryptedPremaster
+ClientKeyExchange = GreedyBytes
+
+##CertificateVerify*
+## client authentication
+
+Finished = Struct(
+    "verify_data" / GreedyBytes
+)
+
+HelloRequest = Const(b"")
+
+
+HandshakeType = Enum( Byte , 
+    hello_request = 0, 
+    client_hello = 1, 
+    server_hello = 2,
+    certificate = 11, 
+    server_key_exchange = 12,
+    certificate_request = 13, 
+    server_hello_done = 14,
+    certificate_verify = 15, 
+    client_key_exchange = 16,
+    finished = 20,
+)
+
+## this is a bit different from the specification of the RFC as the
+## length is included into the body structure. This enable the use of
+## the Prefixed structure. The specification has a field "length" that
+## is that indicates the size of the body. This was hard to implement 
+## as teh length is expressed in bytes.
+
+Handshake = Struct(
+    "msg_type" / HandshakeType, 
+    "body" / Prefixed(
+          BytesInteger(3),
+          Switch( this.msg_type, 
+          { 
+              "hello_request" : HelloRequest,  
+              "client_hello" : ClientHello, 
+              "server_hello" : ServerHello,
+              "certificate" : Certificate,
+              "server_key_exchange" : ServerKeyExchange, 
+##             "certificate_request" : CertificateRequest, 
+              "server_hello_done" : ServerHelloDone, 
+##             "certificate_verify" : CertificateVerify, 
+              "client_key_exchange" : ClientKeyExchange,
+              "finished" : Finished
+          } )
+          )
+    
+) 
+
+HandshakeMessages = Array( 5, Handshake ) 
+#HandshakeMessagesRSA = Stuct(
+#    "client_hello" / ClientHello, 
+#    "server_hello" / ServerHello, 
+#    "Certificate" / Certificate, 
+#    "server_hello_done" / ServerHelloDone, 
+#    "client_key_exchange" / ClientKeyExchange
+#)
+
+
+
 ## Extended master
 
-SessionHash = Prefixed(
-         BytesInteger(2),
-         "session_hash" / GreedyBytes
-)
+## SessionHash = Prefixed(
+##         BytesInteger(2),
+##         "session_hash" / GreedyBytes
+##)
+
 
 
 TLS12ExtendedRSAMasterRequestPayload = Struct(
     "key_id" / KeyPairID , 
-    "tls_version" /  ProtocolVersion, 
-    "prf" / PRFAlgorithm,
-    "session_hash" / SessionHash,
-    "encrypted_premaster" / GreedyBytes
+    "freshness_funct" / FreshnessFunct,
+    "handshake_messages" / HandshakeMessages,
 )
 
 
@@ -312,7 +492,11 @@ ServerECDHParams = Struct(
 
 
 TLS12ECDHERequestPayload = Struct(
-    Embedded(TLS12Base),
+#    Embedded(TLS12Base),
+    "key_id" / KeyPairID , 
+    "freshness_funct" / FreshnessFunct,
+    "client_random" / Random,
+    "server_random" / Random,
     "sig_and_hash" / SignatureAndHashAlgorithm,
     "ecdhe_params" / ServerECDHParams, 
     "poo_params" / Struct( 

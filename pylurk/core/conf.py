@@ -4,8 +4,8 @@ data_dir = pkg_resources.resource_filename( __name__, '../data/')
 
 
 default_conf = { 
-    'role' : "server",  # "client", "server"
-         'connectivity' : { 
+    'role' : 'server', # "client", "server"
+    'connectivity' : { 
              'type' : "udp",  # "udp", "local", 
               'ip_address' : "127.0.0.1", 
               'port' : 6789, 
@@ -32,8 +32,7 @@ default_conf = {
           'version' : "v1", 
           'type' : "rsa_master",
           'key_id_type' : [  "sha256_32" ], 
-          'tls_version' : [ "TLS1.2" ],
-          'prf' : [ "sha256_null", "sha256_sha256" ], 
+          'freshness_funct' : [ "null", "sha256" ], 
           'random_time_window' : 5, 
           'check_server_random' : True, 
           'check_client_random' : False,
@@ -44,8 +43,11 @@ default_conf = {
           'version' : "v1", 
           'type' : "rsa_extended_master",
           'key_id_type' : [  "sha256_32" ], 
-          'tls_version' : [ "TLS1.2" ],
-          'prf' : [ "intrinsic_null", "intrinsic_sha256" ], 
+          'freshness_funct' : [ "null", "sha256" ], 
+          'random_time_window' : 5, 
+          'check_server_random' : True, 
+          'check_client_random' : False,
+          'cert' : [ join( data_dir, 'cert-rsa-enc.der' ) ], 
           'cert' : [ join( data_dir, 'cert-rsa-enc.der' ) ], 
           'key' : [ join( data_dir, 'key-rsa-enc-pkcs8.der' ) ]
         }, 
@@ -53,8 +55,7 @@ default_conf = {
           'version' : "v1", 
           'type' : "ecdhe",
           'key_id_type' : [  "sha256_32" ], 
-          'tls_version' : [ "TLS1.2" ],
-          'prf' : [ "intrinsic_null", "intrinsic_sha256" ], 
+          'freshness_funct' : [ "null", "sha256" ], 
           'random_time_window' : 5, 
           'check_server_random' : True, 
           'check_client_random' : False,

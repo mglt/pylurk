@@ -1,10 +1,50 @@
 import socket
+from textwrap import indent
 from secrets import randbits
 from Cryptodome.Hash import HMAC, SHA256
 from pylurk.core.conf import default_conf
 from pylurk.core.lurk_struct import *
 
 HEADER_LEN = 16 
+LINE_LEN = 60
+
+def wrap( text, line_len=LINE_LEN):
+    """ Wrap text so it does not exceeds line_len
+
+    Args:
+        text (str): the text that can be multilines
+        line_len (int): the maximum len for a line
+
+    Returns:
+        wrap (str): the wrapped text.
+    """
+    lines = []
+    line = ""
+    for c in "%s"%text :
+        line += c
+        if c == '\n' :
+            lines.append( line )
+            line = ""
+    wrap = ""
+    for line in lines:
+        if len( line ) < line_len:
+            wrap += line
+            continue
+        margin = "    "
+        for c in line:
+            if c.isspace():
+                margin += c
+            else:
+                break
+        wrap += line[ : line_len ] + '\n'
+        line = margin + line[ line_len :]
+        while len( line ) >= line_len:
+            wrap += line[ : line_len ] + '\n'
+            line = margin + line[ line_len : ]
+        wrap += line[:]
+    return wrap
+
+
 
 class Error(Exception):
     def __init__(self, expression, message):
@@ -285,12 +325,13 @@ class Payload:
     def check( self, payload ):
         pass
 
-    def show(self, pkt_bytes ):
+    def show(self, pkt_bytes, prefix="", line_len=LINE_LEN):
         """ shows the pkt_bytes. Similar to parse but without any
             control of the configuration and uses the structure
             visualization facilities. """
-        print("%s"%self.struct.__class__.__name__)
-        print("%s"%self.struct.parse(pkt_bytes))
+        print( indent( "%s"%self.struct.__class__.__name__, prefix ) )
+        s = wrap( "%s"%self.struct.parse( pkt_bytes ), line_len=line_len )
+        print( indent( s, prefix ) )
 
 
 
@@ -354,12 +395,13 @@ class LurkMessage( Payload ):
             raise ImplementationError( status, "Expected 'request' or 'success'")
         return  self.get_ext( header ).parse( status, mtype, payload_bytes )
 
-    def show_ext_payload( self, header, payload_bytes ):
+    def show_ext_payload( self, header, payload_bytes, prefix="", line_len=LINE_LEN):
         status = header[ 'status' ]
         mtype = header[ 'type' ]
         if status not in [ 'request', 'success' ]:
             raise ImplementationError( status, "Expected 'request' or 'success'")
-        return  self.get_ext( header ).show( status, mtype, payload_bytes )
+        return  self.get_ext( header ).show( status, mtype, payload_bytes, \
+                                            prefix=prefix, line_len=line_len )
 
 
     def serve_ext_payload( self, header, request ):
@@ -516,8 +558,8 @@ class LurkMessage( Payload ):
                 raise ImplementationError( e, "implementation Error")
             
             
-    def show(self, pkt_bytes ):
-        print("%s"%self.struct.__class__.__name__)
+    def show(self, pkt_bytes, prefix="", line_len=LINE_LEN):
+        print( indent( "%s"%self.struct.__class__.__name__, prefix ) )
         if type ( pkt_bytes ) == dict:
             self.check( pkt_bytes )
             pkt_bytes = self.build( **pkt_bytes )
@@ -526,7 +568,8 @@ class LurkMessage( Payload ):
             print("Expecting %s, got %s"%( HEADER_LEN, len( pkt_bytes) ) )
             print("pkt_bytes: %s"%pkt_bytes )
         else: 
-            print("%s"%self.struct.parse(pkt_bytes[ : HEADER_LEN] ))
+            print( indent( "%s"%self.struct.parse(pkt_bytes[:HEADER_LEN] ), \
+                       prefix ) )
             header = self.struct.parse(pkt_bytes[ : HEADER_LEN ] )
             if len( pkt_bytes ) >= header[ 'length' ]:
                 payload_bytes = pkt_bytes[ HEADER_LEN : header[ 'length'] ]
@@ -534,16 +577,32 @@ class LurkMessage( Payload ):
                 raise InvalidFormat( ( header, pkt_bytes ), \
                           "pkt_bytes too short %s bytes"%len (pkt_bytes ) )
             if header[ 'status' ] in [ "success", "request" ]:
-                self.show_ext_payload( header, payload_bytes ) 
+                self.show_ext_payload( header, payload_bytes, \
+                               prefix=prefix, line_len=line_len) 
             else: ## the payload is an error payload
                 LURKErrorPayload.parse( payload_bytes )
 
 class LurkServer():
 
     def __init__(self, conf=default_conf ):
+        self.init_conf( conf )
         self.conf = LurkConf( conf )
         self.conf.set_role( 'server' )
         self.message = LurkMessage( conf=self.conf.conf ) 
+
+    def init_conf( self, conf ):
+        """ Provides minor changes to conf so the default conf can be used
+ 
+        Args:
+            conf (dict): the dictionary representing the configuration
+                arguments
+ 
+        Returns:
+            conf (dict): the updated conf dictionary
+        """
+        conf[ 'role' ] = 'server' 
+        return conf
+         
 
     def byte_serve(self, pkt_bytes):
         """ read the HEADER_LEN bytes of pkt_bytes. If an error occurs, it
@@ -565,12 +624,34 @@ class LurkServer():
 class LurkClient:
 
     def __init__( self, conf=default_conf): 
+        self.init_conf( conf )
         self.conf = LurkConf( conf )
-        self.conf.set_role( 'client' )
         self.waiting_queries = {}
         self.server = self.get_server(  ) 
         self.message = LurkMessage( conf = self.conf.conf )
 
+    def init_conf( self, conf ):
+        """ Provides minor changes to conf so the default conf can be used
+ 
+        Args:
+            conf (dict): the dictionary representing the configuration
+                arguments
+ 
+        Returns:
+            conf (dict): the updated conf dictionary
+        """
+        conf[ 'role' ] = 'client' 
+        for i in range( len( conf[ 'extensions' ] ) ):
+            ext = conf[ 'extensions' ][ i ]
+            if ext[ 'designation' ] in [ 'tls12' ] and \
+               ext[ 'version' ] in [ 'v1' ] and \
+               ext[ 'type' ] in [ 'rsa_master', 'rsa_extended_master', \
+                   'rsa_master_with_poh', 'rsa_extended_master_poh', \
+                   'ecdhe', 'ecdhe_with_poh' ] :
+                del conf[ 'extensions' ][ i ][ 'key' ]
+        return conf
+         
+    
     def get_server( self ):
         conf_class = self.conf.server.__class__.__name__ 
         if conf_class == 'LocalServerConf' :
@@ -612,8 +693,8 @@ class LurkClient:
 class LurkUDPClient(LurkClient):
 
     def __init__(self, conf=default_conf ):
+        self.init_conf( conf )
         self.conf = LurkConf( conf )
-        self.conf.set_role( 'client' )
         self.waiting_queries = {}
         self.server = self.get_server( self.conf )
         self.message = LurkMessage( conf = self.conf.conf )
@@ -647,6 +728,7 @@ class LurkUDPServer:
 
     def __init__(self, conf=default_conf ):
 
+        self.init_conf( conf )
         self.conf = LurkConf( conf )
         self.conf.set_role( 'server' )
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

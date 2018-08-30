@@ -27,8 +27,8 @@ print("--- Payload Testing: testing build/parse/serve functions" + \
 designation = 'tls12'
 version = 'v1'
 
-for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
-               'capabilities' ]:
+for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master' ]:
+             #'capabilities' ]:
     message_exchange( designation, version, mtype, payload={} )
 
 
@@ -50,20 +50,15 @@ client = LurkClient( conf=clt_conf.conf )
 designation = 'tls12'
 version = 'v1'
 
-
-prfs = { 'rsa_master' : [ "sha256_null", "sha256_sha256" ], \
-         'rsa_extended_master' : [ "sha256_null", "sha256_sha256" ], \
-         'ecdhe' : [ "intrinsic_null", "intrinsic_sha256" ] }
-
-for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
-               'capabilities' ]:
+for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master' ]: #, \
+#######               'capabilities' ]:
     if mtype in [ 'ping', 'capabilities' ]:
         resolve_exchange( client, server, designation, version, mtype, \
                           payload={} )
         continue
-    for prf in prfs[ mtype ]:
+    for freshness_funct in [ "null", "sha256" ]:
         resolve_exchange( client, server, designation, version, mtype, \
-                          payload={ 'prf' : prf } )
+                          payload={ 'freshness_funct' : freshness_funct } )
 
 print( "+---------------------------------------+" )
 print( "|       LURK CLIENT / SERVER TESTS      |" )
@@ -109,9 +104,6 @@ t.start()
 
 designation = 'tls12'
 version = 'v1'
-prfs = { 'rsa_master' : [ "sha256_null", "sha256_sha256" ], \
-         'rsa_extended_master' : [ "sha256_null", "sha256_sha256" ], \
-         'ecdhe' : [ "intrinsic_null", "intrinsic_sha256" ] }
 
 for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
                'capabilities' ]:
@@ -119,9 +111,9 @@ for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
         resolve_exchange( client, server, designation, version, mtype, \
                           payload={} )
         continue
-    for prf in prfs[ mtype ]:
+    for freshness_funct in [ "null", "sha256" ]:
         resolve_exchange( client, server, designation, version, mtype, \
-                          payload={ 'prf' : prf } )
+                          payload={ 'freshness_funct' : freshness_funct } )
 
 print( "+---------------------------------------+" )
 print( "|      UDP  LURK Client / Server        |" )
@@ -142,8 +134,7 @@ conf = { 'role' : "client",
                'version' : "v1", 
                'type' : "rsa_master",
                'key_id_type' : [  "sha256_32" ],  
-               'tls_version' : [ "TLS1.2" ],
-               'prf' : [ "sha256_sha256" ],  
+               'freshness_funct' : [ "sha256" ],  
                'random_time_window' : 0,  
                'check_server_random' : True, 
                'check_client_random' : False,
@@ -152,9 +143,18 @@ conf = { 'role' : "client",
              }] }
 client = LurkUDPClient( conf=conf )
 
-msg = LurkMessage()
+## creating utils for the demo
+## LurkMessage is used to build LURK messages and printing them
+## rsa_conf is the default rsa configuration parameters for LURK
+## rsa_utils is a tool box for RSA, it is used to simulate the various
+## involved values and parameters. 
+msg = LurkMessage() 
 rsa_conf = LurkConf( conf=conf ).get_type_conf( 'tls12', 'v1', 'rsa_master')[0]
 rsa_utils = Tls12RSAMasterConf( conf=rsa_conf )
+
+
+def pretty_print( struct, value):
+    return struct.parse(struct.build( value ) )
 
 print("TLS Client          Edge Server         Key Server\n")
 
@@ -167,19 +167,25 @@ print("       TLS_RSA_*, ...")
 print("-------->")
 
 print("================ Edge Server reads from ClientHello")
-tls_version = ProtocolVersion.parse( ProtocolVersion.build( {} ) )
-print("    - server_version: %s"%tls_version)
-client_random = rsa_utils.get_random()
-print("    - client_random: %s"%client_random)
+#tls_version = ProtocolVersion.parse( ProtocolVersion.build( {} ) )
+tls_version = rsa_utils.default_tls_version()
+#print("    - server_version: %s"%\
+#    pretty_print(ProtocolVersion.build, tls_version ) )
+client_random = rsa_utils.default_random()
+print("    - client_random: %s"%\
+    pretty_print(Random, client_random ) )
 print("================ Edge Server builds ServerHello")
 print("== LURK impacts sever_random generation")
-edge_server_random = rsa_utils.get_random()
-server_random = rsa_utils.pfs( edge_server_random , "sha256_sha256" )
-print("    - server_random: %s"%server_random)
+edge_server_random = rsa_utils.default_random()
+print("    - LURK server_random: %s"%\
+    pretty_print(Random, edge_server_random ) )
+server_random = rsa_utils.pfs( edge_server_random , "sha256" )
+print("    - TLS server_random: %s"%\
+    pretty_print(Random, server_random ) )
 print("================ Edge Server sends ServerHello")
 print("                    ServerHello")
 print("                        tls_version")
-print("                        server_random")
+print("                        server_random (TLS)")
 print("                        Cipher_suite=TLS_RSA")
 print("                    Certificate")
 print("                        RSA Public Key")
@@ -198,8 +204,7 @@ print("================ LURK Exchange between Edge Server and Key Server")
 payload_args = { 'cert' : conf[ 'extensions' ][0][ 'cert' ][0],\
                  'client_random' : client_random, \
                  'server_random' : edge_server_random, \
-                 'tls_version' : tls_version, \
-                 'prf' : conf[ 'extensions' ][0][ 'prf' ][0], 
+                 'freshness_funct' : conf[ 'extensions' ][0][ 'freshness_funct' ][0], 
                  'encrypted_premaster' : encrypted_premaster }
 query, response = client.resolve( designation='tls12', \
                                   version='v1', \
@@ -242,8 +247,7 @@ conf = { 'role' : "client",
                'version' : "v1", 
                'type' : "ecdhe",
                'key_id_type' : [  "sha256_32" ],  
-               'tls_version' : [ "TLS1.2" ],
-               'prf' : [ "intrinsic_sha256" ],  
+               'freshness_funct' : [ "sha256" ],  
                'random_time_window' : 0,  
                'check_server_random' : True, 
                'check_client_random' : False,
@@ -300,14 +304,14 @@ print("       TLS_ECDHE_ECDSA_*, TLS_ECDHE_RSA_*, ...")
 print("       Extension Supported EC, Supported Point Format")
 print("-------->")
 print("================ Edge Server reads from ClientHello")
-tls_version = ProtocolVersion.parse( ProtocolVersion.build( {} ) )
+tls_version = ecdhe_utils.default_tls_version()
 print("    - server_version: %s"%tls_version)
-client_random = ecdhe_utils.get_random()
+client_random = ecdhe_utils.default_random()
 print("    - client_random: %s"%client_random)
 print("================ Edge Server builds ServerHello Random")
 print("== LURK impacts sever_random generation")
-edge_server_random = ecdhe_utils.get_random()
-server_random = ecdhe_utils.pfs( edge_server_random , "intrinsic_sha256" )
+edge_server_random = ecdhe_utils.default_random()
+server_random = ecdhe_utils.pfs( edge_server_random , "sha256" )
 print("    - server_random: %s"%server_random)
 print("================ Edge Server builds ECDHE Parameters and" +\
       "Proof of Ownership")
@@ -371,7 +375,7 @@ clt_conf.set_connectivity( type='udp', ip_address="127.0.0.1", port=6789 )
 client = LurkUDPClient( conf = clt_conf.conf )
 
 
-x = 100
+x = 0
 mtypes = [ 'ping', 'rsa_master', 'rsa_extended_master', 'ecdhe' ]
 for mtype in mtypes: 
     payload = {}
