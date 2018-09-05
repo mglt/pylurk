@@ -2,14 +2,17 @@ from construct import *
 from construct.lib import *
 from pylurk.core.lurk_struct import LURKCapabilitiesResponsePayload
 from pylurk.core.lurk import InvalidFormat, ImplementationError,\
-                      ConfError, LurkConf, Payload
+                      ConfError, LurkConf, Payload, LINE_LEN
 from pylurk.core.conf import default_conf
-   
+from textwrap import indent
+
+
 class LurkCapabilitiesResponsePayload( Payload ):
 
     def __init__( self, conf=default_conf):
         self.conf = LurkConf( conf )
         self.struct = LURKCapabilitiesResponsePayload
+        self.struct_name = 'LURKCapabilitiesResponsePayload'
 
     def build_payload( self, **kwargs ):
         if 'supported_extensions' in kwargs.keys():
@@ -62,8 +65,8 @@ class LurkVoidPayload:
         if payload != {}:
             raise InvalidFormat( payload, "Expected {}") 
     
-    def show( self, pkt_bytes ):
-        print("Void Payload") 
+    def show( self, pkt_bytes, prefix="", line_len=LINE_LEN):
+        print( indent("Void Payload", prefix) ) 
 
 class LurkExt:
 
@@ -114,7 +117,8 @@ class LurkExt:
     def check( self, status, mtype, payload ):
         return self.ext_class[ ( status, mtype ) ].check( payload )
 
-    def show( self, status, mtype, payload ):
-        return self.ext_class[ ( status, mtype ) ].show( payload )
+    def show( self, status, mtype, pkt_bytes, prefix="", line_len=LINE_LEN ):
+        return self.ext_class[ ( status, mtype ) ].show( pkt_bytes,\
+                   prefix=prefix, line_len=line_len )
 
 

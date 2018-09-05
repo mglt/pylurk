@@ -18,17 +18,13 @@ def wrap( text, line_len=LINE_LEN):
     Returns:
         wrap (str): the wrapped text.
     """
-    lines = []
-    line = ""
-    for c in "%s"%text :
-        line += c
-        if c == '\n' :
-            lines.append( line )
-            line = ""
+    lines = text.split('\n')
     wrap = ""
     for line in lines:
+#        print("line: %s"%line )
         if len( line ) < line_len:
             wrap += line
+            wrap += '\n'
             continue
         margin = "    "
         for c in line:
@@ -38,10 +34,16 @@ def wrap( text, line_len=LINE_LEN):
                 break
         wrap += line[ : line_len ] + '\n'
         line = margin + line[ line_len :]
+#        print("    init wrap: %s"%wrap )
+#        print("    init line: %s"%line )
         while len( line ) >= line_len:
             wrap += line[ : line_len ] + '\n'
             line = margin + line[ line_len : ]
+#            print("    wrap: %s"%wrap )
+#            print("    line: %s"%line )
         wrap += line[:]
+        wrap += '\n'
+#        print("    final wrap: %s"%wrap )
     return wrap
 
 
@@ -284,8 +286,20 @@ class LurkConf():
 
 class Payload:
     def __init__( self, conf ):
-        self.conf = conf
-        self.struct = None
+       """Generic class for lurk payload 
+
+       Lurk designates as Payloads the bytes associated to a specific
+       extension. In other words, a payload is all bytes after the Lurk 
+       Header. The Payload class provides an abstraction for programming 
+       extensions as it deals with the convertion between the binary 
+       representation of th3 payload and the representation of the payload 
+       structure using a dictionary. 
+       The Payload class is closely tided with the Struct instance that
+       describes the object. 
+       """
+       self.conf = conf
+       self.struct = None
+       self.struct_name = 'EmptyPayload'
 
     def build_payload( self, **kwargs ):
         """ returns the container that describes the payload """
@@ -329,7 +343,8 @@ class Payload:
         """ shows the pkt_bytes. Similar to parse but without any
             control of the configuration and uses the structure
             visualization facilities. """
-        print( indent( "%s"%self.struct.__class__.__name__, prefix ) )
+#print( indent( "%s"%self.struct.__class__.__name__, prefix ) )
+        print( indent( "%s"%self.struct_name, prefix ) )
         s = wrap( "%s"%self.struct.parse( pkt_bytes ), line_len=line_len )
         print( indent( s, prefix ) )
 
@@ -341,6 +356,7 @@ class LurkMessage( Payload ):
     def __init__( self, conf=default_conf ):
         self.conf = LurkConf( conf )
         self.struct = LURKHeader
+        self.struct_name = 'Lurk Header'
         self.lurk = self.import_ext()
     def import_ext( self ):
         lurk_ext = {}
@@ -559,7 +575,7 @@ class LurkMessage( Payload ):
             
             
     def show(self, pkt_bytes, prefix="", line_len=LINE_LEN):
-        print( indent( "%s"%self.struct.__class__.__name__, prefix ) )
+        print( indent( "%s"%self.struct_name, prefix ) )
         if type ( pkt_bytes ) == dict:
             self.check( pkt_bytes )
             pkt_bytes = self.build( **pkt_bytes )
@@ -577,6 +593,7 @@ class LurkMessage( Payload ):
                 raise InvalidFormat( ( header, pkt_bytes ), \
                           "pkt_bytes too short %s bytes"%len (pkt_bytes ) )
             if header[ 'status' ] in [ "success", "request" ]:
+                 
                 self.show_ext_payload( header, payload_bytes, \
                                prefix=prefix, line_len=line_len) 
             else: ## the payload is an error payload
@@ -648,7 +665,10 @@ class LurkClient:
                ext[ 'type' ] in [ 'rsa_master', 'rsa_extended_master', \
                    'rsa_master_with_poh', 'rsa_extended_master_poh', \
                    'ecdhe', 'ecdhe_with_poh' ] :
-                del conf[ 'extensions' ][ i ][ 'key' ]
+                try:
+                    del conf[ 'extensions' ][ i ][ 'key' ]
+                except KeyError:
+                    pass
         return conf
          
     
@@ -728,14 +748,14 @@ class LurkUDPServer:
 
     def __init__(self, conf=default_conf ):
 
-        self.init_conf( conf )
-        self.conf = LurkConf( conf )
-        self.conf.set_role( 'server' )
+#        self.init_conf( conf )
+        self.lurk = LurkServer( conf )
+#        self.conf = self.lurk.conf
+#        self.conf.set_role( 'server' )
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        ip = self.conf.server.ip_address
-        port = self.conf.server.port
+        ip = self.lurk.conf.server.ip_address
+        port = self.lurk.conf.server.port
         self.sock.bind( ( ip, port) )
-        self.lurk = LurkServer( self.conf.conf )
 
         while True:
             data, address = self.sock.recvfrom(4096)

@@ -513,6 +513,40 @@ class Tls12RSAMasterConf:
                   "delta: %s"%(current_time  - unix_time )+ \
                   "window_time: %s"%self.random_time_window )
 
+    def check_client_random(self, random ):
+        """ Checks the client_random
+
+        Checks is performed according to the check_client_random
+        parameter of the configuration
+
+        Args:
+            random (dict): dictionary representing the random structure
+                { 'gmt_unix_time', gmt_unix_time, 'random': random }.
+
+        Raises:
+            InvalidTLSRandom: if the check fails.
+        """
+        if self.check_client_random == True:
+            self.check_random( random )
+
+
+
+    def check_server_random(self, random ):
+        """ Checks the client_random
+
+        Checks is performed according to the check_client_random
+        parameter of the configuration
+
+        Args:
+            random (dict): dictionary representing the random structure
+                { 'gmt_unix_time', gmt_unix_time, 'random': random }.
+
+        Raises:
+            InvalidTLSRandom: if the check fails.
+        """
+        if self.check_server_random == True:
+            self.check_random( random )
+
     def check_tls_version(self, tls_version ):
         """ Checks the tls_version structure
 
@@ -631,7 +665,7 @@ class Tls12RSAMasterConf:
         """
         try: 
             self.check_tls_version( client_hello[ 'client_version' ] )
-            self.check_random( random = client_hello[ 'random' ] )
+            self.check_client_random( random = client_hello[ 'random' ] )
             self.check_session_id( client_hello[ 'session_id' ] )
             self.check_cipher_suites( client_hello[ 'cipher_suites' ] )
             self.check_compression_methodes( client_hello[ 'compression_methods' ] )
@@ -654,7 +688,7 @@ class Tls12RSAMasterConf:
                 structure.
         """
         self.check_tls_version( server_hello[ 'server_version' ] )
-        self.check_random( server_hello[ 'random' ] )
+        self.check_server_random( server_hello[ 'random' ] )
         if server_hello[ 'cipher_suite' ] not in self.valid_ciphers:
             raise InvalidPayloadFormat( cipher_suites, "ServerHello " +\
                       "Expecting cipher suite in %s"%valid_ciphers )
@@ -1116,7 +1150,7 @@ class Tls12RSAMasterConf:
 
         """
         self.check_freshness_funct( freshness_funct )
-        self.check_random( server_random )
+        self.check_server_random( server_random )
         if freshness_funct == "null":
             return server_random
         elif freshness_funct == "sha256":
@@ -1150,6 +1184,7 @@ class Tls12RsaMasterRequestPayload(Tls12Payload):
        
         self.conf = Tls12RSAMasterConf( conf )
         self.struct = TLS12RSAMasterRequestPayload
+        self.struct_name = 'TLS12RSAMasterRequestPayload'
 
     def build_payload(self, **kwargs ):
         """ Build the payload of the rsa master request 
@@ -1187,8 +1222,8 @@ class Tls12RsaMasterRequestPayload(Tls12Payload):
         self.conf.check_key( payload, keys )
         self.conf.check_key_id( payload[ 'key_id' ] )
         self.conf.check_freshness_funct( payload[ 'freshness_funct' ] )
-        self.conf.check_random( payload[ 'client_random' ] )
-        self.conf.check_random( payload[ 'server_random' ] )
+        self.conf.check_client_random( payload[ 'client_random' ] )
+        self.conf.check_server_random( payload[ 'server_random' ] )
         self.conf.check_encrypted_premaster( payload[ 'encrypted_premaster' ] ) 
 
 ##        base = self.conf.extract_base( payload )
@@ -1219,6 +1254,7 @@ class Tls12RsaMasterResponsePayload(Tls12Payload):
         """
         self.conf = Tls12RSAMasterConf( conf )
         self.struct = TLS12RSAMasterResponsePayload
+        self.struct_name = 'TLS12RSAMasterResponsePayload'
 
     # RFC5246 section 5
     def P_SHA256( self, secret, seed, length):
@@ -1423,6 +1459,7 @@ class Tls12ExtMasterRequestPayload(Tls12RsaMasterRequestPayload):
                                              'rsa_extended_master')[0] ):
         self.conf =  Tls12RSAExtendedMasterConf( conf )
         self.struct = TLS12ExtendedRSAMasterRequestPayload
+        self.struct_name = 'TLS12ExtendedRSAMasterRequestPayload'
 
     def build_payload( self, **kwargs ):
 
@@ -1455,6 +1492,7 @@ class Tls12ExtMasterResponsePayload(Tls12RsaMasterResponsePayload):
                                              'rsa_extended_master')[0] ):
         self.conf = Tls12RSAExtendedMasterConf( conf )
         self.struct = TLS12RSAMasterResponsePayload
+        self.struct_name = 'TLS12RSAMasterResponsePayload'
 
     def compute_master( self, request, premaster ):
         handshake_messages = HandshakeMessages.build( \
@@ -1901,6 +1939,7 @@ class Tls12ECDHERequestPayload(Tls12Payload):
     def __init__(self, conf=LurkConf().get_type_conf('tls12', 'v1', 'ecdhe' )[0] ):
         self.conf = Tls12ECDHEConf( conf )
         self.struct = TLS12ECDHERequestPayload
+        self.struct_name = 'TLS12ECDHERequestPayload'
 
 
     def build_payload( self, **kwargs):
@@ -1950,8 +1989,8 @@ class Tls12ECDHERequestPayload(Tls12Payload):
         self.conf.check_key( payload, keys )
         self.conf.check_key_id( payload[ 'key_id' ] )
         self.conf.check_freshness_funct( payload[ 'freshness_funct' ] )
-        self.conf.check_random( payload[ 'client_random' ] )
-        self.conf.check_random( payload[ 'server_random' ] )
+        self.conf.check_client_random( payload[ 'client_random' ] )
+        self.conf.check_server_random( payload[ 'server_random' ] )
         self.conf.check_sig_and_hash( payload[ 'sig_and_hash' ] )
         self.conf.check_ecdhe_params( payload[ 'ecdhe_params' ] )
         name_curve = payload[ 'ecdhe_params' ][ 'curve_param' ][ 'curve' ]
@@ -1965,6 +2004,7 @@ class Tls12ECDHEResponsePayload(Tls12Payload):
     def __init__(self, conf=LurkConf().get_type_conf('tls12', 'v1', 'ecdhe' )[0] ):
         self.conf = Tls12ECDHEConf( conf )
         self.struct = TLS12ECDHEResponsePayload
+        self.struct_name = 'TLS12ECDHEResponsePayload'
 
     def serve(self, request ):
         key_id = request[ 'key_id' ]
@@ -2098,6 +2138,7 @@ class Tls12CapabilitiesResponsePayload(Tls12Payload):
         self.conf = Tls12CapabilitiesConf( conf=conf )
         self.capabilities = self.set_capabilities()
         self.struct = TLS12CapabilitiesResponsePayload 
+        self.struct_name = 'TLS12CapabilitiesResponsePayload' 
 
 
     def serve( self, request ):
