@@ -763,9 +763,8 @@ class LurkUDPServer:
         self.sock.bind( ( ip, port) )
 
         while True:
-            try:
-                data, address = self.sock.recvfrom(4096)
-                self.sock.sendto( self.lurk.byte_serve( data ) , address)
-            finally:
-                self.sock.close()
+            data, address = self.sock.recvfrom(4096)
+            self.sock.sendto( self.lurk.byte_serve( data ) , address)
+
+        self.sock.close()
 
