@@ -704,7 +704,6 @@ class Tls12RSAMasterConf:
             InvalidPayloadFormat: when an unexpected value is used in the
                 structure.
         """
-        print( "certificate: %s"%certificate )
         cert =  certificate[ 0 ]
         key_id = self.build_key_id( cert, key_id_type=self.key_id_type[0])
         if KeyPairID.build( key_id ) not in self.public_key_db:
@@ -1080,7 +1079,8 @@ class Tls12RSAMasterConf:
         """ Generates a HanshakeMessages structure 
 
         Args:
-            kwargs: multiple arguments. Ignored except
+            kwargs: multiple arguments. Ignored except handshake_messages 
+                or the necessary parameters to build handshake_messages
                 tls_version, client_random, session_id, cipher_suites,
                 compression_methods, extensions, server_random, cipher_suite,
                 compression_method, cert, premaster_secret,
@@ -1091,7 +1091,11 @@ class Tls12RSAMasterConf:
             handshake_messages (list): the list representing the
                 HandshakeMessages Array.
         """
-        return [ { 'msg_type' : 'client_hello',  \
+        try:
+            return kwargs[ 'handshake_messages' ]
+        except KeyError:
+            return [ \
+                 { 'msg_type' : 'client_hello',  \
                    'body' :  self.default_client_hello( **kwargs ) }, \
                  { 'msg_type' : 'server_hello', \
                    'body' :  self.default_server_hello( **kwargs ) }, \
@@ -1101,39 +1105,217 @@ class Tls12RSAMasterConf:
                    'body' :  b'' }, \
                  { 'msg_type' : 'client_key_exchange', \
                    'body' :  self.default_client_key_exchange( **kwargs ) } ]
+
+
+
+    def prf_hash_from_cipher( self, cipher_suite):
+        """ Returns the prf_hahs associated to the cipher suite
+
+        Args:
+            cipher_suite (str): the string representation of the
+                cipher suite
+    
+        Returns:
+            prf_hash (str): the prf hash function
+        """
+        if 'SHA512' in cipher_suite:
+            return 'sha512'
+        elif 'SHA384' in cipher_suite:
+            return 'sha384'
+        else:
+            return 'sha256'
+
+    # RFC5246 section 5
+    def P_SHA256( self, secret, seed, length):
+        """ Data expansion function 
+
+        The data expansion function P_hash(secret, data) is defined in
+        RFC 5246. It uses a single hash function to expand a secret and 
+        seed into an arbitrary quantity of output
+
+        P_hash(secret, seed) = HMAC_hash(secret, A(1) + seed) +
+                               HMAC_hash(secret, A(2) + seed) +
+                               HMAC_hash(secret, A(3) + seed) + ...
+
+        where + indicates concatenation.
+
+        A() is defined as:
+            A(0) = seed
+            A(i) = HMAC_hash(secret, A(i-1))
+
+        Args:
+            secret (bin): the secret to be expanded
+            seed (bin): the initial value A(0)
+            length (int): the length in number of bytes of the expansion
+
+        Returns: 
+            output (bin): the extended data
+        """
+        out = b''
+        A = seed
+        while len(out) < length :  
+            A_next = HMAC.new(secret, digestmod=SHA256)
+            A_next.update( A )
+
+            H = HMAC.new(secret, digestmod=SHA256)
+            H.update( A_next.digest() + seed )
+            out += H.digest()
+            A = A_next.digest()
+        return out[:length]
+
+
+    def PRF12(self, secret, label, seed, length, prf_hash):
+        """ TLS 12 PRF
+       
+        TLS 1.2 PRF is defined in RFC 5246 as:
+        PRF(secret, label, seed) = P_<hash>(secret, label + seed)
+
+        Args:
+            secret (bin): the secret
+            label (str): the ascii string
+            seed (bin): the seed
+            length (int): the length in number of bytes of the expansion
+
+        Returns:
+            output (bin): the extended data
+            
+        """
+        if prf_hash == 'sha256':
+            return self.P_SHA256(secret, label + seed, length)
+        else:
+            print( "Unknown PRF Hash function" )
+
+
+    def compute_master( self, request, premaster, prf_hash='sha256'):
+        """ Computes master secret
  
+        Args:
+            request (dict): the dictionary representing the rsa master
+                request. Note that only random, and freshness_funct are
+                used from the request. In other words, the premaster is 
+                not decrypted from the encrypted_premaster carried by 
+                the request and is provided as a separate argument.
+            premaster (bin): the premaster secret.
 
+        Returns:
+            master_secret (bin): the master secret.
+        """
+        try: 
+            client_random = request[ 'handshake_messages' ][ 0 ][ 'random' ]
+            server_random = request[ 'handshake_messages' ][ 1 ][ 'random' ]
+        except KeyError:
+            client_random = request [ 'client_random' ]
+            server_random = request [ 'server_random' ]
+            
+        server_random = self.conf.pfs( server_random,\
+                                       request[ 'freshness_funct' ] ) 
+        # section 8.1 RFC5246 
+        return self.PRF12(PreMaster.build(premaster), b'master secret',\
+                            Random.build( client_random ) + \
+                            Random.build( server_random ), 48, prf_hash )
+
+
+    def compute_finished( self, handshake_messages, master_secret ):
+        """ Generates the Finished message
+
+        Args:
+            handshake_message (list): array of handshake message
+                structures.  
+            master_secret (bytes): the master secret
+            prf_hash (str): designates the Hash function used for the
+                prf.
+            finished_label (str): designates the label used by the PRF.
+                In our case its value is always b'finished_client' as we
+                do not consider the case where the finished message is 
+                provided by the server.   
+
+        Returns:
+            verify_data (bytes): the byte stream of the Finished message
+        """
+        bytes_handshake = HandshakeMessages.build( handshake_messages )
+        cipher_suite = handshake_messages[1][ 'body' ][ 'cipher_suite' ]
+        prf_hash = self.prf_hash_from_cipher( cipher_suite ) 
+        verify_data_length = 96
+        prf_hash = self.prf_hash_function( cipher_suite )
+        if prf_hash == 'SHA512' :
+            h = SHA512.new( bytes_key ).digest()
+        elif prf_hash == 'SHA384':
+            h = SHA512.new( bytes_key ).digest()
+        else:
+            h = SHA256.new( bytes_key ).digest()
+
+        return  self.PRF12( master_secret, finished_label, h,\
+                        verify_data_len, prf_hash )
+
+    def check_finished( self, finished, handshake_messages=handshake_message,\
+                        master=master ):
+        """ Check the value of the Finished message
+
+        Args:
+            finished (dict): the dictionary representing the finished
+                message structure
+            handshake (list): the list of handshake message. Each of
+                them represented by their structure as a dictionary. 
+            master_secret (bytes): the binary representation of the
+                master_secret.
+            finished_label (string): the bit string label used to
+                generate the finished massage. IN our case, its value is
+                "finished_client"
+
+        Raises: 
+            InvalidFinished when the computed and the provided
+                verify_Data do not match. 
+        """
+        self.check_key( finished, [ 'verify_data' ])
+        l = len( finished[ 'verify_data' ] 
+        if l != 12 * 8:
+            raise InvalidFinished( finished, "Expected len 96, found: %s"%l)
+        try:
+            cipher_suite = handshake_messages[ 1 ][ 'body' ][ 'cipher_suite' ]
+            c_finished = self.compute_finished( handshake_messages, master )
+            if finished[ 'verify_data' ] != c_finished:
+                raise InvalidFinished( finished, "computed finished: %s"%c_finished ) 
+        except NameError:
+            pass
     
-##?gc    def get_default_base( self, **kwargs ):
-##?gc        """ builds a base payload given the provided arguments. keywords
-##?gc            arguments can be 'key_id', 'client_random', 'server_random',
-##?gc            'tls_version', 'freshness_funct'. 
-##?gc            additional keywords may be provided:
-##?gc            'cert' with a key, a certificate or a file which indicates
-##?gc             the data to build teh key id.
-##?gc
-##?gc             Note that key_id = {'key_id_type' : xxx, 'key_id' : xxx }.
-##?gc             keywords are only reserved for the first level domain and
-##?gc             key_id designates the structure.  
-##?gc        """
-##?gc
-##?gc        return { 'key_id' : key_id, \
-##?gc                 'client_random' : client_random, \
-##?gc                 'server_random' : server_random, \
-##?gc                 'tls_version' : tls_version, \
-##?gc                 'freshness_funct' : freshness_funct }
-##
-##    def get_pfs_prf_from_prf( self, prf ):
-##        if prf == "sha256_null":
-##            return 'null'
-##        elif prf == "sha256_sha256":
-##            return "sha256"
-##        else:
-##            raise InvalidFreshnessFunct( prf, 
-##                "Expected 'sha256_sha256' or 'sha256_null' for RSA" )
+    def default_finished( self, **kwargs ):
+        """ Generates a Finished message
 
+        Args:
+           kwargs can have multiple arguments. However, some of them are
+               mandatory as inputs are necessary to generate the
+               finished message. The following cases are considered: 
+                   * finished structure is provided, in which case no other  
+                       parameters are required.
+                   * handshake_messages with (master or premaster)  mandatory
 
-    
+            finished (dict): the dictionary representing the Finished
+                structure.
+        """
+        try:
+            return kwargs[ 'finished' ]
+        except KeyError:
+            try:
+                cipher = request[ 'handshake_messages' ][ 1 ][ 'body' ][ 'cipher_suite' ]
+                prf_hash = prf_hash_from_cipher( cipher ) 
+            except KeyError:
+                raise ImplementationError( kwargs, "Expecting handshake_messages." +\
+                     "Not found in kwargs." )
+            try:
+               master = kwargs[ 'master' ]
+            except KeyError:
+                try:
+                    premaster = kwargs[ 'premaster' ]
+                    #request = { 'handshake_messages' : kwargs[ 'handshake_messages' ] }
+                    master = self.compute_master( self, kwargs, premaster, prf_hash=prf_hash)
+                 except KeyError:
+                     raise ImplementationError( kwargs, "unable to generate a valid" +\
+                         "Finished message. Arguments 'finished', 'master' or " +\
+                         " 'premaster' are required.")
+            verify_data = self.compute_finished( kwargs[ 'handshake_messages' ] , master, \
+                          prf_hash, finish_label=b'finished_client'):
+            return { 'verify_data' : verify_data }
+
     def pfs(self, server_random, freshness_funct):
         """ Perfect Forward Secrecy over the random structure
  
@@ -1160,7 +1342,6 @@ class Tls12RSAMasterConf:
             bytes_random = SHA256.new( data=bytes_random).digest()[:32]
             bytes_random = gmt_unix_time + bytes_random[4:]
             return Random.parse(bytes_random)
-
 
 
 class Tls12RsaMasterRequestPayload(Tls12Payload):
@@ -1226,10 +1407,6 @@ class Tls12RsaMasterRequestPayload(Tls12Payload):
         self.conf.check_server_random( payload[ 'server_random' ] )
         self.conf.check_encrypted_premaster( payload[ 'encrypted_premaster' ] ) 
 
-##        base = self.conf.extract_base( payload )
-##        self.conf.check_base( base,\
-##                              client_random=self.conf.check_client_random,\
-##                              server_random=self.conf.check_server_random )
 
 class Tls12RsaMasterResponsePayload(Tls12Payload):
 
@@ -1256,90 +1433,7 @@ class Tls12RsaMasterResponsePayload(Tls12Payload):
         self.struct = TLS12RSAMasterResponsePayload
         self.struct_name = 'TLS12RSAMasterResponsePayload'
 
-    # RFC5246 section 5
-    def P_SHA256( self, secret, seed, length):
-        """ Data expansion function 
-
-        The data expansion function P_hash(secret, data) is defined in
-        RFC 5246. It uses a single hash function to expand a secret and 
-        seed into an arbitrary quantity of output
-
-        P_hash(secret, seed) = HMAC_hash(secret, A(1) + seed) +
-                               HMAC_hash(secret, A(2) + seed) +
-                               HMAC_hash(secret, A(3) + seed) + ...
-
-        where + indicates concatenation.
-
-        A() is defined as:
-            A(0) = seed
-            A(i) = HMAC_hash(secret, A(i-1))
-
-        Args:
-            secret (bin): the secret to be expanded
-            seed (bin): the initial value A(0)
-            length (int): the length in number of bytes of the expansion
-
-        Returns: 
-            output (bin): the extended data
-        """
-        out = b''
-        A = seed
-        while len(out) < length :  
-            A_next = HMAC.new(secret, digestmod=SHA256)
-            A_next.update( A )
-
-            H = HMAC.new(secret, digestmod=SHA256)
-            H.update( A_next.digest() + seed )
-            out += H.digest()
-            A = A_next.digest()
-        return out[:length]
-
-
-    def PRF12(self, secret, label, seed, length):
-        """ TLS 12 PRF
-       
-        TLS 1.2 PRF is defined in RFC 5246 as:
-        PRF(secret, label, seed) = P_<hash>(secret, label + seed)
-
-        Args:
-            secret (bin): the secret
-            label (str): the ascii string
-            seed (bin): the seed
-            length (int): the length in number of bytes of the expansion
-
-        Returns:
-            output (bin): the extended data
-            
-        """
-        return self.P_SHA256(secret, label + seed, length)
    
-    def compute_master( self, request, premaster ):
-        """ Computes master secret
- 
-        Args:
-            request (dict): the dictionary representing the rsa master
-                request. Note that only random, and freshness_funct are
-                used from the request. In other words, the premaster is 
-                not decrypted from the encrypted_premaster carried by 
-                the request and is provided as a separate argument.
-            premaster (bin): the premaster secret.
-
-        Returns:
-            master_secret (bin): the master secret.
-        """
-        try: 
-            client_random = request[ 'hanshake_messages' ][ 0 ][ 'random' ]
-            server_random = request[ 'hanshake_messages' ][ 1 ][ 'random' ]
-        except KeyError:
-            client_random = request [ 'client_random' ]
-            server_random = request [ 'server_random' ]
-            
-        server_random = self.conf.pfs( server_random,\
-                                       request[ 'freshness_funct' ] ) 
-        # section 8.1 RFC5246 
-        return self.PRF12(PreMaster.build(premaster), b'master secret',\
-                            Random.build( client_random ) + \
-                            Random.build( server_random ), 48  )
     
     def serve(self, request ):
         """ Serves the rsa master request
@@ -1375,7 +1469,7 @@ class Tls12RsaMasterResponsePayload(Tls12Payload):
             ### if any error occurs generate a random master
             return { 'master' : token_bytes( 48 * 8 ) }
 
-        master = self.compute_master( request, premaster)
+        master = self.conf.compute_master( request, premaster)
         return { 'master' : master }
 
     
@@ -1412,6 +1506,49 @@ class Tls12RsaMasterResponsePayload(Tls12Payload):
         if len( payload[ 'master' ] ) != 48:
             raise InvalidPayloadFormat( len( payload[ 'master' ] ), \
                           "invalid master size. Expecting 48" )
+
+## expect for the configuration I guess that shoudl be the same class
+class Tls12MasterWithPoHRequestPayload(Tls12RsaMasterRequestPayload):
+
+    def __init__(self, conf=LurkConf().get_type_conf( 'tls12', 'v1',
+                                             'rsa_extended_master_with_poh')[0] ):
+        self.conf =  Tls12RSAMasterConf( conf )
+        self.struct = TLS12RSAExtendedMasterWithPoHRequestPayload
+        self.struct_name = 'TLS12RSAMasterWithPoHRequestPayload'
+
+    def build_payload( self, **kwargs ):
+
+        if 'premaster' not in kwargs.keys() and \
+           'master' not in kwargs.keys():
+            tls_version = { 'major' : "TLS12M", 'minor' : "TLS12m"} 
+            premaster = PreMaster.build(\
+                    { 'tls_version' : tls_version, 'random' : token_bytes( 46 ) } )
+            kwargs[ 'premaster' ] = premaster
+        payload = super(Tls12ExtMasterRequestPayload, self ).build_payload( **kwargs )
+        payload[ 'finished' ] = self.conf.default_finished( self, **kwargs )
+        return payload
+
+    def check( self, payload, crypto_check=False):
+        keys = [ 'key_id', 'freshness_funct', 'handshake_messages', 'finished' ]
+        self.conf.check_key( payload, keys )
+        self.conf.check_key_id( payload[ 'key_id' ] )
+        self.conf.check_freshness_funct( payload[ 'freshness_funct' ] )
+        self.conf.check_handshake_messages( payload[ 'handshake_messages' ] ) 
+        self.conf.check_finished( payload[ 'finished' ] )
+
+
+class Tls12MasteWithPoHrResponsePayload(Tls12RsaMasterResponsePayload):
+
+    def __init__(self, conf=LurkConf().get_type_conf( 'tls12', 'v1',
+                                             'rsa_extended_master')[0] ):
+        self.conf = Tls12RSAExtendedMasterConf( conf )
+        self.struct = TLS12RSAMasterResponsePayload
+        self.struct_name = 'TLS12RSAExtMasterWithPoHResponsePayload'
+
+
+
+
+
 
 class Tls12RSAExtendedMasterConf( Tls12RSAMasterConf ):
 
@@ -1453,6 +1590,16 @@ class Tls12RSAExtendedMasterConf( Tls12RSAMasterConf ):
             return [ {'extension_type': 'extended_master_secret', \
                       'extension_data': b'' }]
 
+    def compute_master( self, request, premaster, prf_hash='sha256' ):
+        handshake_messages = HandshakeMessages.build( \
+            request[ 'handshake_messages' ] )
+        if prf_hash == 'sha256':
+            session_hash = SHA256.new( handshake_messages ).digest()
+        # section 4 RFC7627 
+        return self.PRF12(PreMaster.build(premaster), b'extended master secret',\
+                            session_hash, 48, prf_hash )
+
+
 class Tls12ExtMasterRequestPayload(Tls12RsaMasterRequestPayload):
 
     def __init__(self, conf=LurkConf().get_type_conf( 'tls12', 'v1',
@@ -1469,22 +1616,13 @@ class Tls12ExtMasterRequestPayload(Tls12RsaMasterRequestPayload):
             'handshake_messages' : self.conf.default_handshake_messages( **kwargs )
         }
 
-#        payload = super( Tls12ExtMasterRequestPayload, self ).build_payload( **kwargs )
-#        del payload[ 'client_random' ]
-#        del payload[ 'server_random' ]
-#        if 'handshake_messages' in kwargs:
-#            payload[ 'handshake_messages' ] = kwargs[ 'handshake_messages' ]
-#        else:
-#            payload[ 'session_hash' ] = SessionHash.build( token_bytes(32) )
-#        return payload
-
     def check(self, payload ):
         keys = [ 'key_id', 'freshness_funct', 'handshake_messages' ]
         self.conf.check_key( payload, keys )
         self.conf.check_key_id( payload[ 'key_id' ] )
         self.conf.check_freshness_funct( payload[ 'freshness_funct' ] )
         self.conf.check_handshake_messages( payload[ 'handshake_messages' ] ) 
-    
+
 
 class Tls12ExtMasterResponsePayload(Tls12RsaMasterResponsePayload):
 
@@ -1492,15 +1630,47 @@ class Tls12ExtMasterResponsePayload(Tls12RsaMasterResponsePayload):
                                              'rsa_extended_master')[0] ):
         self.conf = Tls12RSAExtendedMasterConf( conf )
         self.struct = TLS12RSAMasterResponsePayload
-        self.struct_name = 'TLS12RSAMasterResponsePayload'
+        self.struct_name = 'TLS12RSAExtMasterResponsePayload'
 
-    def compute_master( self, request, premaster ):
-        handshake_messages = HandshakeMessages.build( \
-            request[ 'handshake_messages' ] )
-        session_hash = SHA256.new( handshake_messages ).digest()
-        # section 4 RFC7627 
-        return self.PRF12(PreMaster.build(premaster), b'extended master secret',\
-                            session_hash, 48  )
+
+class Tls12ExtMasterWithPoHRequestPayload(Tls12ExtRsaMasterRequestPayload):
+
+    def __init__(self, conf=LurkConf().get_type_conf( 'tls12', 'v1',
+                                             'rsa_extended_master_with_poh')[0] ):
+        self.conf =  Tls12RSAExtendedMasterConf( conf )
+        self.struct = TLS12ExtendedRSAMasterWithPoHRequestPayload
+        self.struct_name = 'TLS12ExtendedRSAMasterWithPoHRequestPayload'
+
+    def build_payload( self, **kwargs ):
+
+        if 'premaster' not in kwargs.keys() and \
+           'master' not in kwargs.keys():
+            tls_version = { 'major' : "TLS12M", 'minor' : "TLS12m"} 
+            premaster = PreMaster.build(\
+                    { 'tls_version' : tls_version, 'random' : token_bytes( 46 ) } )
+            kwargs[ 'premaster' ] = premaster
+        payload = super(Tls12ExtMasterRequestPayload, self ).build_payload( **kwargs )
+        payload[ 'finished' ] = self.conf.default_finished( self, **kwargs )
+        return payload
+
+    def check( self, payload, crypto_check=False):
+        keys = [ 'key_id', 'freshness_funct', 'handshake_messages', 'finished' ]
+        self.conf.check_key( payload, keys )
+        self.conf.check_key_id( payload[ 'key_id' ] )
+        self.conf.check_freshness_funct( payload[ 'freshness_funct' ] )
+        self.conf.check_handshake_messages( payload[ 'handshake_messages' ] ) 
+        self.conf.check_finished( payload[ 'finished' ] )
+
+
+class Tls12ExtMasteWithPoHrResponsePayload(Tls12RsaMasterResponsePayload):
+
+    def __init__(self, conf=LurkConf().get_type_conf( 'tls12', 'v1',
+                                             'rsa_extended_master')[0] ):
+        self.conf = Tls12RSAExtendedMasterConf( conf )
+        self.struct = TLS12RSAMasterResponsePayload
+        self.struct_name = 'TLS12RSAExtMasterWithPoHResponsePayload'
+
+
 
 class Tls12ECDHEConf ( Tls12RSAMasterConf ):
 

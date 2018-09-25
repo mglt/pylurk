@@ -424,6 +424,14 @@ HandshakeMessages = Array( 5, Handshake )
 ##         "session_hash" / GreedyBytes
 ##)
 
+TLS12RSAMasterWithPoHRequestPayload = Struct(
+    "key_id" / KeyPairID , 
+    "freshness_funct" / FreshnessFunct,
+    "handshake_messages" / HandshakeMessages,
+    "finished" / Finished,
+)
+
+
 
 
 TLS12ExtendedRSAMasterRequestPayload = Struct(
@@ -432,6 +440,12 @@ TLS12ExtendedRSAMasterRequestPayload = Struct(
     "handshake_messages" / HandshakeMessages,
 )
 
+TLS12ExtendedRSAMasterWithPoHRequestPayload = Struct(
+    "key_id" / KeyPairID , 
+    "freshness_funct" / FreshnessFunct,
+    "handshake_messages" / HandshakeMessages,
+    "finished" / Finished,
+)
 
 
 
