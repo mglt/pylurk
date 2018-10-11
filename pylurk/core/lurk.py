@@ -358,7 +358,6 @@ class LurkMessage( Payload ):
         self.struct = LURKHeader
         self.struct_name = 'Lurk Header'
         self.lurk = self.import_ext()
-
     def import_ext( self ):
         lurk_ext = {}
         for ext in self.conf.mtype.keys():
@@ -606,7 +605,7 @@ class LurkServer():
         self.init_conf( conf )
         self.conf = LurkConf( conf )
         self.conf.set_role( 'server' )
-        self.messages = []  # list of messages handled by the LurkServer
+        self.message = LurkMessage( conf=self.conf.conf ) 
 
     def init_conf( self, conf ):
         """ Provides minor changes to conf so the default conf can be used
@@ -627,16 +626,12 @@ class LurkServer():
         associated to the errors encountered by reading the payload part.
         """
         response_bytes = b''
-        new_message = LurkMessage(conf=self.conf.conf)
-
         while len( pkt_bytes ) >= HEADER_LEN :
             try:
-                request = new_message.parse( pkt_bytes )
-                response = new_message.serve ( request )
-                response_bytes += new_message.build( **response )
-                pkt_bytes = pkt_bytes[ request['length' ] : ]
-                self.messages.append(new_message)
-
+                request = self.message.parse( pkt_bytes )
+                response = self.message.serve ( request )
+                response_bytes += self.message.build( **response ) 
+                pkt_bytes = pkt_bytes[ request['length' ] : ]  
             except:
                 ## stop when an error is encountered
                 return response_bytes
@@ -752,9 +747,9 @@ class LurkUDPClient(LurkClient):
 class LurkUDPServer:
 
     def __init__(self, conf=default_conf ):
+
 #        self.init_conf( conf )
         self.lurk = LurkServer( conf )
-
 #        self.conf = self.lurk.conf
 #        self.conf.set_role( 'server' )
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
