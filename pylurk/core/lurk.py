@@ -4,7 +4,8 @@ from secrets import randbits
 from Cryptodome.Hash import HMAC, SHA256
 from pylurk.core.conf import default_conf
 from pylurk.core.lurk_struct import *
-
+from socketserver import ThreadingMixIn, UDPServer,BaseRequestHandler
+import threading
 HEADER_LEN = 16 
 LINE_LEN = 60
 
@@ -746,20 +747,73 @@ class LurkUDPClient(LurkClient):
 
 class LurkUDPServer:
 
-    def __init__(self, conf=default_conf ):
-
-#        self.init_conf( conf )
+    def __init__(self,conf=default_conf):
         self.lurk = LurkServer( conf )
-#        self.conf = self.lurk.conf
-#        self.conf.set_role( 'server' )
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    def serve_client(self):
+        """
+        This method is used to serve a single client without invoking any threading functionaliy
+        """
+        #create and bind socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         ip = self.lurk.conf.server.ip_address
         port = self.lurk.conf.server.port
-        self.sock.bind( ( ip, port) )
+        sock.bind((ip, port))
 
+        #recieve client request and reply
         while True:
-            data, address = self.sock.recvfrom(4096)
-            self.sock.sendto( self.lurk.byte_serve( data ) , address)
+          data, address = sock.recvfrom(4096)
+          sock.sendto( self.lurk.byte_serve( data ) , address)
 
-        self.sock.close()
+        #close socket
+        sock.close()
 
+    def get_thread_udpserver(self):
+
+       """
+       This method is used whenever we want to use threding for UDPServer.
+       :return: an instance of the ThreadingUDPServer from which we can have access to the server socket and client data
+       """
+       ip = self.lurk.conf.server.ip_address
+       port = self.lurk.conf.server.port
+
+       #create a UDP server (socket) bind the host (ip) to the port (port)
+       server = ThreadingUDPServer((ip, port), UDPHandler, self.lurk)
+       return server
+
+#launch a new thread (for each request) when a client gets connected
+class ThreadingUDPServer(ThreadingMixIn, UDPServer):
+
+   def __init__(self, server_info, udp_handler, lurkserver):
+        """
+        Override the method to pass the lurk serversince it is needed to be able to call the byte_serve in UDPHandler.handle()
+        :param server_info:(ip, port) on which the UDP server is listening
+        :param UDPHandler: object of the UDPHandler class
+        :param lurkserver: object of the LurkServer
+        """
+        super(ThreadingUDPServer, self).__init__(server_info, udp_handler)
+        self.lurkServer = lurkserver
+
+class UDPHandler(BaseRequestHandler):
+    """
+    This class  except that self.request consists of a pair of data and client socket,
+    An object of this class is instantiated whenever there is a new client request
+    """
+
+    def handle(self):
+        """
+             This method handles the processing for each request
+        """
+        #get data sent by the client to the server up to 8192 bytes
+        data = self.request[0]
+
+        #get the server socket
+        socket = self.request[1]
+
+        #manipulate the data and send it to the client
+        #self.server is a ThreadingUDPServer
+        socket.sendto(self.server.lurkServer.byte_serve(data), self.client_address)
+
+        #socket.close()
+        print("{} data:".format(threading.current_thread().name))
+        print(data)

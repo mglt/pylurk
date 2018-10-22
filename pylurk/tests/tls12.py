@@ -5,7 +5,7 @@ data_dir = pkg_resources.resource_filename( __name__, '../data/')
 
 from pylurk.core.lurk import LurkServer, ImplementationError, LurkMessage, \
                  HEADER_LEN, LurkClient, LurkServer, LurkUDPClient, \
-                 LurkUDPServer, LurkConf, UDPServerConf 
+                 LurkUDPServer, LurkConf, UDPServerConf
 from pylurk.extensions.tls12 import Tls12RSAMasterConf,  Tls12ECDHEConf, \
                       Tls12RsaMasterRequestPayload,\
                       Tls12ExtMasterRequestPayload,\
@@ -90,7 +90,7 @@ clt_conf = LurkConf( )
 clt_conf.set_role( 'client' )
 clt_conf.set_connectivity( type='udp', ip_address="127.0.0.1", port=6789 )
 client = LurkUDPClient( conf = clt_conf.conf )
-
+client2 = LurkUDPClient( conf = clt_conf.conf )
 
 
 print("-- Starting LURK UDP Server")
@@ -98,7 +98,9 @@ srv_conf = LurkConf()
 srv_conf.set_role( 'server' )
 srv_conf.set_connectivity( type='udp', ip_address="127.0.0.1", port=6789 )
 
-t = threading.Thread( target=LurkUDPServer, kwargs={ 'conf' : srv_conf.conf } )
+updServer = LurkUDPServer (srv_conf.conf)
+#t = threading.Thread( target=LurkUDPServer, kwargs={ 'conf' : srv_conf.conf } )
+t = threading.Thread( target=updServer.serve_client)#single thread (no parallelism)
 t.daemon = True
 t.start()
 
@@ -115,6 +117,7 @@ for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
         resolve_exchange( client, server, designation, version, mtype, \
                           payload={ 'freshness_funct' : freshness_funct } )
 
+
 print( "+---------------------------------------+" )
 print( "|      UDP  LURK Client / Server        |" )
 print( "|      Edge Server Integration (RSA)    |" )
@@ -124,22 +127,22 @@ print( "+---------------------------------------+" )
 print("-- Starting LURK UDP Client")
 
 conf = { 'role' : "client",
-         'connectivity' : { 
-             'type' : "udp",  # "udp", "local", 
-              'ip_address' : "127.0.0.1", 
-              'port' : 6789, 
-        },    
-        'extensions' : [ 
-             { 'designation' : "tls12", 
-               'version' : "v1", 
+         'connectivity' : {
+             'type' : "udp",  # "udp", "local",
+              'ip_address' : "127.0.0.1",
+              'port' : 6789,
+        },
+        'extensions' : [
+             { 'designation' : "tls12",
+               'version' : "v1",
                'type' : "rsa_master",
-               'key_id_type' : [  "sha256_32" ],  
-               'freshness_funct' : [ "sha256" ],  
-               'random_time_window' : 0,  
-               'check_server_random' : True, 
+               'key_id_type' : [  "sha256_32" ],
+               'freshness_funct' : [ "sha256" ],
+               'random_time_window' : 0,
+               'check_server_random' : True,
                'check_client_random' : False,
-               'cert' : [ join( data_dir, "cert-rsa-enc.der" ) ],  
-#               'key' : [ "key-rsa-enc-pkcs8.der" ],  
+               'cert' : [ join( data_dir, "cert-rsa-enc.der" ) ],
+#               'key' : [ "key-rsa-enc-pkcs8.der" ],
              }] }
 client = LurkUDPClient( conf=conf )
 
@@ -147,8 +150,8 @@ client = LurkUDPClient( conf=conf )
 ## LurkMessage is used to build LURK messages and printing them
 ## rsa_conf is the default rsa configuration parameters for LURK
 ## rsa_utils is a tool box for RSA, it is used to simulate the various
-## involved values and parameters. 
-msg = LurkMessage() 
+## involved values and parameters.
+msg = LurkMessage()
 rsa_conf = LurkConf( conf=conf ).get_type_conf( 'tls12', 'v1', 'rsa_master')[0]
 rsa_utils = Tls12RSAMasterConf( conf=rsa_conf )
 
@@ -204,18 +207,18 @@ print("================ LURK Exchange between Edge Server and Key Server")
 payload_args = { 'cert' : conf[ 'extensions' ][0][ 'cert' ][0],\
                  'client_random' : client_random, \
                  'server_random' : edge_server_random, \
-                 'freshness_funct' : conf[ 'extensions' ][0][ 'freshness_funct' ][0], 
+                 'freshness_funct' : conf[ 'extensions' ][0][ 'freshness_funct' ][0],
                  'encrypted_premaster' : encrypted_premaster }
 query, response = client.resolve( designation='tls12', \
                                   version='v1', \
                                   type='rsa_master', \
-                                  payload=payload_args ) 
+                                  payload=payload_args )
 print("LURK Query >>>>")
 msg.show( query )
 print("LURK Response <<<<")
 msg.show( response )
 print("================ Edge Server get the master secret")
-print("    - master: %s"%response[ 'payload' ][ 'master' ]) 
+print("    - master: %s"%response[ 'payload' ][ 'master' ])
 
 print("================ KEX done between Edge Server and TLS Client")
 print("[ChangeCipherSpec]")
@@ -236,36 +239,36 @@ print( "+---------------------------------------+" )
 
 print("-- Starting LURK UDP Client")
 
-conf = { 'role' : "client", 
-         'connectivity' : { 
-             'type' : "udp", 
-              'ip_address' : "127.0.0.1", 
-              'port' : 6789, 
-        },    
+conf = { 'role' : "client",
+         'connectivity' : {
+             'type' : "udp",
+              'ip_address' : "127.0.0.1",
+              'port' : 6789,
+        },
         'extensions' : [
-             { 'designation' : "tls12", 
-               'version' : "v1", 
+             { 'designation' : "tls12",
+               'version' : "v1",
                'type' : "ecdhe",
-               'key_id_type' : [  "sha256_32" ],  
-               'freshness_funct' : [ "sha256" ],  
-               'random_time_window' : 0,  
-               'check_server_random' : True, 
+               'key_id_type' : [  "sha256_32" ],
+               'freshness_funct' : [ "sha256" ],
+               'random_time_window' : 0,
+               'check_server_random' : True,
                'check_client_random' : False,
-               'cert' : [ join( data_dir + "cert-ecc-sig.der" ) ],  
-#               'key' : [ "key-ecc-sig-pkcs8.der" ],  
-#               'cert' : [ "cert-rsa-sig.der" ],  
-#               'key' : [ "key-rsa-sig-pkcs8.der" ],  
+               'cert' : [ join( data_dir + "cert-ecc-sig.der" ) ],
+#               'key' : [ "key-ecc-sig-pkcs8.der" ],
+#               'cert' : [ "cert-rsa-sig.der" ],
+#               'key' : [ "key-rsa-sig-pkcs8.der" ],
                'sig_and_hash' : [ ( 'sha256', 'rsa' ),       ( 'sha512', 'rsa' ),\
                                   ( 'sha256', 'ecdsa' ), ( 'sha512', 'ecdsa' ) ],
                 ## acceptable ecdsa curves when 'ecdsa' is chosen in
                 ## 'sig_andhahs'. This parameter must not be specified
-                ## when 'rsa' is the only acceptable signature.  
+                ## when 'rsa' is the only acceptable signature.
                'ecdsa_curves' : ['secp256r1', 'secp384r1', 'secp512r1'],
                 ## acceptable curves for ecdhe. This is used to check
                 ## the provided ecdhe_params before signing those. It is
                 ## only required for the server. Client only needs then
                 ## when they generate the parameters and SHOULD be omitted
-                ## in the configuration. 
+                ## in the configuration.
                'ecdhe_curves' : ['secp256r1', 'secp384r1', 'secp512r1' ],
                 ## defines how proo-of ownership is generated.
                'poo_prf' : [ "null", "sha256_128", "sha256_256" ]
@@ -331,13 +334,13 @@ payload_args = {'server_random' : edge_server_random, \
 request, response = client.resolve( designation='tls12', \
                                   version='v1', \
                                   type='ecdhe', \
-                                  payload=payload_args ) 
+                                  payload=payload_args )
 print("LURK Query >>>>")
 msg.show( request )
 print("LURK Response <<<<")
 msg.show( response )
 print("================ Edge Server get the signed_params")
-print("    - master: %s"%response[ 'payload' ][ 'signed_params' ]) 
+print("    - master: %s"%response[ 'payload' ][ 'signed_params' ])
 
 print("================ Terminating KEX between Edge Server and TLS Client")
 print("")
@@ -377,16 +380,16 @@ client = LurkUDPClient( conf = clt_conf.conf )
 
 x = 0
 mtypes = [ 'ping', 'rsa_master', 'rsa_extended_master', 'ecdhe' ]
-for mtype in mtypes: 
+for mtype in mtypes:
     payload = {}
     time_start = time()
     for i in range(x):
         request, response = client.resolve( designation='tls12', \
                                   version='v1', \
                                   type=mtype, \
-                                  payload=payload ) 
+                                  payload=payload )
     time_stop = time()
-    print("%s %s resolutions in %s sec."%( x, mtype, (time_stop - time_start) ) ) 
+    print("%s %s resolutions in %s sec."%( x, mtype, (time_stop - time_start) ) )
 
 print( "+---------------------------------------+" )
 print( "|      LURK vs openssl -- vector test   |" )
@@ -408,7 +411,7 @@ print( "+---------------------------------------+" )
 #rsa.key_id_type = [ "sha256_32" ]
 #rsa.tls_version = [ "TLS1.2" ]
 #rsa.prf = [ "sha256_null" ]
-#rsa.random_window_time = 0 
+#rsa.random_window_time = 0
 #cert_dir = "/home/emigdan/gitlab/pylurk/test/"
 #rsa.serverX509Cert =  [ join( cert_dir, "serverX509Cert.pem") ]
 #rsa.serverX509Key =  [ join( cert_dir, "serverX509Key.pem") ]
@@ -428,7 +431,7 @@ print( "+---------------------------------------+" )
 #rsa.key_id_type = [ "sha256_32" ]
 #rsa.tls_version = [ "TLS1.2" ]
 #rsa.prf = [ "sha256_null" ]
-#rsa.random_window_time = 0 
+#rsa.random_window_time = 0
 #cert_dir = "/home/emigdan/gitlab/pylurk/test/"
 #rsa.serverX509Cert =  [ join( cert_dir, "serverX509Cert.pem") ]
 #
