@@ -5,7 +5,7 @@ data_dir = pkg_resources.resource_filename( __name__, '../data/')
 
 from pylurk.core.lurk import LurkServer, ImplementationError, LurkMessage, \
                  HEADER_LEN, LurkClient, LurkServer, LurkUDPClient, \
-                 LurkUDPServer, LurkConf, UDPServerConf
+                 LurkUDPServer, LurkTCPClient, LurkTCPServer, LurkConf, UDPServerConf, PoolMixIn
 from pylurk.extensions.tls12 import Tls12RSAMasterConf,  Tls12ECDHEConf, \
                        Tls12RsaMasterRequestPayload,\
                        Tls12ExtMasterRequestPayload,\
@@ -18,7 +18,6 @@ from pylurk.utils.utils import message_exchange, resolve_exchange, bytes_error_t
 print( "+-------------------------------------------------------+" )
 print( "|    UDP  LURK CLIENT / SERVER - MULTI-Threads TESTS    |" )
 print( "+-------------------------------------------------------+" )
-
 
 print("-- Starting LURK UDP Clients")
 clt_conf = LurkConf( )
@@ -34,8 +33,8 @@ srv_conf.set_role( 'server' )
 srv_conf.set_connectivity( type='udp', ip_address="127.0.0.1", port=6789 )
 
 updServer = LurkUDPServer (srv_conf.conf)
-threadedUDPServer = updServer.get_thread_udpserver()
-#updServer.getThreadUDPServer().serve_forever
+threadedUDPServer = updServer.get_thread_udpserver(7)
+
 
 # Start a thread with the server -- that thread will then start one
 # more thread for each request (not for each client)
@@ -48,7 +47,7 @@ version = 'v1'
 
 
 for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
-               'capabilities' ]:
+               'capabilities']:
     if mtype in [ 'ping', 'capabilities' ]:
         resolve_exchange( client, updServer, designation, version, mtype, \
                           payload={} )

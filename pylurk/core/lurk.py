@@ -4,7 +4,9 @@ from secrets import randbits
 from Cryptodome.Hash import HMAC, SHA256
 from pylurk.core.conf import default_conf
 from pylurk.core.lurk_struct import *
-from socketserver import ThreadingMixIn, UDPServer,BaseRequestHandler
+from socketserver import ThreadingMixIn, UDPServer, TCPServer, BaseRequestHandler
+from concurrent.futures import ThreadPoolExecutor
+from time import sleep
 import threading
 HEADER_LEN = 16 
 LINE_LEN = 60
@@ -104,6 +106,8 @@ class UDPServerConf:
         if set( conf.keys() ) != set( self.keys ) :
             raise ConfError( conf, "Expected keys: %s"%self.keys )
 
+class TCPServerConf(UDPServerConf):pass
+
 class LurkConf():
 
     def __init__(self, conf=default_conf ):
@@ -125,9 +129,9 @@ class LurkConf():
             raise ConfError( conf['role' ], "Expecting role as 'client' " + \
                                             "or 'server'" )
         connectivity = conf[ 'connectivity' ]
-        if connectivity[ 'type' ] not in [ "local", "udp" ]:
+        if connectivity[ 'type' ] not in [ "local", "udp", "tcp" ]:
             raise ConfError( connectivity, "Expected type as 'local' "+\
-                                            "or 'udp'" )
+                                            "or 'udp' or 'tcp'" )
         if type( conf[ 'extensions' ] ) is not list:
             raise ConfError( conf[ 'connectivity' ], "Expected 'list'")
         id_bytes = randbits(8)
@@ -219,6 +223,8 @@ class LurkConf():
             return LocalServerConf( )
         if con[ 'type' ] == "udp" :
             return UDPServerConf( conf=con )
+        if con[ 'type' ] == "tcp" :
+            return TCPServerConf( conf=con )
 
     def set_role( self, role ):
         if role not in [ 'client', 'server' ]:
@@ -243,8 +249,21 @@ class LurkConf():
                 port = 6789
             self.conf[ 'connectivity' ] = \
                 { 'type' : "udp", 'ip_address' : ip, 'port' : port }
+        elif kwargs[ 'type' ] == "tcp":
+            con = {}
+            con[ 'type' ] = 'tcp'
+            if 'ip_address' in kwargs.keys():
+                ip =  kwargs[ 'ip_address' ]
+            else:
+                ip = "127.0.0.1"
+            if 'port' in kwargs.keys():
+                port = kwargs[ 'port' ]
+            else:
+                port = 6789
+            self.conf[ 'connectivity' ] = \
+                { 'type' : "tcp", 'ip_address' : ip, 'port' : port }
         else: 
-            raise ConfError( kwargs[ 'type' ], "Expecting 'local', 'udp' ")
+            raise ConfError( kwargs[ 'type' ], "Expecting 'local', 'udp', 'tcp' ")
 
 
     ### function used by classes using this ConfLurk class 
@@ -529,7 +548,7 @@ class LurkMessage( Payload ):
         if len( pkt_bytes ) < HEADER_LEN:
             raise InvalidFormat(len ( pkt_bytes ), \
                   "bytes packet length too short for LURK header. " +\
-                  "Expected length %s bytes"%HEADER_LEN  ) 
+                  "Expected length %s bytes"%HEADER_LEN  )
         try:
             header = self.struct.parse( pkt_bytes )
         except Exception as e:
@@ -641,11 +660,11 @@ class LurkServer():
 
 class LurkClient:
 
-    def __init__( self, conf=default_conf): 
+    def __init__( self, conf=default_conf):
         self.init_conf( conf )
         self.conf = LurkConf( conf )
         self.waiting_queries = {}
-        self.server = self.get_server(  ) 
+        self.server = self.get_server()
         self.message = LurkMessage( conf = self.conf.conf )
 
     def init_conf( self, conf ):
@@ -717,10 +736,10 @@ class LurkUDPClient(LurkClient):
         self.init_conf( conf )
         self.conf = LurkConf( conf )
         self.waiting_queries = {}
-        self.server = self.get_server( self.conf )
+        self.server = self.get_server()
         self.message = LurkMessage( conf = self.conf.conf )
 
-    def get_server( self, server_conf):
+    def get_server( self):
          sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
          sock.settimeout(1.0)
          return sock
@@ -744,7 +763,6 @@ class LurkUDPClient(LurkClient):
             except: 
                 ImplementationError( '', "Unable resolve" )
 
-
 class LurkUDPServer:
 
     def __init__(self,conf=default_conf):
@@ -763,40 +781,64 @@ class LurkUDPServer:
         #recieve client request and reply
         while True:
           data, address = sock.recvfrom(4096)
-          sock.sendto( self.lurk.byte_serve( data ) , address)
+          sock.sendto( self.lurk.byte_serve(data), address)
 
         #close socket
         sock.close()
 
-    def get_thread_udpserver(self):
+    def get_thread_udpserver(self, max_workers=40):
 
        """
        This method is used whenever we want to use threding for UDPServer.
-       :return: an instance of the ThreadingUDPServer from which we can have access to the server socket and client data
+       :param max_workers: maximum number of threads (requests) to handle at a time
+       :return: an instance of the ThreadedUDPServer from which we can have access to the server socket and client data
        """
        ip = self.lurk.conf.server.ip_address
        port = self.lurk.conf.server.port
 
        #create a UDP server (socket) bind the host (ip) to the port (port)
-       server = ThreadingUDPServer((ip, port), UDPHandler, self.lurk)
+       server = ThreadedUDPServer((ip, port), UDPHandler, self.lurk, max_workers)
        return server
 
-#launch a new thread (for each request) when a client gets connected
-class ThreadingUDPServer(ThreadingMixIn, UDPServer):
+class PoolMixIn(ThreadingMixIn):
 
-   def __init__(self, server_info, udp_handler, lurkserver):
+    def process_request(self, request, client_address):
+        '''
+        Override the process_request () in ThreadingMixIn
+        This method is called by handle_request() pre-defined in BaseServer(in out case; ThreadedUDPServer, ThreadedTCPServer) class which is the superclass of UDPServer and TCPServer
+        :param request:
+        :param client_address:
+        '''
+
+        #call the process_request_thread () defined in ThreadingMixIn for each request in the pool
+        self.pool.submit(self.process_request_thread, request, client_address)
+
+
+class ThreadedUDPServer(PoolMixIn, UDPServer):
+    '''
+     This class represents a UDPServer which launches a new thread (for each request) when a client gets connected
+     This default behavior is modified by extending the PoolMixIn class instead of ThreadingMixIn to handle a specific number of requests(max_workers) in parallel
+    '''
+    def __init__(self, server_info, udp_handler, lurkserver, max_workers=40):
         """
         Override the method to pass the lurk serversince it is needed to be able to call the byte_serve in UDPHandler.handle()
         :param server_info:(ip, port) on which the UDP server is listening
         :param UDPHandler: object of the UDPHandler class
         :param lurkserver: object of the LurkServer
+        :param max_workers: maximum number of threads (requests) to handle at a time
         """
-        super(ThreadingUDPServer, self).__init__(server_info, udp_handler)
+        #super(UDPServer, self).__init__(server_info, udp_handler)
+        super(PoolMixIn, self).__init__(server_info, udp_handler)
         self.lurkServer = lurkserver
+        self.pool = ThreadPoolExecutor(max_workers)
+
 
 class UDPHandler(BaseRequestHandler):
     """
-    This class  except that self.request consists of a pair of data and client socket,
+     This class works similar to the TCP handler class, except that
+    self.request consists of a pair of data and client socket, and since
+    there is no connection, the client address must be given explicitly
+    when sending data back via sendto().
     An object of this class is instantiated whenever there is a new client request
     """
 
@@ -811,9 +853,106 @@ class UDPHandler(BaseRequestHandler):
         socket = self.request[1]
 
         #manipulate the data and send it to the client
-        #self.server is a ThreadingUDPServer
+        #self.server is a ThreadedUDPServer
         socket.sendto(self.server.lurkServer.byte_serve(data), self.client_address)
 
         #socket.close()
         print("{} data:".format(threading.current_thread().name))
         print(data)
+
+class LurkTCPClient(LurkUDPClient):
+
+    def __init__(self, conf=default_conf):
+        conf['connectivity']['type'] = 'tcp'
+        super(LurkUDPClient, self).__init__(conf)
+
+
+    def get_server( self):
+         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+         sock.settimeout(1.0)
+
+         return sock
+
+    def send(self, bytes_pkt):
+         '''
+         This method will connect the client to the server and send the bytes_pkt and recieve the response
+         Important notes:
+             1- We prevent the client to reconnect each time it tries to send a request.
+             For that, we start by trying to send the bytes, if connection is lost of no connection is established a socket exception will be thrown and hence, the client will try to connect to server and re-send the bytes
+             2- Use a buffer of 4096
+             It is important to keep the buffer = 4096 and not less (i.e. 1024) to prevent a timeout error and a failure to reconnect when trying to send an 'rsa_extended_master' and capabilities
+
+         :param bytes_pkt: bytes to send t server
+         :return: recieved bytes (parsed)
+         '''
+
+         while True:
+            try:
+                #try to send first to check if there is a connection established
+                self.server.sendall(bytes_pkt)
+                response_bytes = self.server.recv(4096)
+                waiting = True
+                while waiting == True:
+                    response_bytes = self.server.recv(4096)
+                    response = self.message.parse(response_bytes)
+                    if self.is_response(response) == True:
+                       waiting = False
+                return response
+            #catch any error mainly if no connection exists
+            except socket.error:
+                try:
+                    return response_bytes
+                except:
+                    ImplementationError('', "Unable resolve")
+
+                # set connection status and recconnect
+                connected = False
+
+                while not connected:
+                    #attempt to reconnect
+                    try:
+                        ip = self.conf.server.ip_address
+                        port = self.conf.server.port
+                        self.server.connect( ( ip, port ) )
+                        connected = True
+                    except socket.timeout:
+                        print("timeout")
+
+         self.server.close()
+
+
+
+class LurkTCPServer:
+
+    def __init__(self,conf=default_conf):
+        conf['connectivity']['type'] = 'tcp'
+        self.lurk = LurkServer(conf)
+
+    def serve_client(self):
+        """
+        This method is used to serve a single client without invoking any threading functionality
+        It only allows the connection of one client to the server.
+        Unlike UDP where multiple clients can be handled sequentially, with TCP, for the server to handle multiple clients threading is needed.
+        https://stackoverflow.com/questions/10810249/python-socket-multiple-clients/46980073
+        """
+        #create and bind socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        ip = self.lurk.conf.server.ip_address
+        port = self.lurk.conf.server.port
+
+        #allow address reuse to prevent OS error that the address is already in use when binding
+        #sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((ip, port))
+        sock.listen(1)
+
+        #conn: a new socket object used to send and recv data; addr address of the client
+        conn, addr = sock.accept()
+
+        #recieve client request and reply
+        while True:
+          data = conn.recv(4096)
+          conn.sendall( self.lurk.byte_serve(data))
+
+        #close socket
+        conn.close()
+

@@ -5,7 +5,7 @@ data_dir = pkg_resources.resource_filename( __name__, '../data/')
 
 from pylurk.core.lurk import LurkServer, ImplementationError, LurkMessage, \
                  HEADER_LEN, LurkClient, LurkServer, LurkUDPClient, \
-                 LurkUDPServer, LurkConf, UDPServerConf
+                 LurkUDPServer, LurkConf, UDPServerConf, LurkTCPClient, LurkTCPServer
 from pylurk.extensions.tls12 import Tls12RSAMasterConf,  Tls12ECDHEConf, \
                       Tls12RsaMasterRequestPayload,\
                       Tls12ExtMasterRequestPayload,\
@@ -114,7 +114,7 @@ for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
                           payload={} )
         continue
     for freshness_funct in [ "null", "sha256" ]:
-        resolve_exchange( client, server, designation, version, mtype, \
+        resolve_exchange( client2, server, designation, version, mtype, \
                           payload={ 'freshness_funct' : freshness_funct } )
 
 
@@ -460,3 +460,36 @@ measurements = {'nginx_encrypted_premaster' : nginx_encrypted_premaster, \
                 'nginx_master_secret' : nginx_master_secret}
 
 
+print( "+--------------------------------------------------------------+" )
+print( "|    TCP  LURK CLIENT / SERVER - One client one server TEST    |" )
+print( "+--------------------------------------------------------------+" )
+
+
+print("-- Starting LURK TCP Client")
+clt_conf = LurkConf( )
+clt_conf.set_role( 'client' )
+clt_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )
+client = LurkTCPClient( conf = clt_conf.conf )
+
+print("-- Starting LURK TCP Server")
+srv_conf = LurkConf()
+srv_conf.set_role( 'server' )
+srv_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )
+tcpServer = LurkTCPServer (srv_conf.conf)
+
+t = threading.Thread( target=tcpServer.serve_client)
+t.daemon = True
+t.start()
+
+designation = 'tls12'
+version = 'v1'
+
+for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
+               'capabilities']:
+    if mtype in [ 'ping', 'capabilities' ]:
+        resolve_exchange( client, tcpServer, designation, version, mtype, \
+                          payload={} )
+        continue
+    for freshness_funct in [ "null", "sha256" ]:
+        resolve_exchange( client, tcpServer, designation, version, mtype, \
+                          payload={ 'freshness_funct' : freshness_funct } )
