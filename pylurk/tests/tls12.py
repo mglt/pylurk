@@ -461,7 +461,7 @@ measurements = {'nginx_encrypted_premaster' : nginx_encrypted_premaster, \
 
 
 print( "+--------------------------------------------------------------+" )
-print( "|    TCP  LURK CLIENT / SERVER - One client one server TEST    |" )
+print( "|    TCP/TLS  LURK CLIENT / SERVER - One client one server TEST|" )
 print( "+--------------------------------------------------------------+" )
 
 
@@ -469,13 +469,13 @@ print("-- Starting LURK TCP Client")
 clt_conf = LurkConf( )
 clt_conf.set_role( 'client' )
 clt_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )
-client = LurkTCPClient( conf = clt_conf.conf )
+client = LurkTCPClient( conf = clt_conf.conf, secureTLS_connection=True )
 
 print("-- Starting LURK TCP Server")
 srv_conf = LurkConf()
 srv_conf.set_role( 'server' )
 srv_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )
-tcpServer = LurkTCPServer (srv_conf.conf)
+tcpServer = LurkTCPServer (srv_conf.conf, secureTLS_connection=True)
 
 t = threading.Thread( target=tcpServer.serve_client)
 t.daemon = True

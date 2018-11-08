@@ -6,7 +6,12 @@ from pylurk.core.conf import default_conf
 from pylurk.core.lurk_struct import *
 from socketserver import ThreadingMixIn, UDPServer, TCPServer, BaseRequestHandler
 from concurrent.futures import ThreadPoolExecutor
-from time import sleep
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import http.client
+import ssl
+from  os.path import join
+import pkg_resources
+
 import threading
 HEADER_LEN = 16 
 LINE_LEN = 60
@@ -621,11 +626,14 @@ class LurkMessage( Payload ):
 
 class LurkServer():
 
-    def __init__(self, conf=default_conf ):
+    def __init__(self, conf=default_conf, secureTLS_connection=False ):
         self.init_conf( conf )
         self.conf = LurkConf( conf )
         self.conf.set_role( 'server' )
-        self.message = LurkMessage( conf=self.conf.conf ) 
+        self.message = LurkMessage( conf=self.conf.conf )
+
+        # specify that we need to use TCP TLS
+        self.secureTLS_connection = secureTLS_connection
 
     def init_conf( self, conf ):
         """ Provides minor changes to conf so the default conf can be used
@@ -655,17 +663,54 @@ class LurkServer():
             except:
                 ## stop when an error is encountered
                 return response_bytes
-        return response_bytes 
+        return response_bytes
 
+    def get_context(self):
+        '''
+        This method sets the ssl context for a secure connection with the client.
+        To do: enhance this method to load the certificates from the configuration.
+
+        :return: ssl context object
+        '''
+
+        data_dir = pkg_resources.resource_filename(__name__, '../data/')
+
+        #path to server certificate
+        server_cert = join( data_dir,'cert_tls12_rsa_server.crt')
+
+        #path to server key
+        server_key = join( data_dir,'key_tls12_rsa_server.key')
+
+        #path to client certificates
+        client_certs = join( data_dir,'cert_tls12_rsa_client.crt')
+
+        # context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)#in case we want to use  a default context chosen by ssl
+
+        #set the context to use TLS1.2 protocol
+        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+
+        #set the server to verify clients certificates (the hostname when wrapping the socket should be specified in this case on client side)
+        context.verify_mode = ssl.CERT_REQUIRED
+
+        #load the server certificate and key
+        context.load_cert_chain(certfile= server_cert, keyfile= server_key)
+
+        #allo the server to also authenticate the client
+        context.load_verify_locations(cafile= client_certs)
+
+        return context
 
 class LurkClient:
 
-    def __init__( self, conf=default_conf):
+    def __init__( self, conf=default_conf, secureTLS_connection=False):
         self.init_conf( conf )
         self.conf = LurkConf( conf )
         self.waiting_queries = {}
         self.server = self.get_server()
         self.message = LurkMessage( conf = self.conf.conf )
+
+        #specify that we need to use TCP TLS
+        self.secureTLS_connection = secureTLS_connection
 
     def init_conf( self, conf ):
         """ Provides minor changes to conf so the default conf can be used
@@ -690,8 +735,8 @@ class LurkClient:
                 except KeyError:
                     pass
         return conf
-         
-    
+
+
     def get_server( self ):
         conf_class = self.conf.server.__class__.__name__ 
         if conf_class == 'LocalServerConf' :
@@ -728,7 +773,33 @@ class LurkClient:
             return True
         except KeyError:
             return False
-        
+
+    def get_context(self):
+        '''
+        This method sets the ssl context for a secure connection with the server.
+        To do: enhance this method to load the certificates from the configuration.
+
+        :return: ssl context object
+        '''
+
+        data_dir = pkg_resources.resource_filename(__name__, '../data/')
+
+        # path to server key
+        client_key = join(data_dir, 'key_tls12_rsa_client.key')
+
+        # path to client certificates
+        client_certs = join(data_dir, 'cert_tls12_rsa_client.crt')
+
+        # context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=join( data_dir, 'server.crt' )) #used for default context selected by ssl
+
+        #set the context to use TLS12
+        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+
+        #load the client key and certificate
+        context.load_cert_chain(certfile= client_certs, keyfile=client_key)
+
+        return context
+
 
 class LurkUDPClient(LurkClient):
 
@@ -860,15 +931,31 @@ class UDPHandler(BaseRequestHandler):
         print("{} data:".format(threading.current_thread().name))
         print(data)
 
-class LurkTCPClient(LurkUDPClient):
+class LurkTCPClient(LurkClient):
 
-    def __init__(self, conf=default_conf):
+    def __init__(self, conf=default_conf, secureTLS_connection=False):
         conf['connectivity']['type'] = 'tcp'
-        super(LurkUDPClient, self).__init__(conf)
+
+        #could not call super constructor as it was throwing an init_conf error
+        self.init_conf(conf)
+        self.conf = LurkConf(conf)
+        self.waiting_queries = {}
+
+        # specify that we need to use TCP TLS
+        self.secureTLS_connection = secureTLS_connection
+
+        self.server = self.get_server()
+        self.message = LurkMessage(conf=self.conf.conf)
+
 
 
     def get_server( self):
          sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+         if (self.secureTLS_connection):
+             context = self.get_context()
+             sock = context.wrap_socket(sock, server_side=False,server_hostname= self.conf.server.ip_address) #server_hostname='example.com' (this is the common name when generating the certificate)
+
          sock.settimeout(1.0)
 
          return sock
@@ -922,11 +1009,11 @@ class LurkTCPClient(LurkUDPClient):
 
 
 
-class LurkTCPServer:
+class LurkTCPServer(LurkServer):
 
-    def __init__(self,conf=default_conf):
+    def __init__(self,conf=default_conf, secureTLS_connection=False):
         conf['connectivity']['type'] = 'tcp'
-        self.lurk = LurkServer(conf)
+        LurkServer.__init__(self, conf, secureTLS_connection)
 
     def serve_client(self):
         """
@@ -937,22 +1024,29 @@ class LurkTCPServer:
         """
         #create and bind socket
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        ip = self.lurk.conf.server.ip_address
-        port = self.lurk.conf.server.port
+        ip = self.conf.server.ip_address
+        port = self.conf.server.port
 
         #allow address reuse to prevent OS error that the address is already in use when binding
-        #sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+       # sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
         sock.bind((ip, port))
         sock.listen(1)
+
 
         #conn: a new socket object used to send and recv data; addr address of the client
         conn, addr = sock.accept()
 
+        if (self.secureTLS_connection):
+            context = self.get_context()
+            conn =context.wrap_socket(conn, server_side=True)
+
         #recieve client request and reply
         while True:
           data = conn.recv(4096)
-          conn.sendall( self.lurk.byte_serve(data))
+          conn.sendall( self.byte_serve(data))
 
         #close socket
         conn.close()
 
+        sock.close()
