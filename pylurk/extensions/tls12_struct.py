@@ -5,239 +5,10 @@ from time import time
 
 
 
-TLS12Status = Enum( Byte, 
-    request = 0, 
-    success = 1, 
-    undefined_error = 2, 
-    invalid_payload_format = 3, 
-    ## code points for rsa authentication
-    invalid_key_id_type = 4, 
-    invalid_key_id = 5, 
-    invalid_tls_random = 6, 
-    invalid_freshness_funct = 7, 
-    invalid_encrypted_premaster = 8,
-    invalid_finished = 9,
-    ## code points for ecdhe authentication
-    invalid_ec_type = 10,
-    invalid_ec_curve = 11,
-    invalid_poo_prf = 12,
-    invalid_poo = 13
-)
-
-
-TLS12Type = Enum( Byte, 
-       capabilities = 0, 
-       ping = 1, 
-       rsa_master = 2, 
-       rsa_master_with_poh = 3, 
-       rsa_extended_master = 4, 
-       ecdhe = 5
-)
-
-############# LURKTLSCapabilitiesResponse
-
-
-ASN1Cert = Prefixed(
-        BytesInteger(3),
-        GreedyBytes,
-)
-
-Certificate = Prefixed (
-        BytesInteger(3),
-        GreedyRange(ASN1Cert)
-)
-
-KeyPairIDType = Enum( BytesInteger(1),
-    sha256_32 = 0
-)
-
-KeyPairIDTypeList = Prefixed( 
-    BytesInteger(1),
-    GreedyRange(KeyPairIDType)
-)
-
-ProtocolVersionMajor = Enum( BytesInteger(1),
-    TLS11M = 3,
-    TLS12M = 3,
-)
-ProtocolVersionMinor = Enum( BytesInteger(1),
-    TLS11m = 2,
-    TLS12m = 3,
-)
-
-ProtocolVersion = Struct(
-    "major" / Default( ProtocolVersionMajor, "TLS12M"),
-    "minor" / Default( ProtocolVersionMinor, "TLS12m")
-)
-
-ProtocolVersionList = Prefixed(
-    BytesInteger(1),
-    GreedyRange(ProtocolVersion)    
-)
-
-FreshnessFunct = Enum( BytesInteger(1),
-    sha256 = 0,
-    null = 255, 
-)
-
-FreshnessFunctList = Prefixed(
-    BytesInteger(1),
-    GreedyRange(FreshnessFunct)
-)
-
-TLS12RSACapability = Struct( 
-    "key_id_type" / KeyPairIDTypeList, 
-    "tls_version" / ProtocolVersionList,
-    "freshness_funct" / FreshnessFunctList,
-    "cert" / Certificate, 
-)
+### structures from TLS 1.2 
 
 
 
-
-HashAlgorithm = Enum( Byte, 
-    none = 0, 
-    md5 = 1, 
-    sha1 = 2,
-    sha224 = 3, 
-    sha256 = 4, 
-    sha384 = 5, 
-    sha512 = 6, 
-)
-
-SignatureAlgorithm = Enum( Byte, 
-    anonymous = 0, 
-    rsa = 1, 
-    dsa = 2, 
-    ecdsa = 3, 
-    ed25519 = 7,
-    ed448 = 8
-)
-
-SignatureAndHashAlgorithm = Struct(
-    "hash" / HashAlgorithm, 
-    "sig" / SignatureAlgorithm 
-)
-
-SignatureAndHashAlgorithmList = Prefixed(
-        BytesInteger(2),
-        GreedyRange(SignatureAndHashAlgorithm)
-)
-
-NameCurve = Enum ( BytesInteger(1), 
-    secp256r1 = 23,
-    secp384r1 = 24, 
-    secp512r1 = 25,
-    x25519 = 29,
-    x448 = 30
-)
-
-NameCurveList = Prefixed(
-    BytesInteger(1),
-    GreedyRange(NameCurve)
-)
-
-POOPRF = Enum ( BytesInteger( 1 ), 
-    null = 0, 
-    sha256_128 = 1,
-    sha256_256 = 2
-)
-
-POOPRFList = Prefixed(
-    BytesInteger(1),
-    GreedyRange(POOPRF)
-)
-
-
-TLS12ECDHECapability = Struct(
-    Embedded( TLS12RSACapability ), 
-    "sig_and_hash" / SignatureAndHashAlgorithmList,
-    "ecdsa_curves" / NameCurveList, 
-    "ecdhe_curves" / NameCurveList, 
-    "poo_prf" / POOPRFList
-)
-
-#Void = Struct()
-
-
-TLS12Capability = Prefixed( 
-    BytesInteger(4),
-    Struct(
-    "type" / TLS12Type,
-     Embedded( Switch( this.type, 
-         { 'rsa_master' : TLS12RSACapability, 
-           'rsa_extended_master' : TLS12RSACapability, 
-           'ecdhe' : TLS12ECDHECapability  
-         }, default=Pass
-    ) )
-    )
-)
-
-
-TLS12CapabilitiesResponsePayload = Struct( 
-    "capabilities" /  GreedyRange( TLS12Capability ), 
-    "lurk_state" / Bytes(4)
-)
-    
-
-############# LURKTLSRSAMasterRequest
-
-
-
-
-KeyPairID = Struct( 
-    "key_id_type" / Default( KeyPairIDType, "sha256_32"),
-    "key_id" / Switch( this.key_id_type,
-        {
-        "sha256_32" : Bytes(4)
-        }
-    )
-)
-
-Random = Struct(
-    "gmt_unix_time" / Default(Bytes(4),
-                              Computed( lambda ctx: int(time())
-                                       ).parse(b""), \
-                      ), 
-    "random" / Default( Bytes(28),
-                        Computed( lambda ctx: urandom(28)
-                                ).parse(b"") ),
-)
-
-
-PreMaster = Struct(
-    "tls_version" / Default( ProtocolVersion, {} ), 
-    "random"  / Default( Bytes(46),
-                        Computed( lambda ctx: urandom(46)
-                                ).parse(b"") )
-)
-
-
-
-#TLS12Base = Struct(
-#    "key_id" / KeyPairID , 
-#    "client_random" / Random,
-#    "server_random" / Random,
-#    "tls_version" /  ProtocolVersion, 
-#    "freshness_funct" / FreshnessFunct
-#)
-
-TLS12RSAMasterRequestPayload = Struct(
-##    Embedded(TLS12Base),
-    "key_id" / KeyPairID, 
-    "freshness_funct" / FreshnessFunct,
-    "client_random" / Random,
-    "server_random" / Random,
-    "encrypted_premaster" / GreedyBytes
-)
-
-TLS12RSAMasterResponsePayload = Struct( 
-    "master" / Default ( Bytes(48), 
-                        Computed( lambda ctx: urandom(48)
-                                ).parse(b"") )
-)
-
-## handshake message
 
 ## The necessary structure for the handshake are defined 
 ## in RFC5246
@@ -262,6 +33,30 @@ TLS12RSAMasterResponsePayload = Struct(
 ##              Figure 1.  Message flow for a full handshake
 
 ### ClientHello
+
+ProtocolVersionMajor = Enum( BytesInteger(1),
+    TLS11M = 3,
+    TLS12M = 3,
+)
+ProtocolVersionMinor = Enum( BytesInteger(1),
+    TLS11m = 2,
+    TLS12m = 3,
+)
+
+ProtocolVersion = Struct(
+    "major" / Default( ProtocolVersionMajor, "TLS12M"),
+    "minor" / Default( ProtocolVersionMinor, "TLS12m")
+)
+
+Random = Struct(
+    "gmt_unix_time" / Default(Bytes(4),
+                              Computed( lambda ctx: int(time())
+                                       ).parse(b""), \
+                      ), 
+    "random" / Default( Bytes(28),
+                        Computed( lambda ctx: urandom(28)
+                                ).parse(b"") ),
+)
 
 SessionID = Prefixed( 
     BytesInteger(1),
@@ -350,11 +145,27 @@ ServerHelloDone = Const(b"")
 ### Client Key Exchange
 
 ##Certificate*
-## already defined
+ASN1Cert = Prefixed(
+        BytesInteger(3),
+        GreedyBytes,
+)
+
+Certificate = Prefixed (
+        BytesInteger(3),
+        GreedyRange(ASN1Cert)
+)
 
 ## ClientKeyExchange
 ## rsa: greedyBytes for EncryptedPremaster
 ClientKeyExchange = GreedyBytes
+
+PreMaster = Struct(
+    "tls_version" / Default( ProtocolVersion, {} ), 
+    "random"  / Default( Bytes(46),
+                        Computed( lambda ctx: urandom(46)
+                                ).parse(b"") )
+)
+
 
 ##CertificateVerify*
 ## client authentication
@@ -417,12 +228,81 @@ HandshakeMessages = Array( 5, Handshake )
 
 
 
-## Extended master
+### generic structures for TLS 1.2 Lurk extension
 
-## SessionHash = Prefixed(
-##         BytesInteger(2),
-##         "session_hash" / GreedyBytes
-##)
+TLS12Status = Enum( Byte, 
+    request = 0, 
+    success = 1, 
+    undefined_error = 2, 
+    invalid_payload_format = 3, 
+    ## code points for rsa authentication
+    invalid_key_id_type = 4, 
+    invalid_key_id = 5, 
+    invalid_tls_random = 6, 
+    invalid_freshness_funct = 7, 
+    invalid_encrypted_premaster = 8,
+    invalid_finished = 9,
+    ## code points for ecdhe authentication
+    invalid_ec_type = 10,
+    invalid_ec_curve = 11,
+    invalid_poo_prf = 12,
+    invalid_poo = 13, 
+    invalid_cipher_or_prf_hash = 14 
+)
+
+TLS12Type = Enum( Byte, 
+       capabilities = 0, 
+       ping = 1, 
+       rsa_master = 2, 
+       rsa_master_with_poh = 3, 
+       rsa_extended_master = 4, 
+       rsa_extended_master_with_poh = 5, 
+       ecdhe = 6
+)
+
+### structures for RSA Master
+
+KeyPairIDType = Enum( BytesInteger(1),
+    sha256_32 = 0
+)
+
+KeyPairID = Struct( 
+    "key_id_type" / Default( KeyPairIDType, "sha256_32"),
+    "key_id" / Switch( this.key_id_type,
+        {
+        "sha256_32" : Bytes(4)
+        }
+    )
+)
+
+FreshnessFunct = Enum( BytesInteger(1),
+    sha256 = 0,
+    null = 255, 
+)
+
+PRFHash = Enum( BytesInteger(1),
+    sha256 = 0,
+    sha384 = 1, 
+    sha512 = 2
+)
+
+TLS12RSAMasterRequestPayload = Struct(
+##    Embedded(TLS12Base),
+    "key_id" / KeyPairID, 
+    "freshness_funct" / FreshnessFunct,
+    "prf_hash" / PRFHash,
+    "client_random" / Random,
+    "server_random" / Random,
+    "encrypted_premaster" / GreedyBytes
+)
+
+TLS12RSAMasterResponsePayload = Struct( 
+    "master" / Default ( Bytes(48), 
+                        Computed( lambda ctx: urandom(48)
+                                ).parse(b"") )
+)
+
+### structure for RSA Master with Proof of Handshake
 
 TLS12RSAMasterWithPoHRequestPayload = Struct(
     "key_id" / KeyPairID , 
@@ -432,13 +312,15 @@ TLS12RSAMasterWithPoHRequestPayload = Struct(
 )
 
 
-
+### structure for Extended RSA
 
 TLS12ExtendedRSAMasterRequestPayload = Struct(
     "key_id" / KeyPairID , 
     "freshness_funct" / FreshnessFunct,
     "handshake_messages" / HandshakeMessages,
 )
+
+### structure for Extended RSA with Proof of 
 
 TLS12ExtendedRSAMasterWithPoHRequestPayload = Struct(
     "key_id" / KeyPairID , 
@@ -449,8 +331,54 @@ TLS12ExtendedRSAMasterWithPoHRequestPayload = Struct(
 
 
 
-## ServerECDHParams is described in order to enable format validation.
 
+
+
+### structure for ECDHE
+
+HashAlgorithm = Enum( Byte, 
+    none = 0, 
+    md5 = 1, 
+    sha1 = 2,
+    sha224 = 3, 
+    sha256 = 4, 
+    sha384 = 5, 
+    sha512 = 6, 
+)
+
+SignatureAlgorithm = Enum( Byte, 
+    anonymous = 0, 
+    rsa = 1, 
+    dsa = 2, 
+    ecdsa = 3, 
+    ed25519 = 7,
+    ed448 = 8
+)
+
+SignatureAndHashAlgorithm = Struct(
+    "hash" / HashAlgorithm, 
+    "sig" / SignatureAlgorithm 
+)
+
+SignatureAndHashAlgorithmList = Prefixed(
+        BytesInteger(2),
+        GreedyRange(SignatureAndHashAlgorithm)
+)
+
+NameCurve = Enum ( BytesInteger(1), 
+    secp256r1 = 23,
+    secp384r1 = 24, 
+    secp512r1 = 25,
+    x25519 = 29,
+    x448 = 30
+)
+
+
+POOPRF = Enum ( BytesInteger( 1 ), 
+    null = 0, 
+    sha256_128 = 1,
+    sha256_256 = 2
+)
 
 ECCurveType = Enum ( BytesInteger( 1 ), 
     name_curve = 3
@@ -544,5 +472,89 @@ SignedParams = Prefixed(
 TLS12ECDHEResponsePayload = Struct(
          "signed_params" / SignedParams
 )
+
+
+
+
+############# LURKTLSCapabilitiesResponse
+
+
+
+KeyPairIDTypeList = Prefixed( 
+    BytesInteger(1),
+    GreedyRange(KeyPairIDType)
+)
+
+
+ProtocolVersionList = Prefixed(
+    BytesInteger(1),
+    GreedyRange(ProtocolVersion)    
+)
+
+
+FreshnessFunctList = Prefixed(
+    BytesInteger(1),
+    GreedyRange(FreshnessFunct)
+)
+
+
+PRFHasList = Prefixed(
+    BytesInteger(1),
+    GreedyRange(PRFHash)
+)
+
+
+TLS12RSACapability = Struct( 
+    "key_id_type" / KeyPairIDTypeList, 
+    "tls_version" / ProtocolVersionList,
+    "freshness_funct" / FreshnessFunctList,
+    "cert" / Certificate, 
+)
+
+
+NameCurveList = Prefixed(
+    BytesInteger(1),
+    GreedyRange(NameCurve)
+)
+
+
+
+POOPRFList = Prefixed(
+    BytesInteger(1),
+    GreedyRange(POOPRF)
+)
+
+
+TLS12ECDHECapability = Struct(
+    Embedded( TLS12RSACapability ), 
+    "sig_and_hash" / SignatureAndHashAlgorithmList,
+    "ecdsa_curves" / NameCurveList, 
+    "ecdhe_curves" / NameCurveList, 
+    "poo_prf" / POOPRFList
+)
+
+#Void = Struct()
+
+
+TLS12Capability = Prefixed( 
+    BytesInteger(4),
+    Struct(
+    "type" / TLS12Type,
+     Embedded( Switch( this.type, 
+         { 'rsa_master' : TLS12RSACapability, 
+           'rsa_extended_master' : TLS12RSACapability, 
+           'ecdhe' : TLS12ECDHECapability  
+         }, default=Pass
+    ) )
+    )
+)
+
+
+TLS12CapabilitiesResponsePayload = Struct( 
+    "capabilities" /  GreedyRange( TLS12Capability ), 
+    "lurk_state" / Bytes(4)
+)
+    
+
 
 

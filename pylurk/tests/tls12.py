@@ -6,10 +6,12 @@ data_dir = pkg_resources.resource_filename( __name__, '../data/')
 from pylurk.core.lurk import LurkServer, ImplementationError, LurkMessage, \
                  HEADER_LEN, LurkClient, LurkServer, LurkUDPClient, \
                  LurkUDPServer, LurkConf, UDPServerConf 
-from pylurk.extensions.tls12 import Tls12RSAMasterConf,  Tls12ECDHEConf, \
+from pylurk.extensions.tls12 import Tls12RsaMasterConf,  Tls12EcdheConf, \
                       Tls12RsaMasterRequestPayload,\
-                      Tls12ExtMasterRequestPayload,\
-                      Tls12ECDHERequestPayload
+                      Tls12RsaMasterWithPoHRequestPayload,\
+                      Tls12ExtRsaMasterWithPoHRequestPayload,\
+                      Tls12ExtRsaMasterRequestPayload,\
+                      Tls12EcdheRequestPayload
 from pylurk.extensions.tls12_struct import ProtocolVersion, Random
 from pylurk.utils.utils import message_exchange, resolve_exchange, bytes_error_testing
 from time import time
@@ -27,8 +29,14 @@ print("--- Payload Testing: testing build/parse/serve functions" + \
 designation = 'tls12'
 version = 'v1'
 
-for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master' ]:
-             #'capabilities' ]:
+for mtype in [\
+ 'rsa_master', \
+ 'ecdhe', 'ping', 
+ 'rsa_extended_master',  
+ 'rsa_master_with_poh',  
+ 'rsa_extended_master_with_poh', 
+#'capabilities' 
+]:
     message_exchange( designation, version, mtype, payload={} )
 
 
@@ -150,7 +158,7 @@ client = LurkUDPClient( conf=conf )
 ## involved values and parameters. 
 msg = LurkMessage() 
 rsa_conf = LurkConf( conf=conf ).get_type_conf( 'tls12', 'v1', 'rsa_master')[0]
-rsa_utils = Tls12RSAMasterConf( conf=rsa_conf )
+rsa_utils = Tls12RsaMasterConf( conf=rsa_conf )
 
 
 def pretty_print( struct, value):
@@ -290,7 +298,7 @@ client = LurkUDPClient( conf=conf )
 
 msg = LurkMessage()
 ecdhe_conf = LurkConf( conf=conf ).get_type_conf( 'tls12', 'v1', 'ecdhe')[0]
-ecdhe_utils = Tls12ECDHEConf( conf=ecdhe_conf)
+ecdhe_utils = Tls12EcdheConf( conf=ecdhe_conf)
 
 mtype ='echde'
 
@@ -315,7 +323,7 @@ server_random = ecdhe_utils.pfs( edge_server_random , "sha256" )
 print("    - server_random: %s"%server_random)
 print("================ Edge Server builds ECDHE Parameters and" +\
       "Proof of Ownership")
-params = Tls12ECDHERequestPayload().build_payload()
+params = Tls12EcdheRequestPayload().build_payload()
 ecdhe_params = params[ 'ecdhe_params' ]
 poo_params = params[ 'poo_params' ]
 print("    - ecdhe_params: %s"%ecdhe_params )
@@ -403,7 +411,7 @@ print( "+---------------------------------------+" )
 #lurk.mtype = { ("lurk", "v1") : [ "capabilities", "ping", "error"], \
 #               ("tls12", "v1"): [ "rsa_master" ] }
 #
-#rsa = Tls12RSAMasterConf()
+#rsa = Tls12RsaMasterConf()
 #rsa.role = "server"
 #rsa.key_id_type = [ "sha256_32" ]
 #rsa.tls_version = [ "TLS1.2" ]
