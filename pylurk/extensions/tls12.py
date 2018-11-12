@@ -170,9 +170,9 @@ class Tls12RsaMasterConf:
         """
        
         self.conf_keys = [ 'role', 'key_id_type' , 'freshness_funct', \
-                 'prf_hash', 'random_time_window', 'cert', \
+                 'random_time_window', 'cert', \
                  'check_server_random', 'check_client_random',\
-                 'cipher_suites' ]
+                 'cipher_suites', 'prf_hash']
         ## private variables, specify the type of key authorized
         self.key_classes = [ 'RsaKey' ]
                 
@@ -216,20 +216,36 @@ class Tls12RsaMasterConf:
             raise ConfError( conf, "Expected role value 'client' or 'server' ")
         if conf[ 'role' ] == "server":
             self.conf_keys.append( 'key' )
+            
         ## checking all conf_keys have been provided
         if set( conf.keys() ) != set( self.conf_keys ):
+            print("The following conf keys have been provided")
+            print("and are not expected")
+            for k in conf.keys():
+                if k not in self.conf_keys:
+                    print("    - %s"%k)
+            print("The following conf keys have not been provided")
+            print("and are expected")
+            for k in self.conf_keys:
+                if k not in conf.keys():
+                    print("    - %s"%k)
             raise ConfError( conf.keys(), "Conf keys mismatch. " + \
                       "Expected keys: %s"%self.conf_keys )
         ## checking value provided by conf for each key_conf
         try :
             for k in self.conf_keys:
-                if k in [ 'key_id_type' , 'freshness_funct', 'cert', 'key']:
+                if k in [ 'key_id_type' , 'freshness_funct', 'cert', \
+                          'key', 'prf_hash', 'cipher_suites']:
                     if type( conf[ k ] ) is not list:
                         raise ConfError( conf[ k ], "Expected list" )
                 if k == 'key_id_type':
                     [ KeyPairIDType.build( i ) for i in conf[ k ] ]
                 if k == 'freshness_funct': 
                     [ FreshnessFunct.build( i ) for i in conf[ k ] ]
+                if k == 'prf_hash': 
+                    [ PRFHash.build( i ) for i in conf[ k ] ]
+                if k == 'cipher_suites': 
+                    [ CipherSuite.build( i ) for i in conf[ k ] ]
                 if k in [ 'cert', 'key' ]:
                     for f in conf[ k ]:
                         if isfile( f ) == False:
@@ -1618,7 +1634,7 @@ class Tls12RsaMasterWithPoHResponsePayload(Tls12RsaMasterResponsePayload):
 
     def __init__(self, conf=LurkConf().get_type_conf( 'tls12', 'v1',
                                              'rsa_master_with_poh')[0] ):
-        self.conf = Tls12ExtRsaMasterConf( conf )
+        self.conf = Tls12RsaMasterConf( conf )
         self.struct = TLS12RSAMasterResponsePayload
         self.struct_name = 'TLS12RSAMasterWithPoHResponsePayload'
 
@@ -1803,11 +1819,13 @@ class Tls12EcdheConf ( Tls12RsaMasterConf ):
         self.conf_keys = [ 'role', 'key_id_type' , 'freshness_funct', \
                       'random_time_window', 'cert', 'check_server_random',\
                       'check_client_random', 'sig_and_hash', 'ecdsa_curves', \
-                      'ecdhe_curves', 'poo_prf' ]
+                      'ecdhe_curves', 'poo_prf', 'cipher_suites']
         ## private variables, specify the type of key authorized
         self.key_classes = [  'RsaKey', 'EccKey' ] 
 
-        self.check_conf( conf ) 
+        self.check_conf( conf )
+
+        ## all parameters in the conf are registered in the object
         self.role = conf[ 'role' ]
         self.cert =  conf[ 'cert' ]
         if self.role == "server":
@@ -1820,6 +1838,7 @@ class Tls12EcdheConf ( Tls12RsaMasterConf ):
         self.ecdsa_curves = conf[ 'ecdsa_curves' ]
         self.ecdhe_curves = conf[ 'ecdhe_curves' ] 
         self.poo_prf = conf[ 'poo_prf' ]
+        self.cipher_suites = conf[ 'cipher_suites' ]
 
 
         ## defines authorized certificates mostly concerns the server or
@@ -2378,15 +2397,25 @@ class Tls12CapabilitiesConf:
     ## All configuration parameters are not related to capabilities.
     ## get_ext_conf excludes those parameters.
 
-    def __init__( self, conf=LurkConf().get_ext_conf( 'tls12', 'v1',\
-            exclude=[ 'role', 'designation', 'version', 'type', 'key', \
-                      'random_time_window',  'check_server_random',\
-                      'check_client_random'  ] ) ):
+    def __init__( self, conf=LurkConf().get_ext_conf( 'tls12', 'v1') ):
+        """ Configuration for Capabilities exchanges
+
+        Args:
+            conf (dict): configuration parameters for each extension
+
+        """
         self.check_conf( conf )
         self.conf = conf
 
-
-    def check_conf( self, conf): 
+    def check_conf( self, conf):
+        """ check the configurations
+        
+        Args:
+            conf (dict): configuration diction nary
+           
+        Raises:
+            ConfError when an error occurs.
+        """
         for k in conf.keys():
             keys  = [ 'ping', 'rsa_master', 'rsa_master_with_poh', \
                       'rsa_extended_master', 'rsa_extended_master_with_poh', \
@@ -2400,14 +2429,15 @@ class Tls12CapabilitiesConf:
                 raise ConfError( conf[ k ], "Only len = 1 is currently " +\
                                             "supported")
         for k in conf.keys():
-            if k == "rsa_master":
-                for type_conf in conf[ 'rsa_master' ]:
+            if k in [ 'rsa_master', 'rsa_extended_master' ]:
+                for type_conf in conf[ k ]:
+                ## conf[ k ] is a list of configuration elements
                      Tls12RsaMasterConf().check_conf( type_conf )    
-            elif k == "rsa_extended_master":
-                for type_conf in conf[ 'rsa_extended_master' ]:
+            elif k in [ 'rsa_extended_master', 'rsa_extended_master' ]:
+                for type_conf in conf[ k ]:
                      Tls12ExtRsaMasterConf().check_conf( type_conf )    
-            elif k == "ecdhe" :
-                for type_conf in conf[ 'ecdhe' ]:
+            elif k in [ 'ecdhe' ] :
+                for type_conf in conf[ k ]:
                      Tls12EcdheConf().check_conf( type_conf )    
             
 
@@ -2431,6 +2461,9 @@ class Tls12CapabilitiesResponsePayload(Tls12Payload):
         return self.capabilities
 
     def set_capabilities(self):
+        """ builds the capabilities response
+        
+        """
         payload = {}
         payload[ 'capabilities' ] = []
         for mtype in self.conf.conf:
@@ -2443,32 +2476,32 @@ class Tls12CapabilitiesResponsePayload(Tls12Payload):
                     pass
                 elif mtype == 'capabilities' :
                     pass
-                elif mtype in [ 'rsa_master', 'rsa_extended_master', 'ecdhe' ] :
-                    capability[ 'key_id_type' ] = type_conf[ 'key_id_type' ]
-                    capability[ 'tls_version' ] = []
-#                    for v in type_conf[ 'tls_version' ]:
-#                        if v == "TLS1.2":
-#                            capability[ 'tls_version' ].append( { 'major' : "TLS12M", \
-#                                                              'minor' : "TLS12m" } )
-#                        else:
-#                            raise ConfError( type_conf[ 'tls_version' ], "Expecting TLS12" ) 
-                    capability[ 'freshness_funct' ] = type_conf[ 'freshness_funct' ]
-                    capability[ 'cert' ] = []
+                elif mtype in [ 'rsa_master', 'rsa_master_with_poh', \
+                                'rsa_extended_master', \
+                                 'rsa_extended_master_with_poh', 'ecdhe' ] :
+                    capability[ 'key_id_type_list' ] = type_conf[ 'key_id_type' ]
+                    capability[ 'cert_list' ] = []
                     for cert in type_conf[ 'cert' ]:
                         try:
                             with open( cert, 'rb') as f:
                                 
-                                capability[ 'cert' ].append( f.read( ) )
+                                capability[ 'cert_list' ].append( f.read( ) )
                         except IOError:
                             raise ConfError( cert, "Cannot open file" )
-               
-                if mtype == 'ecdhe' :
-                    capability[ 'sig_and_hash' ] = []
-                    for h,s in type_conf[ 'sig_and_hash' ]:
-                        capability[ 'sig_and_hash' ].append( { 'hash' : h, 'sig' : s } ) 
-                    capability[ 'ecdsa_curves' ] = type_conf[ 'ecdsa_curves' ]
-                    capability[ 'ecdhe_curves' ] = type_conf[ 'ecdhe_curves' ]
-                    capability[ 'poo_prf' ] = type_conf[ 'poo_prf' ]
+                    capability[ 'freshness_funct_list' ] = type_conf[ 'freshness_funct' ]
+                    capability[ 'cipher_suite_list' ] = type_conf[ 'cipher_suites' ]
+                    if mtype in [ 'rsa_master', 'rsa_master_with_poh', \
+                                  'rsa_extended_master', \
+                                  'rsa_extended_master_with_poh' ] :
+                        capability[ 'prf_hash_list' ] = type_conf[ 'prf_hash' ]
+                        
+                    elif mtype == 'ecdhe' :
+                        capability[ 'sig_and_hash_list' ] = []
+                        for h,s in type_conf[ 'sig_and_hash' ]:
+                            capability[ 'sig_and_hash_list' ].append( { 'hash' : h, 'sig' : s } ) 
+                        capability[ 'ecdsa_curve_list' ] = type_conf[ 'ecdsa_curves' ]
+                        capability[ 'ecdhe_curve_list' ] = type_conf[ 'ecdhe_curves' ]
+                        capability[ 'poo_prf_list' ] = type_conf[ 'poo_prf' ]
                     
                 payload[ 'capabilities' ].append( capability )
         lurk_state = SHA256.new( str.encode( str( payload ) ) ).digest()[ :4 ]
@@ -2478,17 +2511,58 @@ class Tls12CapabilitiesResponsePayload(Tls12Payload):
 
 
 class LurkExt:
-    ## conf = { 'ping' : [  []. ...  [] ], 
-    ##          'rsa_master' : [ { conf1_rsa }, { conf2_rsa }, ... ] }
-    ## By default ALL configuration parameters are provided except: type
-    ## already provided as in a key, 9designation, version) that are
-    ## implied by the module.
     def __init__(self, role, conf=LurkConf().get_ext_conf( 'tls12', 'v1' ) ):
+        """ Plugs the TLS 1.2 extension into the Lurk framework
+
+        Args:
+            conf (dict): the configuration associated to the extension.
+
+        The LurkExt class can be seen as an indirection to the main
+        LurkMessage class. The LurkServer receives packets and 
+        responds packets. Operations on packets are performed by the 
+        LurkMessage class with operations such as parse, build, serve, 
+        check, show, build_payload. These modular architecture of Lurk
+        requires that LurkMessage operations are delegated to the 
+        extensions, that is operations provided by LurkMessage are 
+        delegated by the LurkExt for the packet payloads. This class 
+        instantiates the necessary functions that LurkMessage needs 
+        to delegate to each extensions, that is parse, build, serve,  
+        check, show, build_payload.    
+
+        The format of the extension conf is closed to the format of the
+        configuration file, but is different. The conf object is derived
+        from the configuration file using the get_ext_conf function. 
+
+        The expected configuration object has the following format conf = {
+        'ping' : [  {}. ...  {} ], ..., 
+        'rsa_master' : [ { conf1_rsa }, { conf2_rsa }, ... ] }. The conf
+        object takes the types (i.e. 'rsa_master', 'ecdhe') as key. Each
+        type is associated a list of configuration parameters associated 
+        to the type. By default ALL configuration parameters of the conf 
+        file are provided except: type already provided as in a key as 
+        well as (designation, version) that are implied by the module.
+
+        The conf object contains a list of dictionary, so that a given
+        lurk server may treat differently different queries. In other 
+        words, a 'rsa,master' master request may be treated by one key 
+        or the other. The current implementation does not enable this 
+        and it is left for future development. 
+        """
         Tls12CapabilitiesConf( conf=conf ).check_conf( conf )
         self.conf = conf
         self.ext_class = self.get_ext_class()  
 
     def get_ext_class(self):
+        """ reads the LurkExt.conf object and instantiates the 
+            necessary classes of the extension
+    
+        Returns:
+            ext_class (dict): the dictionary that associates the
+            appropriated class. In other words, a class that 
+            corresponds to the (type, request) and (type, response) 
+            is instantiated so incoming packet and outgoing packets 
+            can be treated.  
+        """
         ext_class = {}
         if  'ping' in self.conf.keys() :
             ext_class[ ( 'request', 'ping' ) ] = LurkVoidPayload()
@@ -2526,17 +2600,26 @@ class LurkExt:
             ext_class[ ( 'success', 'rsa_extended_master_with_poh' ) ] = \
                 Tls12ExtRsaMasterResponsePayload(\
                     conf=self.conf[ 'rsa_extended_master_with_poh' ][0])
-
-
         return ext_class 
 
-    def check_conf( self, conf): 
+    def check_conf( self, conf):
+        """ checks the format of conf
+        
+        Args:
+            conf (dict): the configuration passed to the LurkExt
+
+        Raises:
+            ConfError if checks do not pass
+        
+        """
         for k in conf.keys():
             if k is 'role' :
                 if conf[ k ] not in [ 'client', 'server' ]:
                     raise ConfError( conf, "Expecting role in  'client'" +\
                                            "'server'")
-            elif k in [ 'ping', 'rsa_master', 'rsa_extended_master', 'ecdhe' ]:
+            elif k in [ 'ping', 'rsa_master', 'rsa_master_with_poh', \
+                        'rsa_extended_master', 'rsa_extended_master_with_poh', \
+                        'ecdhe' ]:
                 if type( conf[ k ] ) is not list:
                     raise ConfError( conf[ k ], "Expected list")
                 if len( conf[ k ] ) > 1:

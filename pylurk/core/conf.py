@@ -66,7 +66,6 @@ default_conf = {
           'check_server_random' : True, 
           'check_client_random' : False,
           'cert' : [ join( data_dir, 'cert-rsa-enc.der' ) ], 
-          'cert' : [ join( data_dir, 'cert-rsa-enc.der' ) ], 
           'key' : [ join( data_dir, 'key-rsa-enc-pkcs8.der' ) ],
           'cipher_suites' : ["TLS_RSA_WITH_AES_128_GCM_SHA256", \
                              "TLS_RSA_WITH_AES_256_GCM_SHA384" ]
@@ -80,7 +79,6 @@ default_conf = {
           'random_time_window' : 5, 
           'check_server_random' : True, 
           'check_client_random' : False,
-          'cert' : [ join( data_dir, 'cert-rsa-enc.der' ) ], 
           'cert' : [ join( data_dir, 'cert-rsa-enc.der' ) ], 
           'key' : [ join( data_dir, 'key-rsa-enc-pkcs8.der' ) ],
           'cipher_suites' : ["TLS_RSA_WITH_AES_128_GCM_SHA256", \
@@ -109,7 +107,11 @@ default_conf = {
            ## in the configuration. 
           'ecdhe_curves' : ['secp256r1', 'secp384r1', 'secp512r1' ],
            ## defines how proo-of ownership is generated.
-          'poo_prf' : [ "null", "sha256_128", "sha256_256" ]
+          'poo_prf' : [ "null", "sha256_128", "sha256_256" ], 
+          'cipher_suites' : [ 'TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256', \
+                              'TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384',\
+                              'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256', \
+                              'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384']
         }
     ]
     }

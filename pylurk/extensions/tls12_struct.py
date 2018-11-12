@@ -329,11 +329,6 @@ TLS12ExtendedRSAMasterWithPoHRequestPayload = Struct(
     "finished" / Finished,
 )
 
-
-
-
-
-
 ### structure for ECDHE
 
 HashAlgorithm = Enum( Byte, 
@@ -409,9 +404,6 @@ UncompressedPointRepresentation_512 = Struct(
     "y" / BytesInteger(64),
 )
 
-
-
-
 ECParameters = Struct(
     "curve_type" / Default( ECCurveType, "name_curve"), 
     "curve" / Switch( this.curve_type, 
@@ -420,7 +412,6 @@ ECParameters = Struct(
         }
     )
 )
-
 
 ServerECDHParams = Struct(
     "curve_param" / ECParameters,
@@ -485,11 +476,10 @@ KeyPairIDTypeList = Prefixed(
     GreedyRange(KeyPairIDType)
 )
 
-
-ProtocolVersionList = Prefixed(
-    BytesInteger(1),
-    GreedyRange(ProtocolVersion)    
-)
+##ProtocolVersionList = Prefixed(
+##    BytesInteger(1),
+##    GreedyRange(ProtocolVersion)    
+##)
 
 
 FreshnessFunctList = Prefixed(
@@ -498,17 +488,21 @@ FreshnessFunctList = Prefixed(
 )
 
 
-PRFHasList = Prefixed(
+PRFHashList = Prefixed(
     BytesInteger(1),
     GreedyRange(PRFHash)
 )
 
 
+#CipherSuiteList 
+# defined as CipherSuites
+
 TLS12RSACapability = Struct( 
-    "key_id_type" / KeyPairIDTypeList, 
-    "tls_version" / ProtocolVersionList,
-    "freshness_funct" / FreshnessFunctList,
-    "cert" / Certificate, 
+    "key_id_type_list" / KeyPairIDTypeList, 
+    "cert_list" / Certificate,
+    "freshness_funct_list" / FreshnessFunctList,
+    "cipher_suite_list" / CipherSuites,
+    "prf_hash_list" / PRFHashList, 
 )
 
 
@@ -526,11 +520,14 @@ POOPRFList = Prefixed(
 
 
 TLS12ECDHECapability = Struct(
-    Embedded( TLS12RSACapability ), 
-    "sig_and_hash" / SignatureAndHashAlgorithmList,
-    "ecdsa_curves" / NameCurveList, 
-    "ecdhe_curves" / NameCurveList, 
-    "poo_prf" / POOPRFList
+    "key_id_type_list" / KeyPairIDTypeList, 
+    "cert_list" / Certificate,
+    "freshness_funct_list" / FreshnessFunctList,
+    "cipher_suite_list" / CipherSuites,
+    "sig_and_hash_list" / SignatureAndHashAlgorithmList,
+    "ecdsa_curve_list" / NameCurveList, 
+    "ecdhe_curve_list" / NameCurveList, 
+    "poo_prf_list" / POOPRFList
 )
 
 #Void = Struct()
@@ -542,7 +539,9 @@ TLS12Capability = Prefixed(
     "type" / TLS12Type,
      Embedded( Switch( this.type, 
          { 'rsa_master' : TLS12RSACapability, 
+           'rsa_master_with_poh' : TLS12RSACapability, 
            'rsa_extended_master' : TLS12RSACapability, 
+           'rsa_extended_master_with_poh' : TLS12RSACapability, 
            'ecdhe' : TLS12ECDHECapability  
          }, default=Pass
     ) )

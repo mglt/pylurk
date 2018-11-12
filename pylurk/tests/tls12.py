@@ -35,7 +35,7 @@ for mtype in [\
  'rsa_extended_master',  
  'rsa_master_with_poh',  
  'rsa_extended_master_with_poh', 
-#'capabilities' 
+ 'capabilities' 
 ]:
     message_exchange( designation, version, mtype, payload={} )
 
