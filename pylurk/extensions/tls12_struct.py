@@ -476,10 +476,30 @@ KeyPairIDTypeList = Prefixed(
     GreedyRange(KeyPairIDType)
 )
 
-##ProtocolVersionList = Prefixed(
-##    BytesInteger(1),
-##    GreedyRange(ProtocolVersion)    
-##)
+CertificateType = Enum ( BytesInteger(2),
+    x509 = 0,
+    raw_public_key = 2
+)
+
+ASN1_subjectPublicKeyInfo = Prefixed(
+        BytesInteger(3),
+        GreedyBytes,
+)
+
+
+TypedCertificate = Struct(
+    "certificate_type" / CertificateType, 
+    "certificate_data" / Switch( this.certificate_type, 
+        {
+        "x509" : ASN1Cert,
+        "raw_public_key" :  ASN1_subjectPublicKeyInfo
+        })
+)
+
+TypedCertificateList = Prefixed(
+    BytesInteger(1),
+    GreedyRange(TypedCertificate)
+)
 
 
 FreshnessFunctList = Prefixed(
@@ -499,7 +519,7 @@ PRFHashList = Prefixed(
 
 TLS12RSACapability = Struct( 
     "key_id_type_list" / KeyPairIDTypeList, 
-    "cert_list" / Certificate,
+    "cert_list" / TypedCertificateList,
     "freshness_funct_list" / FreshnessFunctList,
     "cipher_suite_list" / CipherSuites,
     "prf_hash_list" / PRFHashList, 
@@ -521,7 +541,7 @@ POOPRFList = Prefixed(
 
 TLS12ECDHECapability = Struct(
     "key_id_type_list" / KeyPairIDTypeList, 
-    "cert_list" / Certificate,
+    "cert_list" / TypedCertificateList,
     "freshness_funct_list" / FreshnessFunctList,
     "cipher_suite_list" / CipherSuites,
     "sig_and_hash_list" / SignatureAndHashAlgorithmList,

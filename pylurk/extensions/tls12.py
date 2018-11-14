@@ -2484,8 +2484,15 @@ class Tls12CapabilitiesResponsePayload(Tls12Payload):
                     for cert in type_conf[ 'cert' ]:
                         try:
                             with open( cert, 'rb') as f:
-                                
-                                capability[ 'cert_list' ].append( f.read( ) )
+                                if "key" in cert:
+                                    cert_type = "raw_public_key"
+                                elif "cert" in cert:
+                                    cert_type = "x509"
+                                else: 
+                                    cert_type = "x509"
+                                typed_cert = {'certificate_type' : cert_type, \
+                                              'certificate_data' : f.read( ) }
+                                capability[ 'cert_list' ].append( typed_cert )
                         except IOError:
                             raise ConfError( cert, "Cannot open file" )
                     capability[ 'freshness_funct_list' ] = type_conf[ 'freshness_funct' ]

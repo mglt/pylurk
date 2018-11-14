@@ -2,6 +2,22 @@ from  os.path import join
 import pkg_resources
 data_dir = pkg_resources.resource_filename( __name__, '../data/')
 
+"""
+Structure that provides the various configuration parameters:
+
+Args:
+    cert (list): the list of certificates. The list contains a list of
+        files name that contains the certificates or the raw keys. By
+        convention, a file that contains the string "key" indicates 
+        that it contains a raw key. A file that contains the string 
+        "cert" indicates that it contains a x509 certificate. Unless 
+        one of these string is found in the file name, the file is 
+        assumed to contain a x509 certificate. Type of the certificate 
+        is required as the capability provides tehtype.  
+
+
+"""
+
 
 default_conf = { 
     'role' : 'server', # "client", "server"
