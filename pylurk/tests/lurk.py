@@ -82,7 +82,10 @@ srv_conf = LurkConf()
 srv_conf.set_role( 'server' )
 srv_conf.set_connectivity( type='udp', ip_address="127.0.0.1", port=6789 ) 
 
-t = threading.Thread( target=LurkUDPServer, kwargs= { 'conf' : srv_conf.conf } )
+updServer = LurkUDPServer (srv_conf.conf)
+#t = threading.Thread( target=LurkUDPServer, kwargs={ 'conf' : srv_conf.conf } )
+t = threading.Thread( target=updServer.serve_client)#single thread (no parallelism)
+
 t.daemon = True
 t.start()
 
