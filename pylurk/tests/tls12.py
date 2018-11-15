@@ -5,7 +5,7 @@ data_dir = pkg_resources.resource_filename( __name__, '../data/')
 
 from pylurk.core.lurk import LurkServer, ImplementationError, LurkMessage, \
                  HEADER_LEN, LurkClient, LurkServer, LurkUDPClient, \
-                 LurkUDPServer, LurkConf, UDPServerConf, LurkTCPClient, LurkTCPServer
+                 LurkUDPServer, LurkConf, UDPServerConf, LurkTCPClient, LurkTCPServer, LurkHTTPSserver, LurkHTTPSClient, HTTPSRequestHandler
 from pylurk.extensions.tls12 import Tls12RSAMasterConf,  Tls12ECDHEConf, \
                       Tls12RsaMasterRequestPayload,\
                       Tls12ExtMasterRequestPayload,\
@@ -459,7 +459,6 @@ measurements = {'nginx_encrypted_premaster' : nginx_encrypted_premaster, \
                 'nginx_server_random' : nginx_server_random, \
                 'nginx_master_secret' : nginx_master_secret}
 
-
 print( "+--------------------------------------------------------------+" )
 print( "|    TCP/TLS  LURK CLIENT / SERVER - One client one server TEST|" )
 print( "+--------------------------------------------------------------+" )
@@ -493,3 +492,45 @@ for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
     for freshness_funct in [ "null", "sha256" ]:
         resolve_exchange( client, tcpServer, designation, version, mtype, \
                           payload={ 'freshness_funct' : freshness_funct } )
+
+
+print( "+--------------------------------------------------------------+" )
+print( "|    HTTPS  LURK CLIENT / SERVER - One client one server TEST|" )
+print( "+--------------------------------------------------------------+" )
+try:
+    print("-- Starting LURK HTTPS Clients")
+    clt_conf = LurkConf( )
+    clt_conf.set_role( 'client' )
+    clt_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )
+    client = LurkHTTPSClient( conf = clt_conf.conf )
+
+    print("-- Starting LURK HTTPS Server")
+    srv_conf = LurkConf()
+    srv_conf.set_role( 'server' )
+    srv_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )
+
+    lurkHttpsServer = LurkHTTPSserver (srv_conf.conf)
+
+
+    # Start a thread with the server
+    t = threading.Thread( target=lurkHttpsServer.serve_forever)
+    t.daemon = True
+    t.start()
+
+    designation = 'tls12'
+    version = 'v1'
+
+    for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
+                    'capabilities']:
+        if mtype in [ 'ping', 'capabilities' ]:
+            resolve_exchange( client, lurkHttpsServer, designation, version, mtype, \
+                              payload={} )
+            continue
+        for freshness_funct in [ "null", "sha256" ]:
+            resolve_exchange( client, lurkHttpsServer, designation, version, mtype, \
+                              payload={ 'freshness_funct' : freshness_funct } )
+
+    lurkHttpsServer.shutdown()
+    lurkHttpsServer.server_close()
+except:
+    print("Error occurred because the server is already running - Comment the TCP server code and run again")
