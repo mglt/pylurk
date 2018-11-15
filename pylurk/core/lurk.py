@@ -6,8 +6,10 @@ from pylurk.core.conf import default_conf
 from pylurk.core.lurk_struct import *
 from socketserver import ThreadingMixIn, UDPServer, TCPServer, BaseRequestHandler
 from concurrent.futures import ThreadPoolExecutor
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import http.client
+from http.server import HTTPServer,  BaseHTTPRequestHandler
+from socket import error as SocketError
+import errno
+import urllib.request
 import ssl
 from  os.path import join
 import pkg_resources
@@ -1050,3 +1052,162 @@ class LurkTCPServer(LurkServer):
         conn.close()
 
         sock.close()
+
+
+class LurkHTTPSClient(LurkClient):
+    def __init__(self, conf=default_conf):
+        conf['connectivity']['type'] = 'tcp'
+
+        # could not call super constructor as it was throwing an init_conf error
+        self.init_conf(conf)
+        self.conf = LurkConf(conf)
+        self.waiting_queries = {}
+
+        #set the server to None as we do not interact directly with the client socket
+        self.server = self.get_server()
+        self.message = LurkMessage(conf=self.conf.conf)
+
+
+    def get_server( self ):
+        '''
+        This should return a TCP client socket.
+        However, as we do not directlt interact with the client socket since we are using urllib, we will just set the
+        server attribute to none
+        :return: None
+        '''
+        return None
+
+    def send(self, bytes_pkt):
+        '''
+        This method represents the HTTPS POSt request of the client and the response recieved from the HTTPS server
+        :param bytes_pkt: bytes to send to the HTTPS server
+        :return: bytes reqponse of the server
+        '''
+        try:
+            # try to send first to check if there is a connection established
+            url = 'https://' + str(self.conf.server.ip_address) + ':' + str(self.conf.server.port)
+
+            #prepare client request to post the bytes_pkt
+            req = urllib.request.Request(url,bytes_pkt , method='POST')
+
+            #request the url, post the data and set up the ssl context
+            response = urllib.request.urlopen(req, context=self.get_context())
+
+            #start by reading the server response
+            response_bytes = response.read(4096)
+
+            waiting = True
+            while waiting == True:
+
+                #keep reading until the end of the response (until exception is thrown)
+                response_bytes = response_bytes+ response.read(4096)
+
+                #make sure the response is in the correct format
+                response = self.message.parse(response_bytes)
+
+                #check if this is the correct response (this is never executed!!!!)
+                if self.is_response(response) == True:
+                    waiting = False
+            return response
+        # catch any error mainly thrown at the end of reading the response
+        except:
+            try:
+                return response_bytes
+            except:
+                ImplementationError('', "Unable resolve")
+
+
+
+class  LurkHTTPSserver(LurkServer, HTTPServer):
+    '''
+    This class represnts and HTTPS server having LurkServer and HTTPServer functionality
+    '''
+    def __init__(self,conf=default_conf):
+        conf['connectivity']['type'] = 'tcp'
+
+        #set the secure connection since we are initializing HTTPS
+        secureTLS_connection = True
+        LurkServer.__init__(self, conf, secureTLS_connection)
+
+        # this will allow reusing the same address for multiple connections
+        self.allow_reuse_address = True
+
+        #initialize the httpserver
+        server_address  = (self.conf.server.ip_address, self.conf.server.port)
+        HTTPServer.__init__(self,server_address, HTTPSRequestHandler)
+
+        #secure connection by setting the context
+        context = self.get_context()
+        #updating the httpserver socket after wrapping it with ssl context
+        self.socket = context.wrap_socket(self.socket, server_side=True)
+
+class ThreadedLurkHTTPSserver(PoolMixIn, LurkHTTPSserver):
+    '''
+    This class represents an HTTPSserver (based on TCPServer) which launches a new thread (for each request) when a client gets connected
+    This default behavior is modified by extending the PoolMixIn class instead of ThreadingMixIn to handle a specific number of requests(max_workers) in parallel
+    '''
+
+    def __init__(self, conf=default_conf,  max_workers=40):
+        '''
+        This is a constructor to initialize an HTTPS server that handles multiple requests at the same time.
+        The code is a copy of the LurkHTTPSserver constructor (Note: calling the super constructor calls the LurkServer constructor which causes an error)
+        :param conf: the configuration
+        :param max_workers: max number of HTTPS requests to handle in parallel
+        '''
+
+        #set the pool attribute to allow multithreading
+        self.pool = ThreadPoolExecutor(max_workers)
+
+        conf['connectivity']['type'] = 'tcp'
+
+        # set the secure connection since we are initializing HTTPS
+        secureTLS_connection = True
+        LurkServer.__init__(self, conf, secureTLS_connection)
+
+        # this will allow reusing the same address for multiple connections
+        self.allow_reuse_address = True
+
+        # initialize the httpserver
+        server_address = (self.conf.server.ip_address, self.conf.server.port)
+        HTTPServer.__init__(self, server_address, HTTPSRequestHandler)
+
+        # secure connection by setting the context
+        context = self.get_context()
+        # updating the httpserver socket after wrapping it with ssl context
+        self.socket = context.wrap_socket(self.socket, server_side=True)
+
+
+
+class HTTPSRequestHandler (BaseHTTPRequestHandler):
+    '''
+    This class handles HTTP GET and HTTP POST requests
+    '''
+    def do_GET(self):
+        '''
+        This method handles get requests by the client
+        Currently not used and implemented with basic response
+        :return:
+        '''
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'Successfull GET request and response ')
+
+    def do_POST(self):
+        '''
+        This method handles the post requests
+        :return:
+        '''
+
+        # get the length of the data sent by the client
+        content_length = int(self.headers['Content-Length'])
+
+        # read the data sent by the client before sending any response
+        data = self.rfile.read(content_length)
+
+       # send response
+        self.send_response(200)
+        self.end_headers()
+
+        #send the response bytes to the client
+        self.wfile.write(self.server.byte_serve(data))
+        print("{}".format(threading.current_thread().name))
