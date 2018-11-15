@@ -6,10 +6,10 @@ data_dir = pkg_resources.resource_filename( __name__, '../data/')
 from pylurk.core.lurk import LurkServer, ImplementationError, LurkMessage, \
                  HEADER_LEN, LurkClient, LurkServer, LurkUDPClient, \
                  LurkUDPServer, LurkTCPClient, LurkTCPServer, LurkConf, UDPServerConf, PoolMixIn, LurkHTTPSserver, LurkHTTPSClient,HTTPSRequestHandler,ThreadedLurkHTTPSserver
-from pylurk.extensions.tls12 import Tls12RSAMasterConf,  Tls12ECDHEConf, \
+from pylurk.extensions.tls12 import Tls12RsaMasterConf,  Tls12EcdheConf, \
                        Tls12RsaMasterRequestPayload,\
-                       Tls12ExtMasterRequestPayload,\
-                       Tls12ECDHERequestPayload
+                       Tls12ExtRsaMasterRequestPayload,\
+                       Tls12EcdheRequestPayload
 
 from pylurk.utils.utils import message_exchange, resolve_exchange, bytes_error_testing
 #import requests
@@ -99,7 +99,5 @@ for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
 
 lurkHttpsServer.shutdown()
 lurkHttpsServer.server_close()
-
-
 
 
