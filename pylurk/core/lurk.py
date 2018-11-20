@@ -1011,11 +1011,24 @@ class LurkTCPClient(LurkClient):
 
 
 
-class LurkTCPServer(LurkServer):
+class LurkTCPServer(LurkServer, TCPServer):
 
     def __init__(self,conf=default_conf, secureTLS_connection=False):
         conf['connectivity']['type'] = 'tcp'
         LurkServer.__init__(self, conf, secureTLS_connection)
+
+        # this will allow reusing the same address for multiple connections
+        self.allow_reuse_address = True
+
+        # initialize the httpserver
+        server_address = (self.conf.server.ip_address, self.conf.server.port)
+        TCPServer.__init__(self, server_address, TCPRequestHandler)
+
+        if (secureTLS_connection):
+            # secure connection by setting the context
+            context = self.get_context()
+            # updating the httpserver socket after wrapping it with ssl context
+            self.socket = context.wrap_socket(self.socket, server_side=True)
 
     def serve_client(self):
         """
@@ -1053,9 +1066,61 @@ class LurkTCPServer(LurkServer):
 
         sock.close()
 
+class ThreadedLurkTCPServer(PoolMixIn, LurkTCPServer):
+    '''
+    This class represents a TCPServer which launches a new thread (for each request) when a client gets connected
+    This default behavior is modified by extending the PoolMixIn class instead of ThreadingMixIn to handle a specific number of requests(max_workers) in parallel
+    '''
 
-class LurkHTTPSClient(LurkClient):
-    def __init__(self, conf=default_conf):
+    def __init__(self, conf=default_conf, secureTLS_connection = False, max_workers=40):
+        '''
+        This is a constructor to initialize an TCP server that handles multiple requests at the same time.
+        The code is a copy of the LurkHTTPSserver constructor (Note: calling the super constructor calls the LurkServer constructor which causes an error)
+        :param conf: the configuration
+        :param max_workers: max number of HTTPS requests to handle in parallel
+        '''
+
+        # set the pool attribute to allow multithreading
+        self.pool = ThreadPoolExecutor(max_workers)
+
+        conf['connectivity']['type'] = 'tcp'
+        LurkServer.__init__(self, conf, secureTLS_connection)
+
+        # this will allow reusing the same address for multiple connections
+        self.allow_reuse_address = True
+
+        # initialize the httpserver
+        server_address = (self.conf.server.ip_address, self.conf.server.port)
+        TCPServer.__init__(self, server_address, TCPRequestHandler)
+
+        if (secureTLS_connection):
+            # secure connection by setting the context
+            context = self.get_context()
+            # updating the httpserver socket after wrapping it with ssl context
+            self.socket = context.wrap_socket(self.socket, server_side=True)
+
+class TCPRequestHandler(BaseRequestHandler):
+
+    def handle(self):
+        '''
+        this function handles all the processing of a request
+        '''
+        # recieve client request and reply
+        print("{}".format(threading.current_thread().name))
+
+        while True:
+            data = self.request.recv(4096)
+            self.request.sendall(self.server.byte_serve(data))
+
+
+        # close the client socket
+        self.request.close()
+
+
+
+class LurkHTTPClient(LurkClient):
+
+    def __init__(self, conf=default_conf, secureTLS_connection=False):
         conf['connectivity']['type'] = 'tcp'
 
         # could not call super constructor as it was throwing an init_conf error
@@ -1066,6 +1131,8 @@ class LurkHTTPSClient(LurkClient):
         #set the server to None as we do not interact directly with the client socket
         self.server = self.get_server()
         self.message = LurkMessage(conf=self.conf.conf)
+
+        self.secureTLS_connection = secureTLS_connection
 
 
     def get_server( self ):
@@ -1079,19 +1146,28 @@ class LurkHTTPSClient(LurkClient):
 
     def send(self, bytes_pkt):
         '''
-        This method represents the HTTPS POSt request of the client and the response recieved from the HTTPS server
-        :param bytes_pkt: bytes to send to the HTTPS server
+        This method represents the HTTP POSt request of the client and the response recieved from the HTTP server
+        :param bytes_pkt: bytes to send to the HTTP server
         :return: bytes reqponse of the server
         '''
         try:
+
+            protocol = 'http'
+
+            if (self.secureTLS_connection):
+                protocol = 'https'
+
             # try to send first to check if there is a connection established
-            url = 'https://' + str(self.conf.server.ip_address) + ':' + str(self.conf.server.port)
+            url = protocol+'://' + str(self.conf.server.ip_address) + ':' + str(self.conf.server.port)
 
             #prepare client request to post the bytes_pkt
             req = urllib.request.Request(url,bytes_pkt , method='POST')
 
             #request the url, post the data and set up the ssl context
-            response = urllib.request.urlopen(req, context=self.get_context())
+            if (self.secureTLS_connection):
+                response = urllib.request.urlopen(req, context=self.get_context())
+            else:
+                response = urllib.request.urlopen(req, context=None)
 
             #start by reading the server response
             response_bytes = response.read(4096)
@@ -1118,15 +1194,14 @@ class LurkHTTPSClient(LurkClient):
 
 
 
-class  LurkHTTPSserver(LurkServer, HTTPServer):
+class  LurkHTTPserver(LurkServer, HTTPServer):
     '''
     This class represnts and HTTPS server having LurkServer and HTTPServer functionality
     '''
-    def __init__(self,conf=default_conf):
+    def __init__(self,conf=default_conf, secureTLS_connection=False):
         conf['connectivity']['type'] = 'tcp'
 
-        #set the secure connection since we are initializing HTTPS
-        secureTLS_connection = True
+
         LurkServer.__init__(self, conf, secureTLS_connection)
 
         # this will allow reusing the same address for multiple connections
@@ -1134,25 +1209,26 @@ class  LurkHTTPSserver(LurkServer, HTTPServer):
 
         #initialize the httpserver
         server_address  = (self.conf.server.ip_address, self.conf.server.port)
-        HTTPServer.__init__(self,server_address, HTTPSRequestHandler)
+        HTTPServer.__init__(self,server_address, HTTPRequestHandler)
 
         #secure connection by setting the context
-        context = self.get_context()
-        #updating the httpserver socket after wrapping it with ssl context
-        self.socket = context.wrap_socket(self.socket, server_side=True)
+        if (secureTLS_connection):
+            context = self.get_context()
+            #updating the httpserver socket after wrapping it with ssl context
+            self.socket = context.wrap_socket(self.socket, server_side=True)
 
-class ThreadedLurkHTTPSserver(PoolMixIn, LurkHTTPSserver):
+class ThreadedLurkHTTPserver(PoolMixIn, LurkHTTPserver):
     '''
     This class represents an HTTPSserver (based on TCPServer) which launches a new thread (for each request) when a client gets connected
     This default behavior is modified by extending the PoolMixIn class instead of ThreadingMixIn to handle a specific number of requests(max_workers) in parallel
     '''
 
-    def __init__(self, conf=default_conf,  max_workers=40):
+    def __init__(self, conf=default_conf,  max_workers=40, secureTLS_connection=False):
         '''
-        This is a constructor to initialize an HTTPS server that handles multiple requests at the same time.
-        The code is a copy of the LurkHTTPSserver constructor (Note: calling the super constructor calls the LurkServer constructor which causes an error)
+        This is a constructor to initialize an HTTP server that handles multiple requests at the same time.
+        The code is a copy of the LurkHTTPserver constructor (Note: calling the super constructor calls the LurkServer constructor which causes an error)
         :param conf: the configuration
-        :param max_workers: max number of HTTPS requests to handle in parallel
+        :param max_workers: max number of HTTP requests to handle in parallel
         '''
 
         #set the pool attribute to allow multithreading
@@ -1160,8 +1236,7 @@ class ThreadedLurkHTTPSserver(PoolMixIn, LurkHTTPSserver):
 
         conf['connectivity']['type'] = 'tcp'
 
-        # set the secure connection since we are initializing HTTPS
-        secureTLS_connection = True
+
         LurkServer.__init__(self, conf, secureTLS_connection)
 
         # this will allow reusing the same address for multiple connections
@@ -1169,16 +1244,17 @@ class ThreadedLurkHTTPSserver(PoolMixIn, LurkHTTPSserver):
 
         # initialize the httpserver
         server_address = (self.conf.server.ip_address, self.conf.server.port)
-        HTTPServer.__init__(self, server_address, HTTPSRequestHandler)
+        HTTPServer.__init__(self, server_address, HTTPRequestHandler)
 
         # secure connection by setting the context
-        context = self.get_context()
-        # updating the httpserver socket after wrapping it with ssl context
-        self.socket = context.wrap_socket(self.socket, server_side=True)
+        if (self.secureTLS_connection):
+            context = self.get_context()
+            # updating the httpserver socket after wrapping it with ssl context
+            self.socket = context.wrap_socket(self.socket, server_side=True)
 
 
 
-class HTTPSRequestHandler (BaseHTTPRequestHandler):
+class HTTPRequestHandler (BaseHTTPRequestHandler):
     '''
     This class handles HTTP GET and HTTP POST requests
     '''

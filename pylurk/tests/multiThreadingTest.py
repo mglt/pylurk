@@ -5,7 +5,7 @@ data_dir = pkg_resources.resource_filename( __name__, '../data/')
 
 from pylurk.core.lurk import LurkServer, ImplementationError, LurkMessage, \
                  HEADER_LEN, LurkClient, LurkServer, LurkUDPClient, \
-                 LurkUDPServer, LurkTCPClient, LurkTCPServer, LurkConf, UDPServerConf, PoolMixIn, LurkHTTPSserver, LurkHTTPSClient,HTTPSRequestHandler,ThreadedLurkHTTPSserver
+                 LurkUDPServer, LurkTCPClient, LurkTCPServer, ThreadedLurkTCPServer, LurkConf, UDPServerConf, PoolMixIn, LurkHTTPserver, LurkHTTPClient,HTTPRequestHandler,ThreadedLurkHTTPserver
 from pylurk.extensions.tls12 import Tls12RsaMasterConf,  Tls12EcdheConf, \
                        Tls12RsaMasterRequestPayload,\
                        Tls12ExtRsaMasterRequestPayload,\
@@ -71,14 +71,14 @@ print("-- Starting LURK HTTPS Clients")
 clt_conf = LurkConf( )
 clt_conf.set_role( 'client' )
 clt_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 ) #keep to tcp?
-client = LurkHTTPSClient( conf = clt_conf.conf )
+client = LurkHTTPClient( conf = clt_conf.conf, secureTLS_connection=True )
 
 print("-- Starting LURK HTTPS Server")
 srv_conf = LurkConf()
 srv_conf.set_role( 'server' )
 srv_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )#keep to tcp?
 
-lurkHttpsServer = ThreadedLurkHTTPSserver(srv_conf.conf, max_workers=7 )
+lurkHttpsServer = ThreadedLurkHTTPserver(srv_conf.conf, max_workers=7 , secureTLS_connection=True)
 t = threading.Thread( target=lurkHttpsServer.serve_forever)
 
 t.daemon = True
@@ -99,5 +99,3 @@ for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
 
 lurkHttpsServer.shutdown()
 lurkHttpsServer.server_close()
-
-

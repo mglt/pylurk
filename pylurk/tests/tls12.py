@@ -5,7 +5,7 @@ data_dir = pkg_resources.resource_filename( __name__, '../data/')
 
 from pylurk.core.lurk import LurkServer, ImplementationError, LurkMessage, \
                  HEADER_LEN, LurkClient, LurkServer, LurkUDPClient, \
-                 LurkUDPServer, LurkConf, UDPServerConf, LurkTCPClient, LurkTCPServer, LurkHTTPSserver, LurkHTTPSClient, HTTPSRequestHandler
+                 LurkUDPServer, LurkConf, UDPServerConf, LurkTCPClient, LurkTCPServer, LurkHTTPserver, LurkHTTPClient, HTTPRequestHandler
 from pylurk.extensions.tls12 import Tls12RsaMasterConf,  Tls12EcdheConf, \
                       Tls12RsaMasterRequestPayload,\
                       Tls12RsaMasterWithPoHRequestPayload,\
@@ -510,14 +510,14 @@ try:
     clt_conf = LurkConf( )
     clt_conf.set_role( 'client' )
     clt_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )
-    client = LurkHTTPSClient( conf = clt_conf.conf )
+    client = LurkHTTPClient( conf = clt_conf.conf )
 
     print("-- Starting LURK HTTPS Server")
     srv_conf = LurkConf()
     srv_conf.set_role( 'server' )
     srv_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )
 
-    lurkHttpsServer = LurkHTTPSserver (srv_conf.conf)
+    lurkHttpsServer = LurkHTTPserver (srv_conf.conf)
 
 
     # Start a thread with the server
