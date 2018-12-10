@@ -97,8 +97,7 @@ print("-- Starting LURK UDP Client")
 clt_conf = LurkConf( )
 clt_conf.set_role( 'client' )
 clt_conf.set_connectivity( type='udp', ip_address="127.0.0.1", port=6789 )
-client = LurkUDPClient( conf = clt_conf.conf )
-client2 = LurkUDPClient( conf = clt_conf.conf )
+client = LurkUDPClient( conf = clt_conf.conf, secureTLS_connection=False)
 
 
 print("-- Starting LURK UDP Server")
@@ -106,9 +105,9 @@ srv_conf = LurkConf()
 srv_conf.set_role( 'server' )
 srv_conf.set_connectivity( type='udp', ip_address="127.0.0.1", port=6789 )
 
-updServer = LurkUDPServer (srv_conf.conf)
-#t = threading.Thread( target=LurkUDPServer, kwargs={ 'conf' : srv_conf.conf } )
-t = threading.Thread( target=updServer.serve_client)#single thread (no parallelism)
+updServer = LurkUDPServer (srv_conf.conf, secureTLS_connection=False)
+
+t = threading.Thread( target=updServer.serve_forever)#single thread (no parallelism)
 t.daemon = True
 t.start()
 
@@ -118,11 +117,11 @@ version = 'v1'
 for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
                'capabilities' ]:
     if mtype in [ 'ping', 'capabilities' ]:
-        resolve_exchange( client, server, designation, version, mtype, \
+        resolve_exchange( client, updServer, designation, version, mtype, \
                           payload={} )
         continue
     for freshness_funct in [ "null", "sha256" ]:
-        resolve_exchange( client2, server, designation, version, mtype, \
+        resolve_exchange( client, updServer, designation, version, mtype, \
                           payload={ 'freshness_funct' : freshness_funct } )
 
 

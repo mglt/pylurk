@@ -5,7 +5,7 @@ data_dir = pkg_resources.resource_filename( __name__, '../data/')
 
 from pylurk.core.lurk import LurkServer, ImplementationError, LurkMessage, \
                  HEADER_LEN, LurkClient, LurkServer, LurkUDPClient, \
-                 LurkUDPServer, LurkTCPClient, LurkTCPServer, ThreadedLurkTCPServer, LurkConf, UDPServerConf, PoolMixIn, LurkHTTPserver, LurkHTTPClient,HTTPRequestHandler,ThreadedLurkHTTPserver
+                 LurkUDPServer, ThreadedLurkUDPServer, LurkTCPClient, LurkTCPServer, ThreadedLurkTCPServer, LurkConf, UDPServerConf, PoolMixIn, LurkHTTPserver, LurkHTTPClient,HTTPRequestHandler,ThreadedLurkHTTPserver
 from pylurk.extensions.tls12 import Tls12RsaMasterConf,  Tls12EcdheConf, \
                        Tls12RsaMasterRequestPayload,\
                        Tls12ExtRsaMasterRequestPayload,\
@@ -27,7 +27,6 @@ clt_conf = LurkConf( )
 clt_conf.set_role( 'client' )
 clt_conf.set_connectivity( type='udp', ip_address="127.0.0.1", port=6789 )
 client = LurkUDPClient( conf = clt_conf.conf )
-client2 = LurkUDPClient( conf = clt_conf.conf )
 
 
 print("-- Starting LURK UDP Server")
@@ -35,9 +34,7 @@ srv_conf = LurkConf()
 srv_conf.set_role( 'server' )
 srv_conf.set_connectivity( type='udp', ip_address="127.0.0.1", port=6789 )
 
-updServer = LurkUDPServer (srv_conf.conf)
-threadedUDPServer = updServer.get_thread_udpserver(7)
-
+threadedUDPServer = ThreadedLurkUDPServer (srv_conf.conf, max_workers=7)
 
 # Start a thread with the server -- that thread will then start one
 # more thread for each request (not for each client)
@@ -52,11 +49,11 @@ version = 'v1'
 for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
                'capabilities']:
     if mtype in [ 'ping', 'capabilities' ]:
-        resolve_exchange( client, updServer, designation, version, mtype, \
+        resolve_exchange( client, threadedUDPServer, designation, version, mtype, \
                           payload={} )
         continue
     for freshness_funct in [ "null", "sha256" ]:
-        resolve_exchange( client2, updServer, designation, version, mtype, \
+        resolve_exchange( client, threadedUDPServer, designation, version, mtype, \
                           payload={ 'freshness_funct' : freshness_funct } )
 
 threadedUDPServer.shutdown()
@@ -99,3 +96,43 @@ for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
 
 lurkHttpsServer.shutdown()
 lurkHttpsServer.server_close()
+
+print( "+--------------------------------------------------------+" )
+print( "|    TCP/TLS  LURK CLIENT / SERVER  - MULTI-Threads TESTS  |" )
+print( "+--------------------------------------------------------+" )
+
+try:
+    print("-- Starting LURK HTTPS Clients")
+    clt_conf = LurkConf( )
+    clt_conf.set_role( 'client' )
+    clt_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )
+    client = LurkTCPClient( conf = clt_conf.conf, secureTLS_connection=True )
+
+    print("-- Starting LURK HTTPS Server")
+    srv_conf = LurkConf()
+    srv_conf.set_role( 'server' )
+    srv_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )
+
+    lurkTCPServer = ThreadedLurkTCPServer(srv_conf.conf, max_workers=7 , secureTLS_connection=True)
+    t = threading.Thread( target=lurkTCPServer.serve_forever)
+
+    t.daemon = True
+    t.start()
+
+    designation = 'tls12'
+    version = 'v1'
+
+    for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
+                    'capabilities']:
+        if mtype in [ 'ping', 'capabilities' ]:
+            resolve_exchange( client, lurkTCPServer, designation, version, mtype, \
+                              payload={} )
+            continue
+        for freshness_funct in [ "null", "sha256" ]:
+            resolve_exchange( client, lurkTCPServer, designation, version, mtype, \
+                              payload={ 'freshness_funct' : freshness_funct } )
+
+    lurkTCPServer.shutdown()
+    lurkTCPServer.server_close()
+except:
+    print("Error occurred because the server is already running - Comment the TCP server code and run again")

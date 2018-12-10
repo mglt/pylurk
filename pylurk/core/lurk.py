@@ -805,16 +805,23 @@ class LurkClient:
 
 class LurkUDPClient(LurkClient):
 
-    def __init__(self, conf=default_conf ):
+    def __init__(self, conf=default_conf, secureTLS_connection=False ):
         self.init_conf( conf )
         self.conf = LurkConf( conf )
         self.waiting_queries = {}
+        self.secureTLS_connection = secureTLS_connection
         self.server = self.get_server()
         self.message = LurkMessage( conf = self.conf.conf )
 
     def get_server( self):
          sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
          sock.settimeout(1.0)
+
+        #DTLS not supported With Python 3.6- this is kept for future use
+         #if (self.secureTLS_connection):
+            # context = self.get_context()
+            # sock = context.wrap_socket(sock, server_side=False, server_hostname=self.conf.server.ip_address)  # server_hostname='example.com' (this is the common name when generating the certificate)
+
          return sock
 
     def send(self, bytes_pkt):
@@ -836,42 +843,25 @@ class LurkUDPClient(LurkClient):
             except: 
                 ImplementationError( '', "Unable resolve" )
 
-class LurkUDPServer:
+class LurkUDPServer(UDPServer, LurkServer):
 
-    def __init__(self,conf=default_conf):
-        self.lurk = LurkServer( conf )
+    def __init__(self,conf=default_conf, secureTLS_connection=False):
 
-    def serve_client(self):
-        """
-        This method is used to serve a single client without invoking any threading functionaliy
-        """
-        #create and bind socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        ip = self.lurk.conf.server.ip_address
-        port = self.lurk.conf.server.port
-        sock.bind((ip, port))
+        LurkServer.__init__(self, conf, secureTLS_connection)
 
-        #recieve client request and reply
-        while True:
-          data, address = sock.recvfrom(4096)
-          sock.sendto( self.lurk.byte_serve(data), address)
+        # this will allow reusing the same address for multiple connections
+        self.allow_reuse_address = True
 
-        #close socket
-        sock.close()
+        # initialize the UDPserver
+        server_address = (self.conf.server.ip_address, self.conf.server.port)
+        UDPServer.__init__(self, server_address, UDPRequestHandler )
 
-    def get_thread_udpserver(self, max_workers=40):
-
-       """
-       This method is used whenever we want to use threding for UDPServer.
-       :param max_workers: maximum number of threads (requests) to handle at a time
-       :return: an instance of the ThreadedUDPServer from which we can have access to the server socket and client data
-       """
-       ip = self.lurk.conf.server.ip_address
-       port = self.lurk.conf.server.port
-
-       #create a UDP server (socket) bind the host (ip) to the port (port)
-       server = ThreadedUDPServer((ip, port), UDPHandler, self.lurk, max_workers)
-       return server
+        #DTLS not supported with python 3.6 -- this is kept for future use
+        #if (secureTLS_connection):
+            # secure connection by setting the context
+           # context = self.get_context()
+            # updating the httpserver socket after wrapping it with ssl context
+           # self.socket = context.wrap_socket(self.socket, server_side=True)
 
 class PoolMixIn(ThreadingMixIn):
 
@@ -887,26 +877,40 @@ class PoolMixIn(ThreadingMixIn):
         self.pool.submit(self.process_request_thread, request, client_address)
 
 
-class ThreadedUDPServer(PoolMixIn, UDPServer):
+class ThreadedLurkUDPServer(PoolMixIn, LurkUDPServer):
     '''
      This class represents a UDPServer which launches a new thread (for each request) when a client gets connected
      This default behavior is modified by extending the PoolMixIn class instead of ThreadingMixIn to handle a specific number of requests(max_workers) in parallel
     '''
-    def __init__(self, server_info, udp_handler, lurkserver, max_workers=40):
-        """
-        Override the method to pass the lurk serversince it is needed to be able to call the byte_serve in UDPHandler.handle()
-        :param server_info:(ip, port) on which the UDP server is listening
-        :param UDPHandler: object of the UDPHandler class
-        :param lurkserver: object of the LurkServer
-        :param max_workers: maximum number of threads (requests) to handle at a time
-        """
-        #super(UDPServer, self).__init__(server_info, udp_handler)
-        super(PoolMixIn, self).__init__(server_info, udp_handler)
-        self.lurkServer = lurkserver
+    def __init__(self, conf=default_conf, secureTLS_connection = False, max_workers=40):
+        '''
+         This is a constructor to initialize an UDP server that handles multiple requests at the same time.
+         The code is a copy of the LurkUDPserver constructor (Note: calling the super constructor calls the LurkServer constructor which causes an error)
+         :param conf: the configuration
+         :param secureTLS_connection: if set to true will wrap the socket to use DTLS - currently not supported
+         :param max_workers: max number of HTTPS requests to handle in parallel
+         '''
+        LurkServer.__init__(self, conf, secureTLS_connection)
+
+        # set the pool attribute to allow multithreading
         self.pool = ThreadPoolExecutor(max_workers)
 
+        # this will allow reusing the same address for multiple connections
+        self.allow_reuse_address = True
 
-class UDPHandler(BaseRequestHandler):
+        # initialize the httpserver
+        server_address = (self.conf.server.ip_address, self.conf.server.port)
+        UDPServer.__init__(self, server_address, UDPRequestHandler)
+
+        #DTLS not supported for python 3.6 This is kept for future implementation
+        #if (secureTLS_connection):
+            # secure connection by setting the context
+           # context = self.get_context()
+            # updating the httpserver socket after wrapping it with ssl context
+            #self.socket = context.wrap_socket(self.socket, server_side=True)
+
+
+class UDPRequestHandler(BaseRequestHandler):
     """
      This class works similar to the TCP handler class, except that
     self.request consists of a pair of data and client socket, and since
@@ -926,8 +930,8 @@ class UDPHandler(BaseRequestHandler):
         socket = self.request[1]
 
         #manipulate the data and send it to the client
-        #self.server is a ThreadedUDPServer
-        socket.sendto(self.server.lurkServer.byte_serve(data), self.client_address)
+        #self.server is a ThreadedLurkUDPServer
+        socket.sendto(self.server.byte_serve(data), self.client_address)
 
         #socket.close()
         print("{} data:".format(threading.current_thread().name))
@@ -1030,41 +1034,6 @@ class LurkTCPServer(LurkServer, TCPServer):
             # updating the httpserver socket after wrapping it with ssl context
             self.socket = context.wrap_socket(self.socket, server_side=True)
 
-    def serve_client(self):
-        """
-        This method is used to serve a single client without invoking any threading functionality
-        It only allows the connection of one client to the server.
-        Unlike UDP where multiple clients can be handled sequentially, with TCP, for the server to handle multiple clients threading is needed.
-        https://stackoverflow.com/questions/10810249/python-socket-multiple-clients/46980073
-        """
-        #create and bind socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        ip = self.conf.server.ip_address
-        port = self.conf.server.port
-
-        #allow address reuse to prevent OS error that the address is already in use when binding
-       # sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-        sock.bind((ip, port))
-        sock.listen(1)
-
-
-        #conn: a new socket object used to send and recv data; addr address of the client
-        conn, addr = sock.accept()
-
-        if (self.secureTLS_connection):
-            context = self.get_context()
-            conn =context.wrap_socket(conn, server_side=True)
-
-        #recieve client request and reply
-        while True:
-          data = conn.recv(4096)
-          conn.sendall( self.byte_serve(data))
-
-        #close socket
-        conn.close()
-
-        sock.close()
 
 class ThreadedLurkTCPServer(PoolMixIn, LurkTCPServer):
     '''
@@ -1077,6 +1046,7 @@ class ThreadedLurkTCPServer(PoolMixIn, LurkTCPServer):
         This is a constructor to initialize an TCP server that handles multiple requests at the same time.
         The code is a copy of the LurkHTTPSserver constructor (Note: calling the super constructor calls the LurkServer constructor which causes an error)
         :param conf: the configuration
+        :param secureTLS_connection: if set to true will wrap the socket to use TLS1.2
         :param max_workers: max number of HTTPS requests to handle in parallel
         '''
 
