@@ -18,6 +18,8 @@ import threading
 HEADER_LEN = 16 
 LINE_LEN = 60
 
+data_dir = pkg_resources.resource_filename( __name__, '../data/')
+
 def wrap( text, line_len=LINE_LEN):
     """ Wrap text so it does not exceeds line_len
 
@@ -104,16 +106,19 @@ class LocalServerConf:
 
 class UDPServerConf:
     def __init__( self, conf=default_conf[ 'connectivity' ] ):
-        self.keys = [ 'type', 'ip_address', 'port' ]
+        self.keys = [ 'type', 'ip_address', 'port', 'keys', 'certs' ]
         self.check_key( conf )
         self.ip_address = conf[ 'ip_address' ]
         self.port = conf[ 'port' ]
+        self.tls_keys = conf['keys']
+        self.tls_certs = conf['certs']
 
     def check_key( self, conf ):
         if set( conf.keys() ) != set( self.keys ) :
             raise ConfError( conf, "Expected keys: %s"%self.keys )
 
 class TCPServerConf(UDPServerConf):pass
+class HTTPServerConf(TCPServerConf):pass #will extend TCP since HTTP is based on TCP
 
 class LurkConf():
 
@@ -136,9 +141,9 @@ class LurkConf():
             raise ConfError( conf['role' ], "Expecting role as 'client' " + \
                                             "or 'server'" )
         connectivity = conf[ 'connectivity' ]
-        if connectivity[ 'type' ] not in [ "local", "udp", "tcp" ]:
+        if connectivity[ 'type' ] not in [ "local", "udp", "tcp", "http" ]:
             raise ConfError( connectivity, "Expected type as 'local' "+\
-                                            "or 'udp' or 'tcp'" )
+                                            "or 'udp' or 'tcp' or 'http'" )
         if type( conf[ 'extensions' ] ) is not list:
             raise ConfError( conf[ 'connectivity' ], "Expected 'list'")
         id_bytes = randbits(8)
@@ -232,6 +237,8 @@ class LurkConf():
             return UDPServerConf( conf=con )
         if con[ 'type' ] == "tcp" :
             return TCPServerConf( conf=con )
+        if con['type'] == "http":
+            return HTTPServerConf(conf=con)
 
     def set_role( self, role ):
         if role not in [ 'client', 'server' ]:
@@ -254,8 +261,22 @@ class LurkConf():
                 port = kwargs[ 'port' ]
             else: 
                 port = 6789
+            if 'keys' in kwargs.keys():
+                keys = kwargs[ 'keys' ]
+            else:
+                keys = {
+                    'client': join( data_dir, 'key_tls12_rsa_client.key'),
+                    'server': join( data_dir, 'key_tls12_rsa_server.key'),
+                }
+            if 'certs' in kwargs.keys():
+                certs = kwargs ['certs']
+            else:
+                certs = {
+                    'client': join( data_dir, 'cert_tls12_rsa_client.crt'),
+                    'server': join( data_dir, 'cert_tls12_rsa_server.crt'),
+                }
             self.conf[ 'connectivity' ] = \
-                { 'type' : "udp", 'ip_address' : ip, 'port' : port }
+                { 'type' : "udp", 'ip_address' : ip, 'port' : port, 'keys' : keys, 'certs' : certs}
         elif kwargs[ 'type' ] == "tcp":
             con = {}
             con[ 'type' ] = 'tcp'
@@ -267,10 +288,50 @@ class LurkConf():
                 port = kwargs[ 'port' ]
             else:
                 port = 6789
-            self.conf[ 'connectivity' ] = \
-                { 'type' : "tcp", 'ip_address' : ip, 'port' : port }
+            if 'keys' in kwargs.keys():
+                keys = kwargs['keys']
+            else:
+                keys = {
+                        'client': join(data_dir, 'key_tls12_rsa_client.key'),
+                        'server': join(data_dir, 'key_tls12_rsa_server.key'),
+                       }
+            if 'certs' in kwargs.keys():
+                certs = kwargs['certs']
+            else:
+                certs = {
+                         'client': join(data_dir, 'cert_tls12_rsa_client.crt'),
+                         'server': join(data_dir, 'cert_tls12_rsa_server.crt'),
+                        }
+            self.conf['connectivity'] = \
+                {'type': 'tcp', 'ip_address': ip, 'port': port, 'keys': keys, 'certs': certs}
+        elif kwargs['type'] == "http":
+            con = {}
+            con['type'] = 'http'
+            if 'ip_address' in kwargs.keys():
+                ip = kwargs['ip_address']
+            else:
+                ip = "127.0.0.1"
+            if 'port' in kwargs.keys():
+                port = kwargs['port']
+            else:
+                port = 6789
+            if 'keys' in kwargs.keys():
+                keys = kwargs['keys']
+            else:
+                keys = { 'client': join(data_dir, 'key_tls12_rsa_client.key'),
+                         'server': join(data_dir, 'key_tls12_rsa_server.key'),
+                       }
+            if 'certs' in kwargs.keys():
+                certs = kwargs['certs']
+            else:
+                certs = {
+                         'client': join(data_dir, 'cert_tls12_rsa_client.crt'),
+                         'server': join(data_dir, 'cert_tls12_rsa_server.crt'),
+                        }
+            self.conf['connectivity'] = \
+                {'type': 'http', 'ip_address': ip, 'port': port, 'keys': keys, 'certs': certs}
         else: 
-            raise ConfError( kwargs[ 'type' ], "Expecting 'local', 'udp', 'tcp' ")
+            raise ConfError( kwargs[ 'type' ], "Expecting 'local', 'udp', 'tcp', 'http' ")
 
 
     ### function used by classes using this ConfLurk class 
@@ -675,16 +736,14 @@ class LurkServer():
         :return: ssl context object
         '''
 
-        data_dir = pkg_resources.resource_filename(__name__, '../data/')
-
         #path to server certificate
-        server_cert = join( data_dir,'cert_tls12_rsa_server.crt')
+        server_cert = self.conf.server.tls_certs['server']
 
         #path to server key
-        server_key = join( data_dir,'key_tls12_rsa_server.key')
+        server_key = self.conf.server.tls_keys['server']
 
         #path to client certificates
-        client_certs = join( data_dir,'cert_tls12_rsa_client.crt')
+        client_certs = self.conf.server.tls_certs['client']
 
         # context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)#in case we want to use  a default context chosen by ssl
 
@@ -784,13 +843,11 @@ class LurkClient:
         :return: ssl context object
         '''
 
-        data_dir = pkg_resources.resource_filename(__name__, '../data/')
-
-        # path to server key
-        client_key = join(data_dir, 'key_tls12_rsa_client.key')
+        # path to client key
+        client_key = self.conf.server.tls_keys['client']
 
         # path to client certificates
-        client_certs = join(data_dir, 'cert_tls12_rsa_client.crt')
+        client_certs = self.conf.server.tls_certs['client']
 
         # context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=join( data_dir, 'server.crt' )) #used for default context selected by ssl
 
@@ -898,7 +955,7 @@ class ThreadedLurkUDPServer(PoolMixIn, LurkUDPServer):
         # this will allow reusing the same address for multiple connections
         self.allow_reuse_address = True
 
-        # initialize the httpserver
+        # initialize the UDPserver
         server_address = (self.conf.server.ip_address, self.conf.server.port)
         UDPServer.__init__(self, server_address, UDPRequestHandler)
 
@@ -1024,14 +1081,14 @@ class LurkTCPServer(LurkServer, TCPServer):
         # this will allow reusing the same address for multiple connections
         self.allow_reuse_address = True
 
-        # initialize the httpserver
+        # initialize the TCPserver
         server_address = (self.conf.server.ip_address, self.conf.server.port)
         TCPServer.__init__(self, server_address, TCPRequestHandler)
 
         if (secureTLS_connection):
             # secure connection by setting the context
             context = self.get_context()
-            # updating the httpserver socket after wrapping it with ssl context
+            # updating the TCPserver socket after wrapping it with ssl context
             self.socket = context.wrap_socket(self.socket, server_side=True)
 
 
@@ -1091,7 +1148,7 @@ class TCPRequestHandler(BaseRequestHandler):
 class LurkHTTPClient(LurkClient):
 
     def __init__(self, conf=default_conf, secureTLS_connection=False):
-        conf['connectivity']['type'] = 'tcp'
+        conf['connectivity']['type'] = 'http'
 
         # could not call super constructor as it was throwing an init_conf error
         self.init_conf(conf)
@@ -1108,7 +1165,7 @@ class LurkHTTPClient(LurkClient):
     def get_server( self ):
         '''
         This should return a TCP client socket.
-        However, as we do not directlt interact with the client socket since we are using urllib, we will just set the
+        However, as we do not directly interact with the client socket since we are using urllib, we will just set the
         server attribute to none
         :return: None
         '''
@@ -1169,7 +1226,7 @@ class  LurkHTTPserver(LurkServer, HTTPServer):
     This class represnts and HTTPS server having LurkServer and HTTPServer functionality
     '''
     def __init__(self,conf=default_conf, secureTLS_connection=False):
-        conf['connectivity']['type'] = 'tcp'
+        conf['connectivity']['type'] = 'http'
 
 
         LurkServer.__init__(self, conf, secureTLS_connection)
@@ -1204,7 +1261,7 @@ class ThreadedLurkHTTPserver(PoolMixIn, LurkHTTPserver):
         #set the pool attribute to allow multithreading
         self.pool = ThreadPoolExecutor(max_workers)
 
-        conf['connectivity']['type'] = 'tcp'
+        conf['connectivity']['type'] = 'http'
 
 
         LurkServer.__init__(self, conf, secureTLS_connection)

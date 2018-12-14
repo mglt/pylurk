@@ -24,7 +24,15 @@ default_conf = {
     'connectivity' : { 
              'type' : "udp",  # "udp", "local", 
               'ip_address' : "127.0.0.1", 
-              'port' : 6789, 
+              'port' : 6789,
+              'keys': {#TLS keys
+                    'client': join( data_dir, 'key_tls12_rsa_client.key'),
+                    'server': join( data_dir, 'key_tls12_rsa_server.key'),
+                },
+              'certs': {#TLS certifications
+                    'client': join( data_dir, 'cert_tls12_rsa_client.crt'),
+                    'server': join( data_dir, 'cert_tls12_rsa_server.crt'),
+              },
          },       
     'extensions' : [
         { 'designation' : "lurk",
@@ -129,6 +137,8 @@ default_conf = {
                               'TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256', \
                               'TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384']
         }
-    ]
-    }
+    ],
+
+
+}
 

@@ -138,6 +138,14 @@ conf = { 'role' : "client",
              'type' : "udp",  # "udp", "local",
               'ip_address' : "127.0.0.1",
               'port' : 6789,
+              'keys': {#TLS keys
+                    'client': join( data_dir, 'key_tls12_rsa_client.key'),
+                    'server': join( data_dir, 'key_tls12_rsa_server.key'),
+                },
+              'certs': {#TLS certifications
+                    'client': join( data_dir, 'cert_tls12_rsa_client.crt'),
+                    'server': join( data_dir, 'cert_tls12_rsa_server.crt'),
+              },
         },
         'extensions' : [
              { 'designation' : "tls12",
@@ -251,6 +259,14 @@ conf = { 'role' : "client",
              'type' : "udp",
               'ip_address' : "127.0.0.1",
               'port' : 6789,
+              'keys': {#TLS keys
+                    'client': join( data_dir, 'key_tls12_rsa_client.key'),
+                    'server': join( data_dir, 'key_tls12_rsa_server.key'),
+                },
+              'certs': {#TLS certifications
+                    'client': join( data_dir, 'cert_tls12_rsa_client.crt'),
+                    'server': join( data_dir, 'cert_tls12_rsa_server.crt'),
+              },
         },
         'extensions' : [
              { 'designation' : "tls12",
@@ -508,13 +524,13 @@ try:
     print("-- Starting LURK HTTPS Clients")
     clt_conf = LurkConf( )
     clt_conf.set_role( 'client' )
-    clt_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )
+    clt_conf.set_connectivity( type='http', ip_address="127.0.0.1", port=6789 )
     client = LurkHTTPClient( conf = clt_conf.conf )
 
     print("-- Starting LURK HTTPS Server")
     srv_conf = LurkConf()
     srv_conf.set_role( 'server' )
-    srv_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )
+    srv_conf.set_connectivity( type='http', ip_address="127.0.0.1", port=6789 )
 
     lurkHttpsServer = LurkHTTPserver (srv_conf.conf)
 
