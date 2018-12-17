@@ -108,7 +108,7 @@ srv_conf.set_connectivity( type='udp', ip_address="127.0.0.1", port=6789 )
 
 updServer = LurkUDPServer (srv_conf.conf)
 #t = threading.Thread( target=LurkUDPServer, kwargs={ 'conf' : srv_conf.conf } )
-t = threading.Thread( target=updServer.serve_client)#single thread (no parallelism)
+t = threading.Thread( target=updServer)#single thread (no parallelism)
 t.daemon = True
 t.start()
 
@@ -125,6 +125,7 @@ for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
         resolve_exchange( client2, server, designation, version, mtype, \
                           payload={ 'freshness_funct' : freshness_funct } )
 
+return None
 
 print( "+---------------------------------------+" )
 print( "|      UDP  LURK Client / Server        |" )

@@ -1,4 +1,10 @@
-import socket
+"""
+We need to provide an explaination on how to add a new extension. 
+
+"""
+import os
+from  os.path import join
+import pkg_resources
 from textwrap import indent
 from secrets import randbits
 from Cryptodome.Hash import HMAC, SHA256
@@ -7,12 +13,15 @@ from pylurk.core.lurk_struct import *
 from socketserver import ThreadingMixIn, UDPServer, TCPServer, BaseRequestHandler
 from concurrent.futures import ThreadPoolExecutor
 from http.server import HTTPServer,  BaseHTTPRequestHandler
+
+import socket
 from socket import error as SocketError
+
+from select import select
 import errno
 import urllib.request
 import ssl
-from  os.path import join
-import pkg_resources
+import binascii
 
 import threading
 HEADER_LEN = 16 
@@ -108,6 +117,9 @@ class UDPServerConf:
         self.check_key( conf )
         self.ip_address = conf[ 'ip_address' ]
         self.port = conf[ 'port' ]
+## mglt: maybe we should check role and transport here. 
+## I am also wandering if that should not be a function 
+## associated to the LurkConf() rather than a class.
 
     def check_key( self, conf ):
         if set( conf.keys() ) != set( self.keys ) :
@@ -156,7 +168,7 @@ class LurkConf():
                 raise ConfError( ext, "Unexpected values for designation, " +\
                                       "version type" )
 
-
+## mglt: I think that get is unclear. maybe list is more appropriated. 
     def get_mtypes( self ):
         """ returns the list of types associated to each extentions
              { ( designation_a, version_a) : [ type_1, ..., type_n ],
@@ -173,6 +185,7 @@ class LurkConf():
             except KeyError:
                 mtype[ k ] = [ ext[ 'type' ] ]
         return mtype
+
 
     def get_supported_ext( self ):
         """ returns the list of extensions 
@@ -223,7 +236,7 @@ class LurkConf():
                  type_conf.append( conf )
          return type_conf
 
-
+## mglt: we should probably have somthing simplier without classes.
     def get_server( self ):
         con = self.conf[ 'connectivity' ]
         if con[ 'type' ] == "local" :
@@ -385,6 +398,7 @@ class LurkMessage( Payload ):
         self.struct = LURKHeader
         self.struct_name = 'Lurk Header'
         self.lurk = self.import_ext()
+
     def import_ext( self ):
         lurk_ext = {}
         for ext in self.conf.mtype.keys():
@@ -402,6 +416,14 @@ class LurkMessage( Payload ):
             else :
                 raise ConfError( ext, "unknown extension" ) 
         return lurk_ext
+
+## mglt: I believe that *_ext* fucntion could be integrated with other
+## function so message is closer to payload. Woudl probably more
+## readable.
+## we need to clarify the position of Payload versus Message
+## The reason to have message is that it combines two independent data
+## structures header and payload and only the payload is delegated to
+## the modules. 
 
     def get_ext( self, message ):
          """ returns the LurkExt object from a message or header """
@@ -626,7 +648,12 @@ class LurkMessage( Payload ):
             else: ## the payload is an error payload
                 LURKErrorPayload.parse( payload_bytes )
 
+
 class LurkServer():
+## mglt: I do not think that secureTLS should be mentionned here.
+## However it might be good to have the threads=1. We need to clarify
+## whether having multithreading here will not solve all multithreading
+## issues. 
 
     def __init__(self, conf=default_conf, secureTLS_connection=False ):
         self.init_conf( conf )
@@ -637,6 +664,8 @@ class LurkServer():
         # specify that we need to use TCP TLS
         self.secureTLS_connection = secureTLS_connection
 
+## mglt: we need to check if that relevent to have this function here
+## while LurkConf has the equivalent mehtod.
     def init_conf( self, conf ):
         """ Provides minor changes to conf so the default conf can be used
  
@@ -666,6 +695,11 @@ class LurkServer():
                 ## stop when an error is encountered
                 return response_bytes
         return response_bytes
+
+
+## mglt: LurkServer - As I understand it - has nothing to do with the
+## TLS session between Lurk Client and Server. I think this function
+## should be in TCPTLSLurkServer/Client. not here. 
 
     def get_context(self):
         '''
@@ -703,8 +737,10 @@ class LurkServer():
         return context
 
 class LurkClient:
-
-    def __init__( self, conf=default_conf, secureTLS_connection=False):
+## mglt - idem: we should probably have multithreading. It is not clear
+## to me why we have TLS
+    def __init__( self, conf=default_conf, secureTLS_connection=False,\
+                  thread=True):
         self.init_conf( conf )
         self.conf = LurkConf( conf )
         self.waiting_queries = {}
@@ -714,6 +750,7 @@ class LurkClient:
         #specify that we need to use TCP TLS
         self.secureTLS_connection = secureTLS_connection
 
+## mglt: should be in LurkConf while checking the role.
     def init_conf( self, conf ):
         """ Provides minor changes to conf so the default conf can be used
  
@@ -738,7 +775,9 @@ class LurkClient:
                     pass
         return conf
 
-
+## mglt: we need to look at udp, tcp... but it seems we could have
+## somthing simplier. We know LurkServer needs to be returned and
+## appropriated conf can be set according to functions from LurkConf.
     def get_server( self ):
         conf_class = self.conf.server.__class__.__name__ 
         if conf_class == 'LocalServerConf' :
@@ -768,13 +807,18 @@ class LurkClient:
         response = self.message.parse( response_bytes )
         return request, response
 
-    def is_response(self, response):
-        try:
-            query = self.waiting_queries[ response [ 'id' ] ]
-            del self.waiting_queries[ response [ 'id' ] ]
-            return True
-        except KeyError:
-            return False
+## mglt: not sure we are using this fucntion. our current client looks
+## like a stub client. This is fine for now, but to avoid layer
+## violation, we will probably need to define a communication between 
+## stub client (in the TLS software and our Lurk*Client) using RPC
+## communications.
+##    def is_response(self, response):
+##        try:
+##            query = self.waiting_queries[ response [ 'id' ] ]
+##            del self.waiting_queries[ response [ 'id' ] ]
+##            return True
+##        except KeyError:
+##            return False
 
     def get_context(self):
         '''
@@ -805,13 +849,15 @@ class LurkClient:
 
 class LurkUDPClient(LurkClient):
 
-    def __init__(self, conf=default_conf ):
+    def __init__(self, conf=default_conf):
         self.init_conf( conf )
         self.conf = LurkConf( conf )
         self.waiting_queries = {}
         self.server = self.get_server()
         self.message = LurkMessage( conf = self.conf.conf )
 
+## mglt: is this an appropriated terminology ? I think what we want toi
+## say is something like set_server_channel 
     def get_server( self):
          sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
          sock.settimeout(1.0)
@@ -836,287 +882,605 @@ class LurkUDPClient(LurkClient):
             except: 
                 ImplementationError( '', "Unable resolve" )
 
+##class LurkUDPServer:
+##
+##    def __init__(self,conf=default_conf):
+##        self.lurk = LurkServer( conf )
+##
+##    def serve_client(self):
+##        """
+##        This method is used to serve a single client without invoking any threading functionaliy
+##        """
+##        #create and bind socket
+##        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+##        ip = self.lurk.conf.server.ip_address
+##        port = self.lurk.conf.server.port
+##        sock.bind((ip, port))
+##
+##        #recieve client request and reply
+##        while True:
+##          data, address = sock.recvfrom(4096)
+##          sock.sendto( self.lurk.byte_serve(data), address)
+##
+##        #close socket
+##        sock.close()
+##
+#### mglt: this function does not seem to be used here. 
+##    def get_thread_udpserver(self, max_workers=40):
+##
+##       """
+##       This method is used whenever we want to use threding for UDPServer.
+##       :param max_workers: maximum number of threads (requests) to handle at a time
+##       :return: an instance of the ThreadedUDPServer from which we can have access to the server socket and client data
+##       """
+##       ip = self.lurk.conf.server.ip_address
+##       port = self.lurk.conf.server.port
+##
+##       #create a UDP server (socket) bind the host (ip) to the port (port)
+##       server = ThreadedUDPServer((ip, port), UDPHandler, self.lurk, max_workers)
+##       return server
+
+"""
+From https://docs.python.org/3.5/library/socketserver.html: 
+
+Creating a server requires several steps. First, you must create a request handler class by subclassing the BaseRequestHandler class and overriding its handle() method; this method will process incoming requests. Second, you must instantiate one of the server classes, passing it the server’s address and the request handler class. Then call the handle_request() or serve_forever() method of the server object to process one or many requests. Finally, call server_close() to close the socket.
+
+When inheriting from ThreadingMixIn for threaded connection behavior, you should explicitly declare how you want your threads to behave on an abrupt shutdown. The ThreadingMixIn class defines an attribute daemon_threads, which indicates whether or not the server should wait for thread termination. You should set the flag explicitly if you would like threads to behave autonomously; the default is False, meaning that Python will not exit until all threads created by ThreadingMixIn have exited.
+"""
+class BaseUDPServer(UDPServer):
+
+    def __init__(self, lurk_conf, RequestHandlerClass ):
+        self.lurk = LurkServer( lurk_conf )
+        host = lurk_conf[ 'connectivity' ][ 'ip_address' ]
+        port = lurk_conf[ 'connectivity' ][ 'port' ]
+        server_address = (host, port) 
+        super().__init__(server_address, RequestHandlerClass)
+
+    def byte_serve(self, data):
+        return self.lurk.byte_serve(data)
+
+
+class ThreadedUDPServer(ThreadingMixIn, BaseUDPServer):
+    pass
+
+
+class UDPHandle(BaseRequestHandler):
+    """
+    """
+ 
+    def handle(self):
+        """ treat the request 
+        From https://docs.python.org/3.5/library/socketserver.html
+
+	This function must do all the work required to service a
+        request. The default implementation does nothing. Several 
+        instance attributes are available to it; the request is 
+        available as self.request; the client address as 
+        self.client_address; and the server instance as self.server, 
+        in case it needs access to per-server information.
+
+        The type of self.request is different for datagram or stream
+        services. For datagram services, self.request is a pair of 
+        string and socket.
+        """
+        data = self.request[0]
+        socket = self.request[1]
+        socket.sendto(self.server.byte_serve(data), self.client_address)
+        print("{} data:".format(threading.current_thread().name))
+
 class LurkUDPServer:
 
-    def __init__(self,conf=default_conf):
-        self.lurk = LurkServer( conf )
+    def __init__(self, conf=default_conf, thread=True):
+        ## self.conf = conf
+        ## host = self.conf[ 'connectivity' ][ 'ip_address' ]
+        ## port = self.conf[ 'connectivity' ][ 'port' ]
+        ## self.lurk = LurkServer( conf )
+        if thread == False:
+           self.server = BaseUDPServer(conf, UDPHandler )
+        else:
+           self.server = ThreadedUDPServer(conf, UDPHandle)
+        self.server.serve_forever()
 
-    def serve_client(self):
-        """
-        This method is used to serve a single client without invoking any threading functionaliy
-        """
-        #create and bind socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        ip = self.lurk.conf.server.ip_address
-        port = self.lurk.conf.server.port
-        sock.bind((ip, port))
-
-        #recieve client request and reply
-        while True:
-          data, address = sock.recvfrom(4096)
-          sock.sendto( self.lurk.byte_serve(data), address)
-
-        #close socket
-        sock.close()
-
-    def get_thread_udpserver(self, max_workers=40):
-
-       """
-       This method is used whenever we want to use threding for UDPServer.
-       :param max_workers: maximum number of threads (requests) to handle at a time
-       :return: an instance of the ThreadedUDPServer from which we can have access to the server socket and client data
-       """
-       ip = self.lurk.conf.server.ip_address
-       port = self.lurk.conf.server.port
-
-       #create a UDP server (socket) bind the host (ip) to the port (port)
-       server = ThreadedUDPServer((ip, port), UDPHandler, self.lurk, max_workers)
-       return server
+#    def serve_forever(self):
+#        self.server.serve_forever()
 
 class PoolMixIn(ThreadingMixIn):
+    pass
 
-    def process_request(self, request, client_address):
-        '''
-        Override the process_request () in ThreadingMixIn
-        This method is called by handle_request() pre-defined in BaseServer(in out case; ThreadedUDPServer, ThreadedTCPServer) class which is the superclass of UDPServer and TCPServer
-        :param request:
-        :param client_address:
-        '''
+#####
+#####    def process_request(self, request, client_address):
+#####        '''
+#####        Override the process_request () in ThreadingMixIn
+#####        This method is called by handle_request() pre-defined in BaseServer(in out case; ThreadedUDPServer, ThreadedTCPServer) class which is the superclass of UDPServer and TCPServer
+#####        :param request:
+#####        :param client_address:
+#####        '''
+#####
+#####        #call the process_request_thread () defined in ThreadingMixIn for each request in the pool
+#####        self.pool.submit(self.process_request_thread, request, client_address)
+#####
+#####
+#####class ThreadedUDPServer(PoolMixIn, UDPServer):
+#####    '''
+#####     This class represents a UDPServer which launches a new thread (for each request) when a client gets connected
+#####     This default behavior is modified by extending the PoolMixIn class instead of ThreadingMixIn to handle a specific number of requests(max_workers) in parallel
+#####    '''
+#####    def __init__(self, server_info, udp_handler, lurkserver, max_workers=40):
+#####        """
+#####        Override the method to pass the lurk serversince it is needed to be able to call the byte_serve in UDPHandler.handle()
+#####        :param server_info:(ip, port) on which the UDP server is listening
+#####        :param UDPHandler: object of the UDPHandler class
+#####        :param lurkserver: object of the LurkServer
+#####        :param max_workers: maximum number of threads (requests) to handle at a time
+#####        """
+#####        #super(UDPServer, self).__init__(server_info, udp_handler)
+#####        super(PoolMixIn, self).__init__(server_info, udp_handler)
+#####        self.lurkServer = lurkserver
+#####        self.pool = ThreadPoolExecutor(max_workers)
+#####
 
-        #call the process_request_thread () defined in ThreadingMixIn for each request in the pool
-        self.pool.submit(self.process_request_thread, request, client_address)
+##class UDPHandler(BaseRequestHandler):
+##    """
+##     This class works similar to the TCP handler class, except that
+##    self.request consists of a pair of data and client socket, and since
+##    there is no connection, the client address must be given explicitly
+##    when sending data back via sendto().
+##    An object of this class is instantiated whenever there is a new client request
+##    """
+#### mglt: maybe lurkServer should be instantiated here. 
+#### 
+##    def handle(self):
+##        """
+##             This method handles the processing for each request
+##        """
+##        #get data sent by the client to the server up to 8192 bytes
+##        data = self.request[0]
+##
+##        #get the server socket
+##        socket = self.request[1]
+##
+##        #manipulate the data and send it to the client
+##        #self.server is a ThreadedUDPServer
+##        socket.sendto(self.server.lurkServer.byte_serve(data), self.client_address)
+##
+##        #socket.close()
+##        print("{} data:".format(threading.current_thread().name))
+##        print(data)
 
 
-class ThreadedUDPServer(PoolMixIn, UDPServer):
-    '''
-     This class represents a UDPServer which launches a new thread (for each request) when a client gets connected
-     This default behavior is modified by extending the PoolMixIn class instead of ThreadingMixIn to handle a specific number of requests(max_workers) in parallel
-    '''
-    def __init__(self, server_info, udp_handler, lurkserver, max_workers=40):
-        """
-        Override the method to pass the lurk serversince it is needed to be able to call the byte_serve in UDPHandler.handle()
-        :param server_info:(ip, port) on which the UDP server is listening
-        :param UDPHandler: object of the UDPHandler class
-        :param lurkserver: object of the LurkServer
-        :param max_workers: maximum number of threads (requests) to handle at a time
-        """
-        #super(UDPServer, self).__init__(server_info, udp_handler)
-        super(PoolMixIn, self).__init__(server_info, udp_handler)
-        self.lurkServer = lurkserver
-        self.pool = ThreadPoolExecutor(max_workers)
+## interesting links on TCP sockets:
+## https://www.scottklement.com/rpg/socktut/tutorial.html
+## https://docs.python.org/3/howto/sockets.html
+## https://docs.python.org/3/library/socket.html
+## https://docs.python.org/3/library/socketserver.html
+
+class BaseTCPServer(TCPServer):
+
+    def __init__(self, lurk_conf, RequestHandlerClass ):
+        self.lurk = LurkServer( lurk_conf )
+        host = lurk_conf[ 'connectivity' ][ 'ip_address' ]
+        port = lurk_conf[ 'connectivity' ][ 'port' ]
+        server_address = (host, port) 
+        super().__init__(server_address, RequestHandlerClass)
+
+    def byte_serve(self, data):
+        return self.lurk.byte_serve(data)
 
 
-class UDPHandler(BaseRequestHandler):
+class ThreadedTCPServer(ThreadingMixIn, BaseTCPServer):
+    pass
+
+class TCPHandle(BaseRequestHandler):
     """
-     This class works similar to the TCP handler class, except that
-    self.request consists of a pair of data and client socket, and since
-    there is no connection, the client address must be given explicitly
-    when sending data back via sendto().
-    An object of this class is instantiated whenever there is a new client request
     """
-
+ 
     def handle(self):
+        """ treat the request 
+        From https://docs.python.org/3.5/library/socketserver.html
+
+	This function must do all the work required to service a
+        request. The default implementation does nothing. Several 
+        instance attributes are available to it; the request is 
+        available as self.request; the client address as 
+        self.client_address; and the server instance as self.server, 
+        in case it needs access to per-server information.
+
+        The type of self.request is different for datagram or stream
+        services.  For stream services, self.request is a socket object.
         """
-             This method handles the processing for each request
-        """
-        #get data sent by the client to the server up to 8192 bytes
-        data = self.request[0]
-
-        #get the server socket
-        socket = self.request[1]
-
-        #manipulate the data and send it to the client
-        #self.server is a ThreadedUDPServer
-        socket.sendto(self.server.lurkServer.byte_serve(data), self.client_address)
-
-        #socket.close()
+        bytes_recv = self.request.recv(HEADER_LEN)
+        header = LURKHeader.parse(bytes_recv)
+        bytes_nbr = header[ 'length' ]
+        while len(bytes_recv) < bytes_nbr:
+            bytes_recv += self.request.recv(min(bytes_nbr - len(bytes_recv), 1024))
+        self.request.sendall(self.server.byte_serve(bytes_recv))
         print("{} data:".format(threading.current_thread().name))
-        print(data)
+
+
+class LurkTCPServer:
+
+    def __init__(self, conf=default_conf, thread=True):
+        if thread == False:
+           self.server = BaseTCPServer(conf, TCPHandle )
+        else:
+           self.server = ThreadedTCPServer(conf, TCPHandle)
+        self.server.serve_forever()
+
+MAX_CONNECT_ATTEMPTS = 3
 
 class LurkTCPClient(LurkClient):
 
-    def __init__(self, conf=default_conf, secureTLS_connection=False):
-        conf['connectivity']['type'] = 'tcp'
+    def __init__(self, conf=default_conf):
+        self.con_type = conf['connectivity']['type']
+        self.host = conf[ 'connectivity' ][ 'ip_address' ]
+        self.port = conf[ 'connectivity' ][ 'port' ]
+        if self.con_type not in [ 'tcp', 'tcp+tls' ]:
+            self.con_type = 'tcp'
+        print("tcp client: %s:%s"%(self.host, self.port))
+        self.message = LurkMessage( conf = conf )
+        self.connect( status='init') 
+        
 
-        #could not call super constructor as it was throwing an init_conf error
-        self.init_conf(conf)
-        self.conf = LurkConf(conf)
-        self.waiting_queries = {}
+    def connect(self, status='reconnect'):
+        if status == 'init':
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.setblocking(False)
+        attempt_nbr = 0
+        error_nbr = -1
+        while error_nbr != 0 and error_nbr != 106 : 
+            error_nbr = self.sock.connect_ex((self.host, self.port))
+            if error_nbr != 0:
+                print("Connecting tcp socket (%s): %s, %s"%\
+                      (error_nbr, errno.errorcode[error_nbr], \
+                       os.strerror(error_nbr)))
+            attempt_nbr += 1
+            if attempt_nbr > MAX_CONNECT_ATTEMPTS:
+                raise ImplementationError(attempt_nbr, "TCP connection" +\
+                      "attempts exceeds MAX_CONNECT_ATTEMPTS " +\
+                      "= %s"%MAX_CONNECT_ATTEMPTS +\
+                      "TCP session not established" )
 
-        # specify that we need to use TCP TLS
-        self.secureTLS_connection = secureTLS_connection
+        if self.con_type == 'tcp+tls' :
+            context = self.get_context()
+            self.sock = context.wrap_socket(sock, server_side=False,server_hostname=host) 
 
-        self.server = self.get_server()
-        self.message = LurkMessage(conf=self.conf.conf)
+            #server_hostname='example.com' 
 
 
+###    def send(self, bytes_pkt):
+###         '''
+###         This method will connect the client to the server and send the bytes_pkt and recieve the response
+###         Important notes:
+###             1- We prevent the client to reconnect each time it tries to send a request.
+###             For that, we start by trying to send the bytes, if connection is lost of no connection is established a socket exception will be thrown and hence, the client will try to connect to server and re-send the bytes
+###             2- Use a buffer of 4096
+###             It is important to keep the buffer = 4096 and not less (i.e. 1024) to prevent a timeout error and a failure to reconnect when trying to send an 'rsa_extended_master' and capabilities
+###
+###         :param bytes_pkt: bytes to send t server
+###         :return: recieved bytes (parsed)
+###         '''
+###         self.outgoing.append(bytes_pkt)
+###         return None
+###
+###         while True:
+###            try:
+###                #try to send first to check if there is a connection established
+###                self.server.sendall(bytes_pkt)
+###                response_bytes = self.server.recv(4096)
+###                waiting = True
+###                while waiting == True:
+###                    response_bytes = self.server.recv(4096)
+###                    response = self.message.parse(response_bytes)
+###                    if self.is_response(response) == True:
+###                       waiting = False
+###                return response
+###            #catch any error mainly if no connection exists
+###            except socket.error:
+###                try:
+###                    return response_bytes
+###                except:
+###                    ImplementationError('', "Unable resolve")
+###
+###                # set connection status and recconnect
+###                connected = False
+###
+###                while not connected:
+###                    #attempt to reconnect
+###                    try:
+###                        ip = self.conf.server.ip_address
+###                        port = self.conf.server.port
+###                        self.server.connect( ( ip, port ) )
+###                        connected = True
+###                    except socket.timeout:
+###                        print("timeout")
+###
+###         self.server.close()
 
-    def get_server( self):
-         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    def caching_bytes(self, bytes_pkt):
+        """ stores al requests of bytes_request in self.request
+        
+        bytes_request can be the concatenation of one or multiple
+        requests. This function lists the each individual request. This
+        is used to define later if all requests have been answered.
 
-         if (self.secureTLS_connection):
-             context = self.get_context()
-             sock = context.wrap_socket(sock, server_side=False,server_hostname= self.conf.server.ip_address) #server_hostname='example.com' (this is the common name when generating the certificate)
+        Args:
+            bytes_pkt (bytes): one or a concatenation of one or multiple
+            packets in a byte format. packets can be requests or responses. 
 
-         sock.settimeout(1.0)
+        Returns:
+            pkt_bytes_dict (dict): a dictionary of every subpackets
+            indexed with their id { pkt['id']: pkt }
+        """
+        bytes_pkt_dict = {}
+        while len(bytes_pkt) != 0: 
+            header = LURKHeader.parse(bytes_pkt)
+            bytes_nbr =  HEADER_LEN + header['length'] 
+            bytes_pkt_dict[ header['id'] ] = bytes_pkt[: bytes_nbr ]
+            bytes_pkt = bytes_pkt[bytes_nbr :] 
+        return bytes_pkt_dict
 
-         return sock
+    def resolve( self, **kwargs ):
+        ## we shoudl be able to pass a list of **kwargs
+        request = self.message.build_payload( **kwargs )
+        bytes_requests = self.message.build( **request )
+        bytes_resolutions = self.bytes_resolve(bytes_requests) 
+        resolutions = []
+        for resol in bytes_resolutions:
+            resolutions.append((self.message.parse(resol[0]), \
+                                self.message.parse(resol[1])))
+        return resolutions[0]
 
-    def send(self, bytes_pkt):
-         '''
-         This method will connect the client to the server and send the bytes_pkt and recieve the response
-         Important notes:
-             1- We prevent the client to reconnect each time it tries to send a request.
-             For that, we start by trying to send the bytes, if connection is lost of no connection is established a socket exception will be thrown and hence, the client will try to connect to server and re-send the bytes
-             2- Use a buffer of 4096
-             It is important to keep the buffer = 4096 and not less (i.e. 1024) to prevent a timeout error and a failure to reconnect when trying to send an 'rsa_extended_master' and capabilities
 
-         :param bytes_pkt: bytes to send t server
-         :return: recieved bytes (parsed)
-         '''
+##?gc        max_retry = 3
+##?gc        retry = 0
+##?gc        while bytes_resolutions == None and retry < max_retry:
+##?gc            response_bytes = self.send( request_bytes )
+##?gc            retry += 1
+##?gc        if response_bytes == None:
+##?gc            print("Resolution Failed")
+##?gc        response = self.message.parse( response_bytes )
+##?gc        return request, response
 
-         while True:
+    def bytes_resolve(self, bytes_request):
+        """ sends bytes_request and returns bytes_responses
+
+        Args:
+            bytes_request (bytes): the request in byte format. This can
+                include a single request or a serie of concatenated 
+                requests in byte format. 
+        
+        Returns: 
+            bytes_resolutions (lst): list of (bytes_response,
+                bytes_request) elements where bytes_request the requests 
+                included in bytes_request and bytes_responses the 
+                corresponding responses. Typically
+        """
+        self.connect(status='init')
+        self.bytes_send(bytes_request)
+        bytes_requests_dict = self.caching_bytes(bytes_request)
+        bytes_responses = self.bytes_receive(bytes_requests_dict)
+        bytes_responses_dict = self.caching_bytes(bytes_responses)
+##        while set(self.requests.keys()) != set(self.responses.keys()):        
+##            read_s, write_s, error_s = select.select([self.sock] , [], [])
+##            if self.sock in read_s:
+##                self.receiving()
+        bytes_resolutions = []
+        for req_id in bytes_requests_dict.keys():
             try:
-                #try to send first to check if there is a connection established
-                self.server.sendall(bytes_pkt)
-                response_bytes = self.server.recv(4096)
-                waiting = True
-                while waiting == True:
-                    response_bytes = self.server.recv(4096)
-                    response = self.message.parse(response_bytes)
-                    if self.is_response(response) == True:
-                       waiting = False
-                return response
-            #catch any error mainly if no connection exists
-            except socket.error:
-                try:
-                    return response_bytes
-                except:
-                    ImplementationError('', "Unable resolve")
+                bytes_resolutions.append((bytes_requests_dict[req_id], \
+                                      bytes_responses_dict[req_id]))
+            except KeyError:
+                ## including void responses, i.e not provided by the
+                ## server
+                bytes_resolutions.append((bytes_requests_dict[req_id],b''))
 
-                # set connection status and recconnect
-                connected = False
+        self.closing()
+        return bytes_resolutions
 
-                while not connected:
-                    #attempt to reconnect
-                    try:
-                        ip = self.conf.server.ip_address
-                        port = self.conf.server.port
-                        self.server.connect( ( ip, port ) )
-                        connected = True
-                    except socket.timeout:
-                        print("timeout")
+    def is_response(self, bytes_response, bytes_requests_dict):
+        if bytes_requests_dict == None:
+            return True
+        ## server does not respond
+        if bytes_response == b'':
+            return True
+        try:
+            header_response = LURKHeader.parse(bytes_response)
+            header_request = LURKHeader.parse(bytes_requests_dict[\
+                                 header_response['id'] ])
+            for key in [ 'designation', 'version', 'type' ]:
+                if header_request[key] != header_response[key]:
+                    return False
+            if header_response['status'] == 'request':
+                return False
+            return True
 
-         self.server.close()
+        except KeyError:
+            return False
+        
 
+    def bytes_send(self, bytes_request):
+        """ sending bytes_pkt bytes
 
-
-class LurkTCPServer(LurkServer, TCPServer):
-
-    def __init__(self,conf=default_conf, secureTLS_connection=False):
-        conf['connectivity']['type'] = 'tcp'
-        LurkServer.__init__(self, conf, secureTLS_connection)
-
-        # this will allow reusing the same address for multiple connections
-        self.allow_reuse_address = True
-
-        # initialize the httpserver
-        server_address = (self.conf.server.ip_address, self.conf.server.port)
-        TCPServer.__init__(self, server_address, TCPRequestHandler)
-
-        if (secureTLS_connection):
-            # secure connection by setting the context
-            context = self.get_context()
-            # updating the httpserver socket after wrapping it with ssl context
-            self.socket = context.wrap_socket(self.socket, server_side=True)
-
-    def serve_client(self):
         """
-        This method is used to serve a single client without invoking any threading functionality
-        It only allows the connection of one client to the server.
-        Unlike UDP where multiple clients can be handled sequentially, with TCP, for the server to handle multiple clients threading is needed.
-        https://stackoverflow.com/questions/10810249/python-socket-multiple-clients/46980073
+        rlist, wlist, xlist = select([], [self.sock], [])
+        sent_status = self.sock.sendall(bytes_request)
+        if sent_status == None:
+            print("bytes_request sent (%s): %s"%(len(bytes_request), \
+                                             binascii.hexlify(bytes_request)))
+        else: 
+            print("Not all data (%s) has been sent: %s"(len(bytes_request), \
+                                   binascii.hexlify(bytes_request)))
+
+
+    def bytes_receive(self, bytes_requests_dict=None):
+        """ receiving response_nbr packets
+
+        Args:
+            bytes_Requests_dict (dict): the dictionary that associated
+                to the id the byte representation of the request (bytes_request) 
+                { id : bytes_request }
+        Returns:
+            bytes_response (bytes): the corresponding bytes_responses.
+                When bytes_requests is composed of multiple bytes_request 
+                concatenated, the responses are concatenated as well. 
         """
-        #create and bind socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        ip = self.conf.server.ip_address
-        port = self.conf.server.port
+        bytes_responses = b''
+        if bytes_requests_dict == None:
+            response_nbr = 1
+        else: 
+            response_nbr = len(bytes_requests_dict.keys())
+        while response_nbr > 0:
+           bytes_response = self.bytes_receive_single_response()
+           if self.is_response(bytes_response, bytes_requests_dict) == False:
+               continue  
+           bytes_responses += bytes_response
+           response_nbr -= 1
 
-        #allow address reuse to prevent OS error that the address is already in use when binding
-       # sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-        sock.bind((ip, port))
-        sock.listen(1)
-
-
-        #conn: a new socket object used to send and recv data; addr address of the client
-        conn, addr = sock.accept()
-
-        if (self.secureTLS_connection):
-            context = self.get_context()
-            conn =context.wrap_socket(conn, server_side=True)
-
-        #recieve client request and reply
-        while True:
-          data = conn.recv(4096)
-          conn.sendall( self.byte_serve(data))
-
-        #close socket
-        conn.close()
-
-        sock.close()
-
-class ThreadedLurkTCPServer(PoolMixIn, LurkTCPServer):
-    '''
-    This class represents a TCPServer which launches a new thread (for each request) when a client gets connected
-    This default behavior is modified by extending the PoolMixIn class instead of ThreadingMixIn to handle a specific number of requests(max_workers) in parallel
-    '''
-
-    def __init__(self, conf=default_conf, secureTLS_connection = False, max_workers=40):
-        '''
-        This is a constructor to initialize an TCP server that handles multiple requests at the same time.
-        The code is a copy of the LurkHTTPSserver constructor (Note: calling the super constructor calls the LurkServer constructor which causes an error)
-        :param conf: the configuration
-        :param max_workers: max number of HTTPS requests to handle in parallel
-        '''
-
-        # set the pool attribute to allow multithreading
-        self.pool = ThreadPoolExecutor(max_workers)
-
-        conf['connectivity']['type'] = 'tcp'
-        LurkServer.__init__(self, conf, secureTLS_connection)
-
-        # this will allow reusing the same address for multiple connections
-        self.allow_reuse_address = True
-
-        # initialize the httpserver
-        server_address = (self.conf.server.ip_address, self.conf.server.port)
-        TCPServer.__init__(self, server_address, TCPRequestHandler)
-
-        if (secureTLS_connection):
-            # secure connection by setting the context
-            context = self.get_context()
-            # updating the httpserver socket after wrapping it with ssl context
-            self.socket = context.wrap_socket(self.socket, server_side=True)
-
-class TCPRequestHandler(BaseRequestHandler):
-
-    def handle(self):
-        '''
-        this function handles all the processing of a request
-        '''
-        # recieve client request and reply
-        print("{}".format(threading.current_thread().name))
-
-        while True:
-            data = self.request.recv(4096)
-            self.request.sendall(self.server.byte_serve(data))
+        return bytes_responses
+ 
+    def bytes_receive_single_response(self):
+        print("bytes_receive_single_response")
+        rlist, wlist, xlist = select([self.sock], [], [])
+        bytes_recv = b''
+        print("rlist :%s"%rlist)
+##        while len(bytes_recv) < HEADER_LEN :
+##            try:
+        bytes_recv = self.sock.recv(HEADER_LEN)
+        if bytes_recv == b'':
+            return bytes_recv
+                ##print("reading header: %s"%binascii.hexlify(bytes_recv))
+##            except (OSError, BlockingIOError) as err:
+##                print("socket connection broken. Cannot read header") 
+##                print("OS error: {0}".format(err))
+##                raise err
+            ##if bytes_recv == b'':
+        print("bytes_recv (header): %s"%binascii.hexlify(bytes_recv))
+        print("len(bytes_recv): %s, %s"%(len(bytes_recv), HEADER_LEN))
+        header = LURKHeader.parse(bytes_recv)
+        bytes_nbr = header[ 'length' ]
+      
+        while len(bytes_recv) < bytes_nbr:
+           rlist, wlist, xlist = select([self.sock], [], [])
+           bytes_recv += self.sock.recv(min(bytes_nbr - len(bytes_recv), 4096))
+           print("bytes_recv (%s): %s"%(len(bytes_recv), \
+                 binascii.hexlify(bytes_recv)))
+        return bytes_recv 
 
 
-        # close the client socket
-        self.request.close()
+    def closing(self):
+        """ Closing the connection
 
+        """
+        self.sock.shutdown(socket.SHUT_RDWR)
+        self.sock.close()
+        
 
+##class LurkTCPServer(LurkServer, TCPServer):
+##
+##    def __init__(self,conf=default_conf, secureTLS_connection=False):
+##        conf['connectivity']['type'] = 'tcp'
+##        LurkServer.__init__(self, conf, secureTLS_connection)
+##
+##        # this will allow reusing the same address for multiple connections
+##        self.allow_reuse_address = True
+##
+##        # initialize the httpserver
+##        server_address = (self.conf.server.ip_address, self.conf.server.port)
+##        TCPServer.__init__(self, server_address, TCPRequestHandler)
+##
+##        if (secureTLS_connection):
+##            # secure connection by setting the context
+##            context = self.get_context()
+##            # updating the httpserver socket after wrapping it with ssl context
+##            self.socket = context.wrap_socket(self.socket, server_side=True)
+##
+##    def serve_client(self):
+##        """
+##        This method is used to serve a single client without invoking any threading functionality
+##        It only allows the connection of one client to the server.
+##        Unlike UDP where multiple clients can be handled sequentially, with TCP, for the server to handle multiple clients threading is needed.
+##        https://stackoverflow.com/questions/10810249/python-socket-multiple-clients/46980073
+##        """
+##        #create and bind socket
+##        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+##        ip = self.conf.server.ip_address
+##        port = self.conf.server.port
+##
+##        #allow address reuse to prevent OS error that the address is already in use when binding
+##       # sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+##
+##        sock.bind((ip, port))
+##        sock.listen(1)
+##
+##
+##        #conn: a new socket object used to send and recv data; addr address of the client
+##        conn, addr = sock.accept()
+##
+##        if (self.secureTLS_connection):
+##            context = self.get_context()
+##            conn =context.wrap_socket(conn, server_side=True)
+##
+##        #recieve client request and reply
+##        while True:
+##          data = conn.recv(4096)
+##          conn.sendall( self.byte_serve(data))
+##
+##        #close socket
+##        conn.close()
+##
+##        sock.close()
+##
+##class ThreadedLurkTCPServer(PoolMixIn, LurkTCPServer):
+##    '''
+##    This class represents a TCPServer which launches a new thread (for each request) when a client gets connected
+##    This default behavior is modified by extending the PoolMixIn class instead of ThreadingMixIn to handle a specific number of requests(max_workers) in parallel
+##    '''
+##
+##    def __init__(self, conf=default_conf, secureTLS_connection = False, max_workers=40):
+##        '''
+##        This is a constructor to initialize an TCP server that handles multiple requests at the same time.
+##        The code is a copy of the LurkHTTPSserver constructor (Note: calling the super constructor calls the LurkServer constructor which causes an error)
+##        :param conf: the configuration
+##        :param max_workers: max number of HTTPS requests to handle in parallel
+##        '''
+##
+##        # set the pool attribute to allow multithreading
+##        self.pool = ThreadPoolExecutor(max_workers)
+##
+##        conf['connectivity']['type'] = 'tcp'
+##        LurkServer.__init__(self, conf, secureTLS_connection)
+##
+##        # this will allow reusing the same address for multiple connections
+##        self.allow_reuse_address = True
+##
+##        # initialize the httpserver
+##        server_address = (self.conf.server.ip_address, self.conf.server.port)
+##        TCPServer.__init__(self, server_address, TCPRequestHandler)
+##
+##        if (secureTLS_connection):
+##            # secure connection by setting the context
+##            context = self.get_context()
+##            # updating the httpserver socket after wrapping it with ssl context
+##            self.socket = context.wrap_socket(self.socket, server_side=True)
+##
+##class TCPRequestHandler(BaseRequestHandler):
+##
+##    def handle(self):
+##        '''
+##        this function handles all the processing of a request
+##        '''
+##        # recieve client request and reply
+##        print("{}".format(threading.current_thread().name))
+##
+##        while True:
+##            data = self.request.recv(4096)
+##            self.request.sendall(self.server.byte_serve(data))
+##
+##
+##        # close the client socket
+##        self.request.close()
+##
+##
 
 class LurkHTTPClient(LurkClient):
 
