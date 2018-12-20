@@ -76,8 +76,8 @@ def message_exchange( designation, version, mtype,  \
     check_request_response( request, response, designation, \
                             version, mtype )
 
-def resolve_exchange( client, server, designation, version, mtype,  \
-                 payload={} ):
+def resolve_exchange( client, designation, version, mtype,  \
+                 payload={}, silent=False ):
     """ generates an prints a valid query / response using resolve  """
     print("-- testing: desig.: %s, vers.: %s "%(designation, version) +
           "mtype: %s"%(mtype))
@@ -85,12 +85,13 @@ def resolve_exchange( client, server, designation, version, mtype,  \
                                       version=version,\
                                       status="request", \
                                       type=mtype, payload=payload ) 
-    msg = LurkMessage()
-    print( ">> Request")
-    msg.show( request )
-    print( "<< Response")
-    msg.show( response )
-    print( "\n" )
+    if silent == False:
+        msg = LurkMessage()
+        print( ">> Request")
+        msg.show( request )
+        print( "<< Response")
+        msg.show( response )
+        print( "\n" )
 
     check_request_response( request, response, designation, \
                             version, mtype )
