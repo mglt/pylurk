@@ -16,7 +16,9 @@ from http.server import HTTPServer,  BaseHTTPRequestHandler
 
 import socket
 from socket import error as SocketError
+from time import time
 
+import selectors
 from select import select
 import errno
 import urllib.request
@@ -736,6 +738,10 @@ class LurkServer():
 
         return context
 
+class LurkBaseClient:
+    pass
+
+
 class LurkClient:
 ## mglt - idem: we should probably have multithreading. It is not clear
 ## to me why we have TLS
@@ -856,6 +862,11 @@ class LurkUDPClient(LurkClient):
         self.server = self.get_server()
         self.message = LurkMessage( conf = self.conf.conf )
 
+
+    def connect(self, conf):
+         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+         self.sock.settimeout(1.0)
+        
 ## mglt: is this an appropriated terminology ? I think what we want toi
 ## say is something like set_server_channel 
     def get_server( self):
@@ -1053,19 +1064,160 @@ class PoolMixIn(ThreadingMixIn):
 ## https://docs.python.org/3/howto/sockets.html
 ## https://docs.python.org/3/library/socket.html
 ## https://docs.python.org/3/library/socketserver.html
+## https://github.com/eliben/python3-samples/blob/master/async/selectors-async-tcp-server.py
 
 class BaseTCPServer(TCPServer):
 
     def __init__(self, lurk_conf, RequestHandlerClass ):
+        """Basic TCP Server
+
+        The main difference with the TCPServer class is that TCPServer
+        class accepts a TCP session for a request, process the request 
+        and close the TCP session. The advantage is that it prevents 
+        management or tracking of unused TCP session with a timeout 
+        for example. The downside is that it also rpevents a TCP 
+        session to be used for multiple requests. 
+
+        This class modify the TCPServer class by 1) not shuting down and 
+        closing the socket after the initial request has been treated by
+        the RequestHandlerClass. 2) listen to events happening on the 
+        listening socket (self.socket) as well as those accepted sockets 
+        (self.accept()). The latest are used when further requests are 
+        sent over the established TCP session. 3) sockets needs to be 
+        managed and eventually closed when timeout occurs.  
+
+        """
         self.lurk = LurkServer( lurk_conf )
         host = lurk_conf[ 'connectivity' ][ 'ip_address' ]
         port = lurk_conf[ 'connectivity' ][ 'port' ]
         server_address = (host, port) 
         super().__init__(server_address, RequestHandlerClass)
+        print("--- self.socket: %s"%self.socket)
+        self.selector = selectors.DefaultSelector()
+        self.selector.register(fileobj=self.socket, \
+                               events=selectors.EVENT_READ, \
+                               data="accept")
+        self.fd_timeout = 3600       
+        self.fd_time = {}
 
     def byte_serve(self, data):
         return self.lurk.byte_serve(data)
 
+    def shutdown_request(self, request):
+        """ actions after the RequestHandlerClass is called. 
+
+        TCPServer closes the socket used by the handler. This results in
+        having socket being used for a single transaction. As we are
+        looking to be able to re-use a socket that has been accepted 
+        for further transactions, the socket needs to be left open. 
+        The current function prevents shutingdown and closing the socket. 
+
+        Args:
+            request: a socket object.
+        """
+        pass
+
+
+    def serve_forever(self, poll_interval=0.5):
+        """ serves incoming request 
+
+        This function listen to events on the listening socket
+        (self.socket) as well as other sockets associated to accepted
+        communications ( sock = self.sock.accept()). 
+
+        The main difference with the original function is the original
+        function only listened to events on the main socket (self.socket). 
+        As a result, even though (self.shutdown_request) does not close 
+        or shutdown the socket used for the transaction (sock), further 
+        communications using this socket are not possible. Events happening 
+        on the socket - typically incoming packets - are just ignored. 
+        The results in the situation where only the initial requests 
+        provided at the creation of the socket are responded, other 
+        are not treated.    
+        """
+        self._BaseServer__is_shut_down.clear()
+        previous_time = 0
+        try:
+            while not self._BaseServer__shutdown_request:
+                events = self.selector.select(poll_interval)
+                print(" --- events: %s"%events)
+                for selector_key, event in events:
+                    if self._BaseServer__shutdown_request:
+                        break
+                    self._handle_request_noblock(selector_key, event)
+                    self.service_actions()
+                current_time = time()
+                if current_time - previous_time > 1:
+                    previous_time = current_time
+                    for fd in self.selector.get_map():
+                        print(" --- fd: %s"%fd)
+                        key = self.selector._fd_to_key[fd]
+                        print(" --- key: %s"%str(key))
+                        try:
+                            delta_time = current_time - self.fd_time[fd]
+                            if delta_time > self.fd_timeout and key.data == 'establish': 
+                                self.close_request(key.fileobj)                        
+                        except KeyError:
+                            ## time of self.socket is not monitored
+                            ## while it triggers events  
+                            continue
+        finally:
+            self._BaseServer__shutdown_request = False
+            self._BaseServer__is_shut_down.set()
+
+## need to check if that could work by passing variables to object
+## or any other ways. 
+    def _handle_request_noblock(self, selector_key, event):
+        
+        try:
+            request, client_address = self.get_request(selector_key, event)
+        except OSError:
+            return
+        if self.verify_request(request, client_address):
+            try:
+                self.process_request(request, client_address)
+            except Exception:
+                self.handle_error(request, client_address)
+                self.shutdown_request(request)
+            except:
+                self.shutdown_request(request)
+                raise
+        else:
+            self.shutdown_request(request)
+
+
+    def get_request(self, selector_key, event):
+        """Provides connectivity information to the RequestHandlerClass
+
+        Returns the appropriated socket (request) and address
+        (client_address) to the RequestHandlerClass. The parameters are
+        passed via the finish_request method.
+        serve_forever() --> _handle_request_noblock() -->
+        process_request(self, request, client_address) --> 
+        finish_request(self, request, client_address)
+
+        Args: 
+           selector_key: SelectorKey object (fileobj, fd, events, data). 
+               It is returned by the selector.select()
+           event:  
+        """
+        print("--- selector_key: %s"%str(selector_key))
+        print("--- event: %s"%str(event))
+        if selector_key.data == "accept":
+            request, client_address = self.socket.accept()
+            request.setblocking(False)
+            self.selector.register(fileobj=request, \
+                                   events=selectors.EVENT_READ,\
+                                   data="establish")
+        elif selector_key.data == "establish":
+            request = selector_key.fileobj
+            client_address = request.getpeername()
+        self.fd_time[request.fileno] = time()
+        return request, client_address
+
+    def close_request(self, request):
+        self.selector.unregister(request)
+        request.close()
 
 class ThreadedTCPServer(ThreadingMixIn, BaseTCPServer):
     pass
@@ -1087,15 +1239,19 @@ class TCPHandle(BaseRequestHandler):
 
         The type of self.request is different for datagram or stream
         services.  For stream services, self.request is a socket object.
+
+        
         """
+
         bytes_recv = self.request.recv(HEADER_LEN)
+        if bytes_recv == b'':
+            return 
         header = LURKHeader.parse(bytes_recv)
         bytes_nbr = header[ 'length' ]
         while len(bytes_recv) < bytes_nbr:
             bytes_recv += self.request.recv(min(bytes_nbr - len(bytes_recv), 1024))
         self.request.sendall(self.server.byte_serve(bytes_recv))
         print("{} data:".format(threading.current_thread().name))
-
 
 class LurkTCPServer:
 
@@ -1106,7 +1262,12 @@ class LurkTCPServer:
            self.server = ThreadedTCPServer(conf, TCPHandle)
         self.server.serve_forever()
 
+
+
 MAX_CONNECT_ATTEMPTS = 3
+
+
+
 
 class LurkTCPClient(LurkClient):
 
@@ -1118,13 +1279,12 @@ class LurkTCPClient(LurkClient):
             self.con_type = 'tcp'
         print("tcp client: %s:%s"%(self.host, self.port))
         self.message = LurkMessage( conf = conf )
-        self.connect( status='init') 
-        
-
-    def connect(self, status='reconnect'):
-        if status == 'init':
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.setblocking(False)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setblocking(False)
+        self.connect() 
+        print("init: self.sock: %s"%self.sock) 
+      
+    def connect(self):
         attempt_nbr = 0
         error_nbr = -1
         while error_nbr != 0 and error_nbr != 106 : 
@@ -1196,7 +1356,7 @@ class LurkTCPClient(LurkClient):
 ###
 ###         self.server.close()
 
-    def caching_bytes(self, bytes_pkt):
+    def unpack_bytes(self, bytes_pkt):
         """ stores al requests of bytes_request in self.request
         
         bytes_request can be the concatenation of one or multiple
@@ -1209,7 +1369,7 @@ class LurkTCPClient(LurkClient):
 
         Returns:
             pkt_bytes_dict (dict): a dictionary of every subpackets
-            indexed with their id { pkt['id']: pkt }
+                indexed with their id { pkt['id']: pkt }
         """
         bytes_pkt_dict = {}
         while len(bytes_pkt) != 0: 
@@ -1255,11 +1415,11 @@ class LurkTCPClient(LurkClient):
                 included in bytes_request and bytes_responses the 
                 corresponding responses. Typically
         """
-        self.connect(status='init')
+        ##self.connect(status='init')
         self.bytes_send(bytes_request)
-        bytes_requests_dict = self.caching_bytes(bytes_request)
+        bytes_requests_dict = self.unpack_bytes(bytes_request)
         bytes_responses = self.bytes_receive(bytes_requests_dict)
-        bytes_responses_dict = self.caching_bytes(bytes_responses)
+        bytes_responses_dict = self.unpack_bytes(bytes_responses)
 ##        while set(self.requests.keys()) != set(self.responses.keys()):        
 ##            read_s, write_s, error_s = select.select([self.sock] , [], [])
 ##            if self.sock in read_s:
@@ -1274,7 +1434,7 @@ class LurkTCPClient(LurkClient):
                 ## server
                 bytes_resolutions.append((bytes_requests_dict[req_id],b''))
 
-        self.closing()
+        ##self.closing()
         return bytes_resolutions
 
     def is_response(self, bytes_response, bytes_requests_dict):
@@ -1302,6 +1462,7 @@ class LurkTCPClient(LurkClient):
         """ sending bytes_pkt bytes
 
         """
+        print("bytes_send: self.sock: %s"%self.sock) 
         rlist, wlist, xlist = select([], [self.sock], [])
         sent_status = self.sock.sendall(bytes_request)
         if sent_status == None:
@@ -1342,12 +1503,14 @@ class LurkTCPClient(LurkClient):
         print("bytes_receive_single_response")
         rlist, wlist, xlist = select([self.sock], [], [])
         bytes_recv = b''
-        print("rlist :%s"%rlist)
-##        while len(bytes_recv) < HEADER_LEN :
+        print("--rlist: %s, xlist: %s"%(rlist, xlist))
+        while len(bytes_recv) < HEADER_LEN :
+            rlist, wlist, xlist = select([self.sock], [], [])
 ##            try:
-        bytes_recv = self.sock.recv(HEADER_LEN)
-        if bytes_recv == b'':
-            return bytes_recv
+            bytes_recv = self.sock.recv(HEADER_LEN)
+##        if bytes_recv == b'':
+##            self.connect() 
+##            return bytes_recv
                 ##print("reading header: %s"%binascii.hexlify(bytes_recv))
 ##            except (OSError, BlockingIOError) as err:
 ##                print("socket connection broken. Cannot read header") 

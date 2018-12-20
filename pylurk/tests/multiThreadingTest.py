@@ -8,7 +8,7 @@ data_dir = pkg_resources.resource_filename( __name__, '../data/')
 from pylurk.core.lurk import LurkServer, ImplementationError, LurkMessage, \
                  HEADER_LEN, LurkClient, LurkServer, \
                  LurkUDPClient, LurkUDPServer, \
-                 LurkTCPClient, LurkTCPServer, \
+                 LurkTCPClient, LurkTCPServer, BaseTCPServer, TCPHandle,  \
                  LurkConf, UDPServerConf, \
                  LurkHTTPserver, LurkHTTPClient,HTTPRequestHandler,ThreadedLurkHTTPserver \
                  ## PoolMixIn, \
@@ -36,6 +36,11 @@ def set_lurk( role, **kwargs):
         port=kwargs['port']
     except KeyError:
         port = 6789
+    try:
+        background = kwargs['background']
+    except KeyError:
+        background = True
+
     conf = LurkConf( )
     conf.set_role( role )
     conf.set_connectivity( type='udp', ip_address="127.0.0.1", port=6789 )
@@ -49,16 +54,23 @@ def set_lurk( role, **kwargs):
             print("UNKNOWN type: %s for client"%type)
     elif role == 'server':
         print("Setting server %s"%type)
-        if type == 'udp': 
+        if type == 'udp' and background == True: 
             p = mp.Process(target=LurkUDPServer, args=(conf.conf,),\
                    kwargs={'thread' : 40}, name="udp server", daemon=True )
-        elif type == 'tcp':
+            p.start()
+            return p
+        if type == 'udp' and background == False: 
+            LurkUDPServer(conf.conf, thread=False) 
+        elif type == 'tcp' and background == True:
             p = mp.Process(target=LurkTCPServer, args=(conf.conf,),\
                    kwargs={'thread' : 40}, name="udp server", daemon=True )
+            p.start()
+            return p
+        if type == 'tcp' and background == False: 
+             LurkTCPServer(conf.conf, thread=False) 
+
         else: 
             print("UNKNOWN type: %s for server"%type)
-        p.start()
-        return p
 
 
 def test_basic_exchanges(type):
@@ -70,10 +82,8 @@ def test_basic_exchanges(type):
     designation = 'tls12'
     version = 'v1'
     
-    
-    for mtype in [ 'rsa_extended_master', 'capabilities']:
-## for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
-##                   'capabilities']:
+    for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
+                   'capabilities']:
         if mtype in [ 'ping', 'capabilities' ]:
             resolve_exchange( client, designation, version, mtype,\
                               payload={}, silent=True )
@@ -85,18 +95,19 @@ def test_basic_exchanges(type):
     
     server.terminate()
 
+if __name__ == "__main__":
+    print( "+-------------------------------------------------------+" )
+    print( "|    UDP  LURK CLIENT / SERVER - MULTI-Threads TESTS    |" )
+    print( "+-------------------------------------------------------+" )
 
-print( "+-------------------------------------------------------+" )
-print( "|    UDP  LURK CLIENT / SERVER - MULTI-Threads TESTS    |" )
-print( "+-------------------------------------------------------+" )
+    test_basic_exchanges('udp')
 
-#test_basic_exchanges('udp')
+    print( "+-------------------------------------------------------+" )
+    print( "|    TCP  LURK CLIENT / SERVER - MULTI-Threads TESTS    |" )
+    print( "+-------------------------------------------------------+" )
 
-print( "+-------------------------------------------------------+" )
-print( "|    TCP  LURK CLIENT / SERVER - MULTI-Threads TESTS    |" )
-print( "+-------------------------------------------------------+" )
-
-test_basic_exchanges('tcp')
+    test_basic_exchanges('tcp')
+    sleep(5)
 #conf = LurkConf( )
 #conf.set_role( 'server' )
 #conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )
@@ -117,42 +128,42 @@ test_basic_exchanges('tcp')
 #
 #server = set_lurk('server', type='tcp')
 #client = set_lurk('client', type='tcp')
-
-
-print( "+--------------------------------------------------------+" )
-print( "|    HTTPS  LURK CLIENT / SERVER  - MULTI-Threads TESTS  |" )
-print( "+--------------------------------------------------------+" )
-
-
-print("-- Starting LURK HTTPS Clients")
-clt_conf = LurkConf( )
-clt_conf.set_role( 'client' )
-clt_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 ) #keep to tcp?
-client = LurkHTTPClient( conf = clt_conf.conf, secureTLS_connection=True )
-
-print("-- Starting LURK HTTPS Server")
-srv_conf = LurkConf()
-srv_conf.set_role( 'server' )
-srv_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )#keep to tcp?
-
-lurkHttpsServer = ThreadedLurkHTTPserver(srv_conf.conf, max_workers=7 , secureTLS_connection=True)
-t = threading.Thread( target=lurkHttpsServer.serve_forever)
-
-t.daemon = True
-t.start()
-
-designation = 'tls12'
-version = 'v1'
-
-for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
-                'capabilities']:
-    if mtype in [ 'ping', 'capabilities' ]:
-        resolve_exchange( client, lurkHttpsServer, designation, version, mtype, \
-                          payload={} )
-        continue
-    for freshness_funct in [ "null", "sha256" ]:
-        resolve_exchange( client, lurkHttpsServer, designation, version, mtype, \
-                          payload={ 'freshness_funct' : freshness_funct } )
-
-lurkHttpsServer.shutdown()
-lurkHttpsServer.server_close()
+    
+    
+    print( "+--------------------------------------------------------+" )
+    print( "|    HTTPS  LURK CLIENT / SERVER  - MULTI-Threads TESTS  |" )
+    print( "+--------------------------------------------------------+" )
+    
+    
+    print("-- Starting LURK HTTPS Clients")
+    clt_conf = LurkConf( )
+    clt_conf.set_role( 'client' )
+    clt_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 ) #keep to tcp?
+    client = LurkHTTPClient( conf = clt_conf.conf, secureTLS_connection=True )
+    
+    print("-- Starting LURK HTTPS Server")
+    srv_conf = LurkConf()
+    srv_conf.set_role( 'server' )
+    srv_conf.set_connectivity( type='tcp', ip_address="127.0.0.1", port=6789 )#keep to tcp?
+    
+    lurkHttpsServer = ThreadedLurkHTTPserver(srv_conf.conf, max_workers=7 , secureTLS_connection=True)
+    t = threading.Thread( target=lurkHttpsServer.serve_forever)
+    
+    t.daemon = True
+    t.start()
+    
+    designation = 'tls12'
+    version = 'v1'
+    
+    for mtype in [ 'rsa_master', 'ecdhe', 'ping', 'rsa_extended_master', \
+                    'capabilities']:
+        if mtype in [ 'ping', 'capabilities' ]:
+            resolve_exchange( client, lurkHttpsServer, designation, version, mtype, \
+                              payload={} )
+            continue
+        for freshness_funct in [ "null", "sha256" ]:
+            resolve_exchange( client, lurkHttpsServer, designation, version, mtype, \
+                              payload={ 'freshness_funct' : freshness_funct } )
+    
+    lurkHttpsServer.shutdown()
+    lurkHttpsServer.server_close()
