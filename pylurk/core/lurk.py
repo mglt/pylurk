@@ -1,5 +1,5 @@
 """
-We need to provide an explaination on how to add a new extension. 
+We need to provide an explaination on how to add a new extension.
 
 """
 import os
@@ -8,7 +8,7 @@ import pkg_resources
 from textwrap import indent
 from secrets import randbits
 from Cryptodome.Hash import HMAC, SHA256
-from pylurk.core.conf import * 
+from pylurk.core.conf import *
 from pylurk.core.lurk_struct import *
 from socketserver import ThreadingMixIn, UDPServer, TCPServer, BaseRequestHandler
 from concurrent.futures import ThreadPoolExecutor
@@ -28,7 +28,7 @@ import binascii
 import threading
 from copy import deepcopy
 
-HEADER_LEN = 16 
+HEADER_LEN = 16
 LINE_LEN = 60
 
 data_dir = pkg_resources.resource_filename( __name__, '../data/')
@@ -110,7 +110,7 @@ class TemporaryFailure(Error):
 class LurkConf():
 
     def __init__(self, conf=deepcopy(default_conf)):
-        self.conf = self.check_conf(conf) 
+        self.conf = self.check_conf(conf)
 
     def check_conf(self, conf=None ):
         """Checks the format of the configuration file
@@ -122,13 +122,13 @@ class LurkConf():
             conf (dict): the configuration dictionary. When not
                 provided, checks applies to self.conf.
 
-        Returns: 
+        Returns:
             conf (dict): the configuration dictionary. In some case,
-                some changes have been performed such as removing non 
-                necessary data.  
+                some changes have been performed such as removing non
+                necessary data.
 
         Raises:
-            ConfError when an configuration error is detected. 
+            ConfError when an configuration error is detected.
         """
         if conf == None:
             conf = self.conf
@@ -168,10 +168,10 @@ class LurkConf():
         The default configuration is provided for a server with a secure
         connectivity between the client and the server. A client or a
         server not using a secure communication do not need to be provisioned
-        with such keys. This functions removes such keys are removed. 
-        Similarly, a client does not needs the private keys associated to 
-        extensions. This function also removes such keys.  
-        
+        with such keys. This functions removes such keys are removed.
+        Similarly, a client does not needs the private keys associated to
+        extensions. This function also removes such keys.
+
         On the other hand, when the keys are necessary and are missing,
         this function raises a ConfError.
 
@@ -180,19 +180,19 @@ class LurkConf():
         server. It is assumed that 'server' and 'client' are mentioned
         in the cert and key files. However, the function does not remove
         the private key of the peer. This is left to the set_role
-        function.  
+        function.
 
         Args:
             conf (dict): the configuration dictionary. When not
                 provided, checks applies to self.conf.
 
-        Returns: 
+        Returns:
             conf (dict): the configuration dictionary. In some case,
-                some changes have been performed such as removing non 
-                necessary data.  
+                some changes have been performed such as removing non
+                necessary data.
 
         Raises:
-            ConfError when private keys or cerrtificates  are missing. 
+            ConfError when private keys or cerrtificates  are missing.
         """
 
         if conf == None:
@@ -226,7 +226,7 @@ class LurkConf():
                     continue
                 try:
                     ext['key']
-                except KeyError: 
+                except KeyError:
                     raise ConfError(ext, "Private key Expected with " +\
                         "server role (role: %s)"%conf['role'])
         return conf
@@ -236,9 +236,9 @@ class LurkConf():
 
         The main difference between the two roles is that the client
         does not need private keys, while the server needs private keys to
-        perform some cryptographic operations. The function does not proceed 
-        to such checks. It is always recommended to perform a self.check 
-        after changes have been performed. 
+        perform some cryptographic operations. The function does not proceed
+        to such checks. It is always recommended to perform a self.check
+        after changes have been performed.
 
         Args:
             role (str) the designation of the role. Expected values are
@@ -265,7 +265,7 @@ class LurkConf():
             ## and no further key is performed. The check is only
             ## intended to switch keys according to role. It is based on
             ## the heuristics that 'clients' and 'servers' are indicated
-            ## in the key files.  
+            ## in the key files.
             key_peer = self.conf['connectivity']['key_peer']
             cert_peer = self.conf['connectivity']['cert_peer']
             if ( role in key_peer and role_peer in key) or \
@@ -276,9 +276,9 @@ class LurkConf():
                 self.conf['connectivity']['cert_peer'] = cert
         except KeyError:
            ## no key_peer. may not be an issue
-           pass 
+           pass
         try:
-            del self.conf['connectivity']['key_peer'] 
+            del self.conf['connectivity']['key_peer']
         except KeyError:
             pass
         if self.conf['role'] == 'client':
@@ -292,12 +292,12 @@ class LurkConf():
         """Configures the channel between the client and the server
 
         Connectivity is set by setting arguments provided by kwargs
-        first. When not provided the connectivity is configured with 
-        parameters provided in self.conf. When these are missing the 
+        first. When not provided the connectivity is configured with
+        parameters provided in self.conf. When these are missing the
         value from default_conf are considered.
 
         Args:
-            role: 
+            role:
             type :
             ip_address:
             port:
@@ -312,7 +312,7 @@ class LurkConf():
                 self.conf['connectivity'][k] = kwargs[k]
             except KeyError:
                 try:
-                    self.conf['connectivity'][k] 
+                    self.conf['connectivity'][k]
                 except KeyError:
                     self.conf['connectivity'][k] = default_conf['connectivity'][k]
         try:
@@ -331,7 +331,7 @@ class LurkConf():
     def get_conf(self):
         """Returns the configuration
 
-        Checks self.conf and returns it. 
+        Checks self.conf and returns it.
 
         Returns:
             conf (dict): the dictionary with all configuration parameters.
@@ -362,8 +362,8 @@ class LurkConf():
 
 
     def get_supported_ext( self ):
-        """ returns the list of extensions 
-          [ ( designation_a, version_a ), ... (designation_n, version_n ) ] 
+        """ returns the list of extensions
+          [ ( designation_a, version_a ), ... (designation_n, version_n ) ]
         """
         sup_ext = []
         for extension in self.conf[ 'extensions' ]:
@@ -375,8 +375,8 @@ class LurkConf():
     def get_ext_conf( self, designation, version, \
             exclude=[ 'designation', 'version', 'type' ] ):
         """ returns the configuration associated to an extension.
-            conf = { 'role' : "server" 
-                      'ping' : [  []. ...  [] ], 
+            conf = { 'role' : "server"
+                      'ping' : [  []. ...  [] ],
                      'rsa_master' : [ { conf1_rsa }, { conf2_rsa }, ... ] }
         """
         conf = {}
@@ -390,7 +390,7 @@ class LurkConf():
         for mtype in type_list:
             conf[ mtype ] = self.get_type_conf( designation, version, \
                                 mtype, exclude=exclude )
-        return conf  
+        return conf
 
 
 
@@ -398,7 +398,7 @@ class LurkConf():
     def get_type_conf( self, designation, version, mtype, \
             exclude=['designation', 'version', 'type'] ):
          """ returns the configuration parameters associated to a given
-             type. It has the 'role' value and removes parameters value 
+             type. It has the 'role' value and removes parameters value
              provided by exclude.  """
          type_conf = []
          for ext in self.conf[ 'extensions' ] :
@@ -424,8 +424,8 @@ class LurkConf():
         """ builds TLS context from configuration
 
         Returns:
-            tls_ctx : the TLS context to establish a TLS session between the 
-                client and the server.  
+            tls_ctx : the TLS context to establish a TLS session between the
+                client and the server.
         """
 
         conn_conf = self.conf['connectivity']
@@ -439,7 +439,7 @@ class LurkConf():
         return context
 
 
-    ### function used by classes using this ConfLurk class 
+    ### function used by classes using this ConfLurk class
     def check_key( self, payload, keys):
         """ checks payload got the expected keys"""
         if set( payload.keys() ) != set( keys ):
@@ -453,8 +453,8 @@ class LurkConf():
 
     def check_type( self, designation, version,  mtype):
        if mtype not in self.get_mtypes()[ ( designation, version ) ]:
-           raise InvalidType(self.mtype, "Expected: %s"% 
-                              self.mtype[ (designation, version ) ] ) 
+           raise InvalidType(self.mtype, "Expected: %s"%
+                              self.mtype[ (designation, version ) ] )
 
     def get_state(self, ext ):
         state = "state" +  str( self.supported_extensions )
@@ -474,21 +474,21 @@ class LurkConf():
             raise InvalidFormat( len(error) , "Expected 4 byte len" )
 
 
-         
+
 
 
 class Payload:
     def __init__( self, conf ):
-       """Generic class for lurk payload 
+       """Generic class for lurk payload
 
        Lurk designates as Payloads the bytes associated to a specific
-       extension. In other words, a payload is all bytes after the Lurk 
-       Header. The Payload class provides an abstraction for programming 
-       extensions as it deals with the convertion between the binary 
-       representation of th3 payload and the representation of the payload 
-       structure using a dictionary. 
+       extension. In other words, a payload is all bytes after the Lurk
+       Header. The Payload class provides an abstraction for programming
+       extensions as it deals with the convertion between the binary
+       representation of th3 payload and the representation of the payload
+       structure using a dictionary.
        The Payload class is closely tided with the Struct instance that
-       describes the object. 
+       describes the object.
        """
        self.conf = conf
        self.struct = None
@@ -514,7 +514,7 @@ class Payload:
             return payload
         except Exception as e:
             self.treat_exception( e )
-        
+
     def treat_exception( self, e ):
         if type(e) == MappingError:
             value = e.args[0].split()[4]
@@ -522,9 +522,9 @@ class Payload:
                 raise InvalidExtension( value, "unvalid extension")
             elif "version" in e.args[0]:
                 raise InvalidExtension( value, "unvalid extension")
-            elif "status" in e.args[0]: 
+            elif "status" in e.args[0]:
                 raise InvalidStatus(value, "unexpected status")
-            elif "type" in e.args[0]:                
+            elif "type" in e.args[0]:
                 raise  InvalidType(value, "unexpected message type")
         else:
             raise InvalidFormat(type(e), e.args)
@@ -556,18 +556,18 @@ class LurkMessage( Payload ):
         mtypes = self.conf.get_mtypes()
         for ext in mtypes.keys():
             if ext == ( "lurk", "v1" ):
-                import pylurk.extensions.lurk 
+                import pylurk.extensions.lurk
                 ## ext_lurk is a special option. It needs the list of
                 ## extensions which are parameters outside lurkext. We
                 # provide the  full configuration file.
                 lurk_ext[ ext ] = pylurk.extensions.lurk.LurkExt( self.conf.conf )
             elif ext == ( "tls12", "v1" ):
                 ## this is how future extensions are expected to be handled.
-                import pylurk.extensions.tls12 
-                lurk_ext[ ext ] = pylurk.extensions.tls12.LurkExt( 
+                import pylurk.extensions.tls12
+                lurk_ext[ ext ] = pylurk.extensions.tls12.LurkExt(
                                       self.conf.get_ext_conf( 'tls12', 'v1' ) )
             else :
-                raise ConfError( ext, "unknown extension" ) 
+                raise ConfError( ext, "unknown extension" )
         return lurk_ext
 
     def get_ext( self, message ):
@@ -583,19 +583,19 @@ class LurkMessage( Payload ):
                  'id' : message[ 'id' ], \
                  'length' :  message[ 'length' ] }
 
-    def build_ext_payload( self, header, **kwargs ):   
+    def build_ext_payload( self, header, **kwargs ):
         status = header[ 'status' ]
         mtype = header[ 'type' ]
         if status not in [ 'request', 'success' ]:
             raise ImplementationError( status, "Expected 'request' or 'success'")
         return self.get_ext( header).build( status, mtype, **kwargs )
 
-    def check_ext_payload( self, header, payload ):   
+    def check_ext_payload( self, header, payload ):
         status = header[ 'status' ]
         mtype = header[ 'type' ]
         if status not in [ 'request', 'success' ]:
             raise ImplementationError( status, "Expected 'request' or 'success'")
-        self.get_ext( header ).check( status, mtype, payload ) 
+        self.get_ext( header ).check( status, mtype, payload )
 
 
     def parse_ext_payload( self, header, payload_bytes ):
@@ -622,7 +622,7 @@ class LurkMessage( Payload ):
     def build_payload( self, **kwargs ):
         """ builds the lurk header. Missing arguments are replaced by
             default values. Additional keys may be:
-                payload_bytes: that describes the payload carried by the 
+                payload_bytes: that describes the payload carried by the
                 lurk header. It is used to derive the length.
         """
         if 'designation' in kwargs.keys():
@@ -639,7 +639,7 @@ class LurkMessage( Payload ):
             mtype = "ping"
         if 'status' in kwargs.keys():
             status = kwargs[ 'status' ]
-        else: 
+        else:
             status = "request"
         if 'id' in kwargs.keys():
             hdr_id = kwargs[ 'id' ]
@@ -664,13 +664,13 @@ class LurkMessage( Payload ):
             return { **header, 'payload' : payload }
         else:
             if 'payload_bytes' in kwargs.keys():
-                payload_bytes = kwargs[ 'payload_bytes' ] 
-            else: 
+                payload_bytes = kwargs[ 'payload_bytes' ]
+            else:
                 payload_bytes = b''
             header[ 'length' ] += len( payload_bytes )
             return { **header, 'payload_bytes' : payload_bytes }
 
-           
+
 
     def build( self,  **kwargs ):
         message = self.build_payload( **kwargs )
@@ -692,7 +692,7 @@ class LurkMessage( Payload ):
         try :
             header.append( 'payload' )
             self.conf.check_key( message, header )
-        except ( InvalidFormat ) : 
+        except ( InvalidFormat ) :
             header.remove( 'payload' )
             header.append( 'payload_bytes' )
             self.conf.check_key( message, header)
@@ -704,7 +704,7 @@ class LurkMessage( Payload ):
         if 'payload' in message.keys():
             payload = message[ 'payload' ]
             if header[ 'status' ] in [ "success", "request" ]:
-                self.check_ext_payload( header, payload )   
+                self.check_ext_payload( header, payload )
             else:
                 self.conf.check_error( payload )
         elif 'payload_bytes' in message.keys():
@@ -713,10 +713,10 @@ class LurkMessage( Payload ):
                 pass
             else:
                 self.conf.check_error_bytes( message[ 'payload_bytes' ] )
-        else: 
+        else:
             raise ImplementationError( message, \
                       "Expecting 'payload or 'payload_bytes' key")
-         
+
     def parse(self, pkt_bytes):
         """ parse the first packet, ignores remaining bytes. """
         if len( pkt_bytes ) < HEADER_LEN:
@@ -727,7 +727,7 @@ class LurkMessage( Payload ):
             header = self.struct.parse( pkt_bytes )
         except Exception as e:
             self.treat_exception( e )
-        payload_bytes = pkt_bytes[ HEADER_LEN : header[ 'length' ] ] 
+        payload_bytes = pkt_bytes[ HEADER_LEN : header[ 'length' ] ]
         if header[ 'status' ] in [ "success", "request" ]:
             payload = self.parse_ext_payload( header, payload_bytes )
         else: ## the payload is an error payload
@@ -738,14 +738,14 @@ class LurkMessage( Payload ):
 
 
     def serve(self, request):
-        try: 
+        try:
             if request[ 'status' ] != "request":
                 raise InvalidStatus(request[ 'status' ], "Expected 'request'")
         except KeyError:
             raise ImplementationError( request, "No key status" )
         header = self.get_header( request )
         try :
-            if 'payload_bytes' in request.keys(): 
+            if 'payload_bytes' in request.keys():
                 req_payload = self.parse_ext_payload( header, request[ 'payload_bytes' ] )
             elif 'payload' in request.keys():
                  req_payload = request[ 'payload' ]
@@ -764,10 +764,10 @@ class LurkMessage( Payload ):
                 header[ 'status' ] = e.status
                 header[ 'length' ] = HEADER_LEN + len( resp_bytes )
                 return { **header, 'payload' : resp_payload }
-            except Exception as e : 
+            except Exception as e :
                 raise ImplementationError( e, "implementation Error")
-            
-            
+
+
     def show(self, pkt_bytes, prefix="", line_len=LINE_LEN):
         print( indent( "%s"%self.struct_name, prefix ) )
         if type ( pkt_bytes ) == dict:
@@ -777,7 +777,7 @@ class LurkMessage( Payload ):
             print("Not enough bytes, cannot parse LURK Header" )
             print("Expecting %s, got %s"%( HEADER_LEN, len( pkt_bytes) ) )
             print("pkt_bytes: %s"%pkt_bytes )
-        else: 
+        else:
             print( indent( "%s"%self.struct.parse(pkt_bytes[:HEADER_LEN] ), \
                        prefix ) )
             header = self.struct.parse(pkt_bytes[ : HEADER_LEN ] )
@@ -787,9 +787,9 @@ class LurkMessage( Payload ):
                 raise InvalidFormat( ( header, pkt_bytes ), \
                           "pkt_bytes too short %s bytes"%len (pkt_bytes ) )
             if header[ 'status' ] in [ "success", "request" ]:
-                 
+
                 self.show_ext_payload( header, payload_bytes, \
-                               prefix=prefix, line_len=line_len) 
+                               prefix=prefix, line_len=line_len)
             else: ## the payload is an error payload
                 LURKErrorPayload.parse( payload_bytes )
 
@@ -804,17 +804,17 @@ class LurkServer():
 
     def init_conf( self, conf ):
         """ Provides minor changes to conf so the default conf can be used
- 
+
         Args:
             conf (dict): the dictionary representing the configuration
                 arguments
- 
+
         Returns:
             conf (dict): the updated conf dictionary
         """
-        conf[ 'role' ] = 'server' 
+        conf[ 'role' ] = 'server'
         return conf
-         
+
 
     def byte_serve(self, pkt_bytes):
         """ read the HEADER_LEN bytes of pkt_bytes. If an error occurs, it
@@ -825,8 +825,8 @@ class LurkServer():
             try:
                 request = self.message.parse( pkt_bytes )
                 response = self.message.serve ( request )
-                response_bytes += self.message.build( **response ) 
-                pkt_bytes = pkt_bytes[ request['length' ] : ]  
+                response_bytes += self.message.build( **response )
+                pkt_bytes = pkt_bytes[ request['length' ] : ]
             except:
                 ## stop when an error is encountered
                 return response_bytes
@@ -841,7 +841,7 @@ class LurkBaseClient:
     def __init__(self, conf):
         self.conf = LurkConf(conf)
         self.server_address = self.conf.get_server_address()
-        self.connection_type = self.conf.get_connection_type() 
+        self.connection_type = self.conf.get_connection_type()
         self.message = LurkMessage(conf=self.conf.get_conf())
         self.set_up_server_session()
         self.selector = selectors.DefaultSelector()
@@ -852,11 +852,11 @@ class LurkBaseClient:
 
     def init_conf( self, conf ):
         """ Provides minor changes to conf so the default conf can be used
- 
+
         Args:
             conf (dict): the dictionary representing the configuration
                 arguments
- 
+
         Returns:
             conf (dict): the updated conf dictionary
         """
@@ -864,26 +864,26 @@ class LurkBaseClient:
         self.conf_check_conf()
 
     def unpack_bytes(self, bytes_pkt):
-        """splits concatenation of lurk message 
-        
+        """splits concatenation of lurk message
+
         bytes_request can be the concatenation of one or multiple
         requests. This function lists the each individual request. This
         is used to define later if all requests have been answered.
 
         Args:
             bytes_pkt (bytes): one or a concatenation of one or multiple
-            packets in a byte format. packets can be requests or responses. 
+            packets in a byte format. packets can be requests or responses.
 
         Returns:
             pkt_bytes_dict (dict): a dictionary of every subpackets
                 indexed with their id { pkt['id']: pkt }
         """
         bytes_pkt_dict = {}
-        while len(bytes_pkt) != 0: 
+        while len(bytes_pkt) != 0:
             header = LURKHeader.parse(bytes_pkt)
-            bytes_nbr =  HEADER_LEN + header['length'] 
+            bytes_nbr =  HEADER_LEN + header['length']
             bytes_pkt_dict[ header['id'] ] = bytes_pkt[: bytes_nbr ]
-            bytes_pkt = bytes_pkt[bytes_nbr :] 
+            bytes_pkt = bytes_pkt[bytes_nbr :]
         return bytes_pkt_dict
 
 
@@ -897,10 +897,10 @@ class LurkBaseClient:
             context = self.conf.get_tls_context()
             self.sock = context.wrap_socket(self.sock, server_side=False,\
                             do_handshake_on_connect=False,\
-                            server_hostname=self.server_address[0]) 
+                            server_hostname=self.server_address[0])
         attempt_nbr = 0
         error_nbr = -1
-        while attempt_nbr <= MAX_ATTEMPTS: 
+        while attempt_nbr <= MAX_ATTEMPTS:
             error_nbr = self.sock.connect_ex(self.server_address)
             if error_nbr == 0:
                 break
@@ -951,22 +951,22 @@ class LurkBaseClient:
 
         Args:
             request_list (list): contains a list of requests. Each
-                request is represented by a dictionary. The dictionary contains 
+                request is represented by a dictionary. The dictionary contains
                 the element necessary to build the LURK request. Missing
-                are derived from default values. Each dictionary 
+                are derived from default values. Each dictionary
                 is taken as a **kwargs to build the associated request
-        
+
         Returns:
             resolutions_list (list): the list of (request, repsonse).
                 request and response are represented as dictionaries.
-            error_list (list): the list of non resolved requested. 
+            error_list (list): the list of non resolved requested.
         """
         bytes_requests = b''
         for input_request in request_list:
             print(" --- resolve : input_request: %s"%input_request)
             request = self.message.build_payload( **input_request )
             bytes_requests += self.message.build( **request )
-        bytes_resolutions, bytes_errors = self.bytes_resolve(bytes_requests) 
+        bytes_resolutions, bytes_errors = self.bytes_resolve(bytes_requests)
         resolutions_list = []
         for resol in bytes_resolutions:
             resolutions_list.append((self.message.parse(resol[0]), \
@@ -983,17 +983,17 @@ class LurkBaseClient:
         Takes the bytes_requests and evaluate whether their is one
         request or multiple requests and builds an dictionnary
         {id:bytes_request}. This dictionary is latter used to determine
-        if all queries have been answered.          
+        if all queries have been answered.
 
         Args:
             bytes_request (bytes): the request in byte format. This can
-                include a single request or a serie of concatenated 
-                requests in byte format. 
-        
-        Returns: 
+                include a single request or a serie of concatenated
+                requests in byte format.
+
+        Returns:
             bytes_resolutions (lst): list of (bytes_response,
-                bytes_request) elements where bytes_request the requests 
-                included in bytes_request and bytes_responses the 
+                bytes_request) elements where bytes_request the requests
+                included in bytes_request and bytes_responses the
                 corresponding responses. Typically
         """
         self.bytes_send(bytes_request)
@@ -1040,13 +1040,13 @@ class LurkBaseClient:
         """ sending bytes_pkt bytes
 
         """
-        print("bytes_send: self.sock: %s"%self.sock) 
+        print("bytes_send: self.sock: %s"%self.sock)
         rlist, wlist, xlist = select([], [self.sock], [])
         sent_status = self.sock.sendall(bytes_request)
         if sent_status == None:
             print("bytes_request sent (%s): %s"%(len(bytes_request), \
                                              binascii.hexlify(bytes_request)))
-        else: 
+        else:
             print("Not all data (%s) has been sent: %s"(len(bytes_request), \
                                    binascii.hexlify(bytes_request)))
 
@@ -1058,24 +1058,24 @@ class LurkUDPClient(LurkBaseClient):
         The main difference between the UDP and TCP is that recv read
         the full buffer in UDP. As a result, this function reads the
         full buffer and does not red progressively the responses. responses that
-        are missing will never be received.  
+        are missing will never be received.
 
         A response may be composed of multiple UDP packets. This case is
         not handled by the UDPClient.
 
         Args:
             bytes_Requests_dict (dict): the dictionary that associated
-                to the id the byte representation of the request (bytes_request) 
+                to the id the byte representation of the request (bytes_request)
                 { id : bytes_request }
         Returns:
             bytes_response (bytes): the corresponding bytes_responses.
-                When bytes_requests is composed of multiple bytes_request 
-                concatenated, the responses are concatenated as well. 
+                When bytes_requests is composed of multiple bytes_request
+                concatenated, the responses are concatenated as well.
         """
         bytes_responses = b''
         if bytes_requests_dict == None:
             response_nbr = 1
-        else: 
+        else:
             response_nbr = len(bytes_requests_dict.keys())
         rlist, wlist, xlist = select([self.sock], [], [], 5)
         if len(rlist) == 0:
@@ -1087,15 +1087,15 @@ class LurkUDPClient(LurkBaseClient):
                 bytes_nbr =  HEADER_LEN + LURKHeader.parse(bytes_pkt)['length']
                 bytes_response = bytes_pkt[: bytes_nbr ]
                 if self.is_response(bytes_response, bytes_requests_dict) == False:
-                    continue  
+                    continue
                 bytes_responses += bytes_response
-                bytes_pkt = bytes_pkt[bytes_nbr :] 
+                bytes_pkt = bytes_pkt[bytes_nbr :]
             except:
                 break
         return bytes_responses
 
 """
-From https://docs.python.org/3.5/library/socketserver.html: 
+From https://docs.python.org/3.5/library/socketserver.html:
 
 Creating a server requires several steps. First, you must create a request handler class by subclassing the BaseRequestHandler class and overriding its handle() method; this method will process incoming requests. Second, you must instantiate one of the server classes, passing it the server’s address and the request handler class. Then call the handle_request() or serve_forever() method of the server object to process one or many requests. Finally, call server_close() to close the socket.
 
@@ -1107,7 +1107,7 @@ class BaseUDPServer(UDPServer):
         self.conf = LurkConf(deepcopy(lurk_conf))
         self.lurk = LurkServer(self.conf.get_conf())
         self.server_address = self.conf.get_server_address()
-        self.connection_type = self.conf.get_connection_type() 
+        self.connection_type = self.conf.get_connection_type()
         super().__init__(self.server_address, RequestHandlerClass)
 
     def byte_serve(self, data):
@@ -1120,30 +1120,25 @@ class ThreadedUDPServer(ThreadingMixIn, BaseUDPServer):
 class UDPHandle(BaseRequestHandler):
     """
     """
- 
+
     def handle(self):
-        """ treat the request 
+        """ treat the request
         From https://docs.python.org/3.5/library/socketserver.html
 
 	This function must do all the work required to service a
-        request. The default implementation does nothing. Several 
-        instance attributes are available to it; the request is 
-        available as self.request; the client address as 
-        self.client_address; and the server instance as self.server, 
+        request. The default implementation does nothing. Several
+        instance attributes are available to it; the request is
+        available as self.request; the client address as
+        self.client_address; and the server instance as self.server,
         in case it needs access to per-server information.
 
         The type of self.request is different for datagram or stream
-        services. For datagram services, self.request is a pair of 
+        services. For datagram services, self.request is a pair of
         string and socket.
         """
         data = self.request[0]
         socket = self.request[1]
-##        select([socket], [], [])
-        print(" --- data: %s"%data)
-        print(" --- client_address: %s"%str(self.client_address))
-        print(" --- response: %s"%self.server.byte_serve(data))
         socket.sendto(self.server.byte_serve(data), self.client_address)
-        print("{} data:".format(threading.current_thread().name))
 
 class LurkUDPServer:
 
@@ -1165,7 +1160,7 @@ class PoolMixIn(ThreadingMixIn):
 ## https://docs.python.org/3/library/socketserver.html
 ## https://docs.python.org/3/library/ssl.html#ssl.SSLContext.wrap_socket
 ## https://github.com/eliben/python3-samples/blob/master/async/selectors-async-tcp-server.py
-## https://hg.python.org/cpython/rev/b763c1ba5589 
+## https://hg.python.org/cpython/rev/b763c1ba5589
 
 class BaseTCPServer(TCPServer):
 
@@ -1173,25 +1168,25 @@ class BaseTCPServer(TCPServer):
         """Basic TCP Server
 
         The main difference with the TCPServer class is that TCPServer
-        class accepts a TCP session for a request, process the request 
-        and close the TCP session. The advantage is that it prevents 
-        management or tracking of unused TCP session with a timeout 
-        for example. The downside is that it also rpevents a TCP 
-        session to be used for multiple requests. 
+        class accepts a TCP session for a request, process the request
+        and close the TCP session. The advantage is that it prevents
+        management or tracking of unused TCP session with a timeout
+        for example. The downside is that it also rpevents a TCP
+        session to be used for multiple requests.
 
-        This class modify the TCPServer class by 1) not shuting down and 
+        This class modify the TCPServer class by 1) not shuting down and
         closing the socket after the initial request has been treated by
-        the RequestHandlerClass. 2) listen to events happening on the 
-        listening socket (self.socket) as well as those accepted sockets 
-        (self.accept()). The latest are used when further requests are 
-        sent over the established TCP session. 3) sockets needs to be 
-        managed and eventually closed when timeout occurs.  
+        the RequestHandlerClass. 2) listen to events happening on the
+        listening socket (self.socket) as well as those accepted sockets
+        (self.accept()). The latest are used when further requests are
+        sent over the established TCP session. 3) sockets needs to be
+        managed and eventually closed when timeout occurs.
 
         """
         self.conf = LurkConf(deepcopy(lurk_conf))
         self.lurk = LurkServer(self.conf.get_conf())
         self.server_address = self.conf.get_server_address()
-        self.connection_type = self.conf.get_connection_type() 
+        self.connection_type = self.conf.get_connection_type()
         print("server_address: %s"%str(self.server_address))
         super().__init__(self.server_address, RequestHandlerClass)
 #        if self.connection_type == 'tcp+tls':
@@ -1202,7 +1197,7 @@ class BaseTCPServer(TCPServer):
         self.selector.register(fileobj=self.socket, \
                                events=selectors.EVENT_READ, \
                                data="accept")
-        self.fd_timeout = 3600       
+        self.fd_timeout = 3600
         self.fd_time = {}
 
         self.fd_busy = {}
@@ -1211,13 +1206,13 @@ class BaseTCPServer(TCPServer):
         return self.lurk.byte_serve(data)
 
     def shutdown_request(self, request):
-        """ actions after the RequestHandlerClass is called. 
+        """ actions after the RequestHandlerClass is called.
 
         TCPServer closes the socket used by the handler. This results in
         having socket being used for a single transaction. As we are
-        looking to be able to re-use a socket that has been accepted 
-        for further transactions, the socket needs to be left open. 
-        The current function prevents shutingdown and closing the socket. 
+        looking to be able to re-use a socket that has been accepted
+        for further transactions, the socket needs to be left open.
+        The current function prevents shutingdown and closing the socket.
 
         Args:
             request: a socket object.
@@ -1226,21 +1221,21 @@ class BaseTCPServer(TCPServer):
 
 
     def serve_forever(self, poll_interval=0.5):
-        """ serves incoming request 
+        """ serves incoming request
 
         This function listen to events on the listening socket
         (self.socket) as well as other sockets associated to accepted
-        communications ( sock = self.sock.accept()). 
+        communications ( sock = self.sock.accept()).
 
         The main difference with the original function is the original
-        function only listened to events on the main socket (self.socket). 
-        As a result, even though (self.shutdown_request) does not close 
-        or shutdown the socket used for the transaction (sock), further 
-        communications using this socket are not possible. Events happening 
-        on the socket - typically incoming packets - are just ignored. 
-        The results in the situation where only the initial requests 
-        provided at the creation of the socket are responded, other 
-        are not treated.    
+        function only listened to events on the main socket (self.socket).
+        As a result, even though (self.shutdown_request) does not close
+        or shutdown the socket used for the transaction (sock), further
+        communications using this socket are not possible. Events happening
+        on the socket - typically incoming packets - are just ignored.
+        The results in the situation where only the initial requests
+        provided at the creation of the socket are responded, other
+        are not treated.
         """
         self._BaseServer__is_shut_down.clear()
         previous_time = 0
@@ -1252,7 +1247,7 @@ class BaseTCPServer(TCPServer):
                         break
                     try:
                         print("serve_forever: %s"%str(selector_key))
-                        self.fd_busy[selector_key.fileobj.fileno()] 
+                        self.fd_busy[selector_key.fileobj.fileno()]
                     except KeyError:
                         self._handle_request_noblock(selector_key, event)
                         self.service_actions()
@@ -1263,18 +1258,18 @@ class BaseTCPServer(TCPServer):
                         key = self.selector._fd_to_key[fd]
                         try:
                             delta_time = current_time - self.fd_time[fd]
-                            if delta_time > self.fd_timeout and key.data == 'establish': 
-                                self.close_request(key.fileobj)                        
+                            if delta_time > self.fd_timeout and key.data == 'establish':
+                                self.close_request(key.fileobj)
                         except KeyError:
                             ## time of self.socket is not monitored
-                            ## while it triggers events  
+                            ## while it triggers events
                             continue
         finally:
             self._BaseServer__shutdown_request = False
             self._BaseServer__is_shut_down.set()
 
     def _handle_request_noblock(self, selector_key, event):
-        
+
         try:
             request, client_address = self.get_request(selector_key, event)
         except OSError:
@@ -1299,16 +1294,14 @@ class BaseTCPServer(TCPServer):
         (client_address) to the RequestHandlerClass. The parameters are
         passed via the finish_request method.
         serve_forever() --> _handle_request_noblock() -->
-        process_request(self, request, client_address) --> 
+        process_request(self, request, client_address) -->
         finish_request(self, request, client_address)
 
-        Args: 
-           selector_key: SelectorKey object (fileobj, fd, events, data). 
+        Args:
+           selector_key: SelectorKey object (fileobj, fd, events, data).
                It is returned by the selector.select()
-           event:  
+           event:
         """
-##        print("--- selector_key: %s"%str(selector_key))
-##        print("--- event: %s"%str(event))
         if selector_key.data == "accept":
             request, client_address = self.socket.accept()
             request.setblocking(False)
@@ -1335,25 +1328,25 @@ class ThreadedTCPServer(ThreadingMixIn, BaseTCPServer):
 class TCPHandle(BaseRequestHandler):
     """
     """
- 
+
     def handle(self):
-        """ treat the request 
+        """ treat the request
         From https://docs.python.org/3.5/library/socketserver.html
 
 	This function must do all the work required to service a
-        request. The default implementation does nothing. Several 
-        instance attributes are available to it; the request is 
-        available as self.request; the client address as 
-        self.client_address; and the server instance as self.server, 
+        request. The default implementation does nothing. Several
+        instance attributes are available to it; the request is
+        available as self.request; the client address as
+        self.client_address; and the server instance as self.server,
         in case it needs access to per-server information.
 
         The type of self.request is different for datagram or stream
         services.  For stream services, self.request is a socket object.
 
-        
+
         """
-        try: 
-            self.server.fd_busy[self.request.fileno()] 
+        try:
+            self.server.fd_busy[self.request.fileno()]
             return
         except KeyError:
             self.server.fd_busy[self.request.fileno()]  = time()
@@ -1361,53 +1354,17 @@ class TCPHandle(BaseRequestHandler):
         try:
             bytes_recv = self.request.recv(HEADER_LEN)
         except:
-            del self.server.fd_busy[self.request.fileno()] 
-            return 
-   
-##        select([self.request], [], [])
-##        try:
-##            bytes_recv = self.request.recv(HEADER_LEN)
-##        except BlockingIOError:
-##            return
-######        attempt_nbr = 0
-######        while attempt_nbr <= MAX_ATTEMPTS:
-######            try:
-######                attempt_nbr += 1
-########                select([self.request], [], [])
-######                bytes_recv = self.request.recv(HEADER_LEN)
-######                attempt_nbr = MAX_ATTEMPTS + 1
-######                break
-######            except ssl.SSLError as err:
-######                if err.args[0] == ssl.SSL_ERROR_WANT_READ:
-######                    select([self.request], [], [])
-########                elif err.args[0] == ssl.SSL_ERROR_WANT_WRITE:
-########                    select([self.request],[],  [])
-######                else:
-######                    raise
-######            except BlockingIOError:
-######                select([self.request], [], [])
-######            if attempt_nbr == MAX_ATTEMPTS:
-######                return 
-######                raise ImplementationError(attempt_nbr, "Reading Header" +\
-######                      "attempts exceeds MAX_ATTEMPTS " +\
-######                      "= %s"%MAX_ATTEMPTS +\
-######                      "Lurk Header not read" )
-########        if bytes_recv == b'':
-########            return 
+            del self.server.fd_busy[self.request.fileno()]
+            return
+
         print("--- Receiving Header (len : %s)bytes_recv: %s"%(len(bytes_recv), binascii.hexlify(bytes_recv)))
         print("--- request: %s"%str(self.request))
         header = LURKHeader.parse(bytes_recv)
         print(" --- header: %s"%header)
         bytes_nbr = header[ 'length' ]
-##        while len(bytes_recv) < bytes_nbr:
-##            try:
-##                bytes_recv += self.request.recv(min(bytes_nbr - len(bytes_recv), 1024))
-##            except BlockingIOError:
-##                select([self.request], [], [])
 
         while len(bytes_recv) < bytes_nbr:
-            try: 
-##                select([self.request], [], [], 5)
+            try:
                 bytes_recv += self.request.recv(min(bytes_nbr - len(bytes_recv), 1024))
             except ssl.SSLError as err:
                        if err.args[0] == ssl.SSL_ERROR_WANT_READ:
@@ -1422,7 +1379,7 @@ class TCPHandle(BaseRequestHandler):
         print("--- Responding :%s"%binascii.hexlify(self.server.byte_serve(bytes_recv)))
         attempt_nbr = 0
         while attempt_nbr <= MAX_ATTEMPTS:
-            try: 
+            try:
                 self.request.sendall(self.server.byte_serve(bytes_recv))
                 print("--- Response SENT")
                 break
@@ -1434,14 +1391,14 @@ class TCPHandle(BaseRequestHandler):
             except BlockingIOError:
                 select([], [self.request], [])
             if attempt_nbr == MAX_ATTEMPTS:
-                return 
+                return
                 raise ImplementationError(attempt_nbr, "Reading Header" +\
                       "attempts exceeds MAX_ATTEMPTS " +\
                       "= %s"%MAX_ATTEMPTS +\
                       "Lurk Header not read" )
         print("{} data:".format(threading.current_thread().name))
-        del self.server.fd_busy[self.request.fileno()] 
-        return 
+        del self.server.fd_busy[self.request.fileno()]
+        return
 
 class LurkTCPServer:
 
@@ -1461,27 +1418,27 @@ class LurkTCPClient(LurkBaseClient):
 
         Args:
             bytes_Requests_dict (dict): the dictionary that associated
-                to the id the byte representation of the request (bytes_request) 
+                to the id the byte representation of the request (bytes_request)
                 { id : bytes_request }
         Returns:
             bytes_response (bytes): the corresponding bytes_responses.
-                When bytes_requests is composed of multiple bytes_request 
-                concatenated, the responses are concatenated as well. 
+                When bytes_requests is composed of multiple bytes_request
+                concatenated, the responses are concatenated as well.
         """
         bytes_responses = b''
         if bytes_requests_dict == None:
             response_nbr = 1
-        else: 
+        else:
             response_nbr = len(bytes_requests_dict.keys())
         while response_nbr > 0:
            bytes_response = self.bytes_receive_single_response()
            if self.is_response(bytes_response, bytes_requests_dict) == False:
-               continue  
+               continue
            bytes_responses += bytes_response
            response_nbr -= 1
 
         return bytes_responses
- 
+
     def bytes_receive_single_response(self):
         print("bytes_receive_single_response")
         bytes_recv = b''
@@ -1494,9 +1451,9 @@ class LurkTCPClient(LurkBaseClient):
         print("len(bytes_recv): %s, %s"%(len(bytes_recv), HEADER_LEN))
         header = LURKHeader.parse(bytes_recv)
         bytes_nbr = header[ 'length' ]
-      
+
         bytes_recv += self.sock.recv(min(bytes_nbr - len(bytes_recv), 4096))
-        return bytes_recv 
+        return bytes_recv
 
 
 class LurkHTTPServer:
@@ -1517,70 +1474,18 @@ class  BaseHTTPServer(HTTPServer):
         self.conf = LurkConf(deepcopy(lurk_conf))
         self.lurk = LurkServer(self.conf.get_conf())
         self.server_address = self.conf.get_server_address()
-        self.connection_type = self.conf.get_connection_type() 
+        self.connection_type = self.conf.get_connection_type()
         super().__init__(self.server_address, RequestHandlerClass)
-
-###        conf['connectivity']['type'] = 'http'
-###        LurkServer.__init__(self, conf, secureTLS_connection)
-        # this will allow reusing the same address for multiple connections
         self.allow_reuse_address = True
-        #initialize the httpserver
-###        server_address  = (self.conf.server.ip_address, self.conf.server.port)
-###        HTTPServer.__init__(self,server_address, HTTPRequestHandler)
         HTTPServer.__init__(self,self.server_address, RequestHandlerClass)
-
-###        #secure connection by setting the context
-###        if (secureTLS_connection):
-###            context = self.get_context()
-###            #updating the httpserver socket after wrapping it with ssl context
-###            self.socket = context.wrap_socket(self.socket, server_side=True)
 
         if self.connection_type == 'https':
             context = self.conf.get_tls_context()
             self.socket = context.wrap_socket(self.socket, server_side=True)
-##                            do_handshake_on_connect=False,\
-##from tcp                            server_hostname=self.server_address[0]) 
 
 
 class ThreadedHTTPServer(ThreadingMixIn, BaseHTTPServer):
     pass
-
-###:class ThreadedLurkHTTPServer(PoolMixIn, LurkHTTPServer):
-###    '''
-###    This class represents an HTTPSserver (based on TCPServer) which launches a new thread (for each request) when a client gets connected
-###    This default behavior is modified by extending the PoolMixIn class instead of ThreadingMixIn to handle a specific number of requests(max_workers) in parallel
-###    '''
-###
-###    def __init__(self, conf=deepcopy(default_conf)):
-###        '''
-###        This is a constructor to initialize an HTTP server that handles multiple requests at the same time.
-###        The code is a copy of the LurkHTTPserver constructor (Note: calling the super constructor calls the LurkServer constructor which causes an error)
-###        :param conf: the configuration
-###        :param max_workers: max number of HTTP requests to handle in parallel
-###        '''
-###
-###        #set the pool attribute to allow multithreading
-###        self.pool = ThreadPoolExecutor(max_workers)
-###
-###        conf['connectivity']['type'] = 'http'
-###
-###
-###        LurkServer.__init__(self, conf, secureTLS_connection)
-###
-###        # this will allow reusing the same address for multiple connections
-###        self.allow_reuse_address = True
-###
-###        # initialize the httpserver
-###        server_address = (self.conf.server.ip_address, self.conf.server.port)
-###        HTTPServer.__init__(self, server_address, HTTPRequestHandler)
-###
-###        # secure connection by setting the context
-###        if (self.secureTLS_connection):
-###            context = self.get_context()
-###            # updating the httpserver socket after wrapping it with ssl context
-###            self.socket = context.wrap_socket(self.socket, server_side=True)
-
-
 
 class HTTPHandle (BaseHTTPRequestHandler):
     '''
@@ -1624,40 +1529,10 @@ class LurkHTTPClient(LurkTCPClient):
     def __init__(self, conf):
         self.conf = LurkConf(conf)
         self.server_address = self.conf.get_server_address()
-        self.connection_type = self.conf.get_connection_type() 
+        self.connection_type = self.conf.get_connection_type()
         self.message = LurkMessage(conf=self.conf.get_conf())
         self.pending_resp = []
 
-##        self.conf = LurkConf(conf)
-##        self.server_address = self.conf.get_server_address()
-##        self.connection_type = self.conf.get_connection_type()
-##        self.message = LurkMessage(conf=self.conf.get_conf())
-###        self.set_up_server_session()
-##        self.base = LurkBaseClient(conf)
-
-####?gc    def __init__(self, conf=deepcopy(default_conf)):
-####?gc        conf['connectivity']['type'] = 'http'
-####?gc
-####?gc        # could not call super constructor as it was throwing an init_conf error
-####?gc        self.init_conf(conf)
-####?gc        self.conf = LurkConf(conf)
-####?gc        self.waiting_queries = {}
-####?gc
-####?gc        #set the server to None as we do not interact directly with the client socket
-####?gc        self.server = self.get_server()
-####?gc        self.message = LurkMessage(conf=self.conf.conf)
-####?gc
-####?gc        self.secureTLS_connection = False
-####
-####
-####    def get_server( self ):
-####        '''
-####        This should return a TCP client socket.
-####        However, as we do not directly interact with the client socket since we are using urllib, we will just set the
-####        server attribute to none
-####        :return: None
-####        '''
-####        return None
     def set_up_server_session(self):
         pass
 
@@ -1686,62 +1561,13 @@ class LurkHTTPClient(LurkTCPClient):
         self.pending_resp.append(resp)
         print("resp: %s"%resp)
         print("bytes_request sent (%s): %s"%(len(bytes_request), \
-                                             binascii.hexlify(bytes_request))) 
-   
+                                             binascii.hexlify(bytes_request)))
+
     def  bytes_receive(self, bytes_requests_dict=None):
         print("bytes_receive: self.pending_request : %s"%self.pending_resp)
         for resp_index in range(len(self.pending_resp)):
             resp = self.pending_resp[resp_index]
             response_bytes = b''
-##            try:
             print("receiving: %s"%binascii.hexlify(response_bytes))
             response_bytes = response_bytes + resp.read(4096)
-##            except:
-##            del self.pending_resp[self.pending_resp.index(resp)]
         return response_bytes
-      
-
-    def bytes_resolve2(self, bytes_pkt):
-        '''
-        This method represents the HTTP POSt request of the client and the response recieved from the HTTP server
-        :param bytes_pkt: bytes to send to the HTTP server
-        :return: bytes reqponse of the server
-        '''
-        try:
-            # try to send first to check if there is a connection established
-            url = self.connection_type + '://' + str(self.server_address[0]) + \
-                                         ':' + str(self.server_address[1])
-            #prepare client request to post the bytes_pkt
-            req = urllib.request.Request(url, bytes_pkt , method='POST')
-            bytes_requests_dict = self.unpack_bytes( bytes_pkt) 
-            #request the url, post the data and set up the ssl context
-            if self.connection_type == 'https':
-                tls_context = self.conf.get_tls_context()
-####                response = urllib.request.urlopen(req, context=self.conf.get_tls_context())
-            else:
-                tls_context = None
-####                response = urllib.request.urlopen(req, context=None)
-            print("SEDNING")
-            response = urllib.request.urlopen(req, context=tls_context)
-            #start by reading the server response
-            print("READING")
-            response_bytes = response.read(4096)
-
-            waiting = True
-            while waiting == True:
-                #keep reading until the end of the response (until exception is thrown)
-                response_bytes = response_bytes+ response.read(4096)
-                #make sure the response is in the correct format
-###                response = self.message.parse(response_bytes)
-###
-###                #check if this is the correct response (this is never executed!!!!)                
-                if self.is_response(response_bytes, bytes_requests_dict) == True:
-                    waiting = False
-            return response_bytes
-        # catch any error mainly thrown at the end of reading the response
-        except:
-            try:
-                return response_bytes
-            except:
-                ImplementationError('', "Unable resolve")
-
