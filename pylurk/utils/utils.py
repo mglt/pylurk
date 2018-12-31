@@ -81,10 +81,15 @@ def resolve_exchange( client, designation, version, mtype,  \
     """ generates an prints a valid query / response using resolve  """
     print("-- testing: desig.: %s, vers.: %s "%(designation, version) +
           "mtype: %s"%(mtype))
-    request, response = client.resolve( designation=designation, \
-                                      version=version,\
-                                      status="request", \
-                                      type=mtype, payload=payload ) 
+    resolutions, errors = client.resolve( [{'designation' : designation, \
+                          'version' : version,'status'  : "request", \
+                          'type' : mtype, 'payload' : payload}] )
+    print("resolutions: %s"%resolutions)
+    print("errors: %s"%errors)
+
+    request = resolutions[0][0]
+    response = resolutions[0][1]
+        
     if silent == False:
         msg = LurkMessage()
         print( ">> Request")

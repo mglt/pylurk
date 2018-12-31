@@ -22,17 +22,21 @@ Args:
 default_conf = { 
     'role' : 'server', # "client", "server"
     'connectivity' : { 
-             'type' : "udp",  # "udp", "local", 
+             'type' : "udp",  # "local", "tcp", "tcp+tls", http, https
               'ip_address' : "127.0.0.1", 
               'port' : 6789,
-              'keys': {#TLS keys
-                    'client': join( data_dir, 'key_tls12_rsa_client.key'),
-                    'server': join( data_dir, 'key_tls12_rsa_server.key'),
-                },
-              'certs': {#TLS certifications
-                    'client': join( data_dir, 'cert_tls12_rsa_client.crt'),
-                    'server': join( data_dir, 'cert_tls12_rsa_server.crt'),
-              },
+              'key' : join( data_dir, 'key_tls12_rsa_server.key'), 
+              'cert' : join( data_dir, 'cert_tls12_rsa_server.crt'),
+              'key_peer' : join( data_dir, 'key_tls12_rsa_client.key'),
+              'cert_peer' : join( data_dir, 'cert_tls12_rsa_client.crt')
+#              'keys': {#TLS keys
+#                    'client': join( data_dir, 'key_tls12_rsa_client.key'),
+#                    'server': join( data_dir, 'key_tls12_rsa_server.key'),
+#                },
+#              'certs': {#TLS certifications
+#                    'client': join( data_dir, 'cert_tls12_rsa_client.crt'),
+#                    'server': join( data_dir, 'cert_tls12_rsa_server.crt'),
+#              },
          },       
     'extensions' : [
         { 'designation' : "lurk",
