@@ -2,38 +2,38 @@
 We need to provide an explaination on how to add a new extension.
 
 """
-import os
-from  os.path import join
-import pkg_resources
+from copy import deepcopy
+from time import time
 from textwrap import indent
 from secrets import randbits
-from Cryptodome.Hash import HMAC, SHA256
-from pylurk.core.conf import *
-from pylurk.core.lurk_struct import *
 from socketserver import ThreadingMixIn, UDPServer, TCPServer, BaseRequestHandler
-from concurrent.futures import ThreadPoolExecutor
-from http.server import HTTPServer,  BaseHTTPRequestHandler
+#from concurrent.futures import ThreadPoolExecutor
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from select import select
+#from socket import error as SocketError
 
 import socket
-from socket import error as SocketError
-from time import time
-
+import os
 import selectors
-from select import select
 import errno
 import urllib.request
 import ssl
 import binascii
+#import threading
+import pkg_resources
 
-import threading
-from copy import deepcopy
+from pylurk.core.conf import default_conf
+from pylurk.core.lurk_struct import LURKHeader, LURKErrorPayload
+
+##from Cryptodome.Hash import HMAC, SHA256
+#from os.path import join
 
 HEADER_LEN = 16
 LINE_LEN = 60
 
-data_dir = pkg_resources.resource_filename( __name__, '../data/')
+data_dir = pkg_resources.resource_filename(__name__, '../data/')
 
-def wrap( text, line_len=LINE_LEN):
+def wrap(text, line_len=LINE_LEN):
     """ Wrap text so it does not exceeds line_len
 
     Args:
@@ -46,7 +46,7 @@ def wrap( text, line_len=LINE_LEN):
     lines = text.split('\n')
     wrap = ""
     for line in lines:
-        if len( line ) < line_len:
+        if len(line) < line_len:
             wrap += line
             wrap += '\n'
             continue
@@ -56,11 +56,11 @@ def wrap( text, line_len=LINE_LEN):
                 margin += c
             else:
                 break
-        wrap += line[ : line_len ] + '\n'
-        line = margin + line[ line_len :]
-        while len( line ) >= line_len:
-            wrap += line[ : line_len ] + '\n'
-            line = margin + line[ line_len : ]
+        wrap += line[: line_len] + '\n'
+        line = margin + line[line_len :]
+        while len(line) >= line_len:
+            wrap += line[: line_len] + '\n'
+            line = margin + line[line_len :]
         wrap += line[:]
         wrap += '\n'
     return wrap
@@ -75,35 +75,40 @@ class Error(Exception):
 
 ## system error
 class ConfError(Error):
+    """ Configuration Error
+    """
     pass
+
 class ImplementationError(Error):
+    """ Implementation Error
+    """
     pass
 
 
 ## LURK Error
 class UndefinedError(Error):
     def __init__(self, expression, message):
-        super().__init__(expression, message )
+        super().__init__(expression, message)
         self.status = "undefined_error"
 class InvalidFormat(Error):
     def __init__(self, expression, message):
-        super().__init__(expression, message )
+        super().__init__(expression, message)
         self.status = "invalid_format"
 class InvalidExtension(Error):
     def __init__(self, expression, message):
-        super().__init__(expression, message )
+        super().__init__(expression, message)
         self.status = "invalid_extension"
 class InvalidType(Error):
     def __init__(self, expression, message):
-        super().__init__(expression, message )
+        super().__init__(expression, message)
         self.status = "invalid_type"
 class InvalidStatus(Error):
     def __init__(self, expression, message):
-        super().__init__(expression, message )
+        super().__init__(expression, message)
         self.status = "invalid_status"
 class TemporaryFailure(Error):
     def __init__(self, expression, message):
-        super().__init__(expression, message )
+        super().__init__(expression, message)
         self.status = "temporary_failure"
 
 
@@ -112,7 +117,7 @@ class LurkConf():
     def __init__(self, conf=deepcopy(default_conf)):
         self.conf = self.check_conf(conf)
 
-    def check_conf(self, conf=None ):
+    def check_conf(self, conf=None):
         """Checks the format of the configuration file
 
         If the configuration file is not provided, checks are performed
@@ -130,36 +135,36 @@ class LurkConf():
         Raises:
             ConfError when an configuration error is detected.
         """
-        if conf == None:
+        if conf is None:
             conf = self.conf
 
-        if type( conf ) is not dict:
-            raise ConfError( conf, "Expecting dict" )
-        self.check_key( conf, [ 'role', 'connectivity', 'extensions' ] )
-        if conf[ 'role' ] not in [ 'client', 'server' ]:
-            raise ConfError( conf['role' ], "Expecting role as 'client' " + \
-                                            "or 'server'" )
+        if type(conf) is not dict:
+            raise ConfError(conf, "Expecting dict")
+        self.check_key(conf, ['role', 'connectivity', 'extensions'])
+        if conf['role'] not in ['client', 'server']:
+            raise ConfError(conf['role'], "Expecting role as 'client' " + \
+                                            "or 'server'")
         connectivity = conf['connectivity']
         if connectivity['type'] not in ["local", "udp", "udp+dtls", \
                                         "tcp", "tcp+tls", "http", "https"]:
-            raise ConfError( connectivity, "Expected type as 'local' "+\
-                                            "or 'udp' or 'tcp' or 'http'" )
-        if type( conf[ 'extensions' ] ) is not list:
-            raise ConfError( conf[ 'connectivity' ], "Expected 'list'")
+            raise ConfError(connectivity, "Expected type as 'local' "+\
+                                            "or 'udp' or 'tcp' or 'http'")
+        if type(conf['extensions']) is not list:
+            raise ConfError(conf['connectivity'], "Expected 'list'")
         id_bytes = randbits(8)
-        for ext in conf[ 'extensions' ]:
-            ## validation between of ( 'designation', 'version', 'type'
+        for ext in conf['extensions']:
+            ## validation between of ('designation', 'version', 'type'
             ## is tested by building a LURKHeader
             try:
-                LURKHeader.build( { 'designation' : ext[ 'designation' ],
-                                    'version' : ext[ 'version' ],
-                                    'type' : ext[ 'type' ],
-                                    'status' : "request",
-                                    'id' : id_bytes,
-                                    'length' : HEADER_LEN } )
-            except :
-                raise ConfError( ext, "Unexpected values for designation, " +\
-                                      "version type" )
+                LURKHeader.build({'designation' : ext['designation'],
+                                  'version' : ext['version'],
+                                  'type' : ext['type'],
+                                  'status' : "request",
+                                  'id' : id_bytes,
+                                  'length' : HEADER_LEN})
+            except:
+                raise ConfError(ext, "Unexpected values for designation, " +\
+                                      "version type")
         return self.check_crypto_keys(conf)
 
     def check_crypto_keys(self, conf=None):
@@ -195,7 +200,7 @@ class LurkConf():
             ConfError when private keys or cerrtificates  are missing.
         """
 
-        if conf == None:
+        if conf is None:
             conf = self.conf
         conn_type = conf['connectivity']['type']
         if conn_type not in ['udp+dtls', 'tcp+tls', 'https']:
@@ -207,7 +212,7 @@ class LurkConf():
             except KeyError:
                 pass
         else:
-            for k in [ 'key', 'cert', 'cert_peer']:
+            for k in ['key', 'cert', 'cert_peer']:
                 if k not in conf['connectivity'].keys():
                     raise ConfError(conf['connectivity'],\
                         "Connectivity type %s requires "%conn_type +\
@@ -231,7 +236,7 @@ class LurkConf():
                         "server role (role: %s)"%conf['role'])
         return conf
 
-    def set_role( self, role ):
+    def set_role(self, role):
         """ set the role of the configuration
 
         The main difference between the two roles is that the client
@@ -248,9 +253,9 @@ class LurkConf():
             ConfError
         """
 
-        if role not in [ 'client', 'server' ]:
-            raise ConfError( role, "Expected 'client' or 'server'" )
-        self.conf[ 'role' ] = role
+        if role not in ['client', 'server']:
+            raise ConfError(role, "Expected 'client' or 'server'")
+        self.conf['role'] = role
         ## if we have the default configuration, make sure it is
         ## correct
         try:
@@ -268,15 +273,15 @@ class LurkConf():
             ## in the key files.
             key_peer = self.conf['connectivity']['key_peer']
             cert_peer = self.conf['connectivity']['cert_peer']
-            if ( role in key_peer and role_peer in key) or \
-               ( role in cert_peer and role_peer in cert):
+            if (role in key_peer and role_peer in key) or \
+               (role in cert_peer and role_peer in cert):
                 self.conf['connectivity']['key'] = key_peer
                 self.conf['connectivity']['cert'] = cert_peer
                 self.conf['connectivity']['key_peer'] = key
                 self.conf['connectivity']['cert_peer'] = cert
         except KeyError:
-           ## no key_peer. may not be an issue
-           pass
+            ## no key_peer. may not be an issue
+            pass
         try:
             del self.conf['connectivity']['key_peer']
         except KeyError:
@@ -288,7 +293,7 @@ class LurkConf():
                 except KeyError:
                     pass
 
-    def set_connectivity( self, **kwargs ):
+    def set_connectivity(self, **kwargs):
         """Configures the channel between the client and the server
 
         Connectivity is set by setting arguments provided by kwargs
@@ -338,80 +343,80 @@ class LurkConf():
 
         """
 
-        self.set_role( self.conf['role'])
+        self.set_role(self.conf['role'])
         self.check_conf()
         return self.conf
 
 
-    def get_mtypes( self ):
+    def get_mtypes(self):
         """ returns the list of types associated to each extentions
-             { ( designation_a, version_a) : [ type_1, ..., type_n ],
-               ( designation_n, version_n) : [ type_1, ..., type_n ] }
+             {(designation_a, version_a) : [type_1, ..., type_n],
+               (designation_n, version_n) : [type_1, ..., type_n]}
         """
 
         mtype = {}
-        id_bytes = randbits(8)
-        for ext in self.conf[ 'extensions' ]:
-            k = ( ext[ 'designation' ], ext[ 'version' ] )
+##        id_bytes = randbits(8)
+        for ext in self.conf['extensions']:
+            k = (ext['designation'], ext['version'])
             try:
-                if ext[ 'type' ] not in mtype[ k ]:
-                    mtype[ k ].append( ext[ 'type' ] )
+                if ext['type'] not in mtype[k]:
+                    mtype[k].append(ext['type'])
             except KeyError:
-                mtype[ k ] = [ ext[ 'type' ] ]
+                mtype[k] = [ext['type']]
         return mtype
 
 
-    def get_supported_ext( self ):
+    def get_supported_ext(self):
         """ returns the list of extensions
-          [ ( designation_a, version_a ), ... (designation_n, version_n ) ]
+          [(designation_a, version_a), ... (designation_n, version_n)]
         """
         sup_ext = []
-        for extension in self.conf[ 'extensions' ]:
-            ext = ( extension[ 'designation' ], extension[ 'version' ] )
+        for extension in self.conf['extensions']:
+            ext = (extension['designation'], extension['version'])
             if ext not in sup_ext:
-                sup_ext.append( ext )
+                sup_ext.append(ext)
         return sup_ext
 
-    def get_ext_conf( self, designation, version, \
-            exclude=[ 'designation', 'version', 'type' ] ):
+    def get_ext_conf(self, designation, version, \
+            exclude=['designation', 'version', 'type']):
         """ returns the configuration associated to an extension.
-            conf = { 'role' : "server"
-                      'ping' : [  []. ...  [] ],
-                     'rsa_master' : [ { conf1_rsa }, { conf2_rsa }, ... ] }
+            conf = {'role' : "server"
+                      'ping' : [ []. ...  []],
+                     'rsa_master' : [{conf1_rsa}, {conf2_rsa}, ...]}
         """
         conf = {}
-        ## conf[ 'role' ] = self.conf[ 'role' ]
+        ## conf['role'] = self.conf['role']
         type_list = []
-        for ext in self.conf[ 'extensions' ] :
-            if ext[ 'designation' ] == designation and \
-               ext[ 'version' ] == version :
-                type_list.append( ext[ 'type' ] )
-        type_list = list( set( type_list ) )
+        for ext in self.conf['extensions']:
+            if ext['designation'] == designation and \
+               ext['version'] == version:
+                type_list.append(ext['type'])
+        type_list = list(set(type_list))
         for mtype in type_list:
-            conf[ mtype ] = self.get_type_conf( designation, version, \
-                                mtype, exclude=exclude )
+            conf[mtype] = self.get_type_conf(designation, version, \
+                                mtype, exclude=exclude)
         return conf
 
 
 
 
-    def get_type_conf( self, designation, version, mtype, \
-            exclude=['designation', 'version', 'type'] ):
-         """ returns the configuration parameters associated to a given
-             type. It has the 'role' value and removes parameters value
-             provided by exclude.  """
-         type_conf = []
-         for ext in self.conf[ 'extensions' ] :
-             if ext[ 'designation' ] == designation and \
-                ext[ 'version' ] == version and \
-                ext[ 'type' ] == mtype:
-                 conf = dict( ext )
-                 conf[ 'role' ] =  self.conf[ 'role' ]
-                 for k in exclude:
-                     if k in conf.keys():
-                         del conf[ k ]
-                 type_conf.append( conf )
-         return type_conf
+    def get_type_conf(self, designation, version, mtype, \
+            exclude=['designation', 'version', 'type']):
+        """ returns the configuration parameters associated to a given
+            type. It has the 'role' value and removes parameters value
+            provided by exclude.  """
+        type_conf = []
+        for ext in self.conf['extensions']:
+            if ext['designation'] == designation and \
+               ext['version'] == version and \
+               ext['type'] == mtype:
+                conf = dict(ext)
+                conf['role'] = self.conf['role']
+                for k in exclude:
+                    if k in conf.keys():
+                        del conf[k]
+                type_conf.append(conf)
+        return type_conf
 
     def get_server_address(self):
         return self.conf['connectivity']['ip_address'], \
@@ -440,88 +445,88 @@ class LurkConf():
 
 
     ### function used by classes using this ConfLurk class
-    def check_key( self, payload, keys):
+    def check_key(self, payload, keys):
         """ checks payload got the expected keys"""
-        if set( payload.keys() ) != set( keys ):
-            raise InvalidFormat( str(payload.keys()),   \
+        if set(payload.keys()) != set(keys):
+            raise InvalidFormat(str(payload.keys()),   \
                       "Missing or extra key found. Expected %s"%keys)
 
-    def check_extension( self, designation, version ):
-        ext = ( designation, version )
+    def check_extension(self, designation, version):
+        ext = (designation, version)
         if ext  not in self.get_mtypes().keys():
-           raise InvalidExtension( ext, "Expected %s"%self.mtype.keys() )
+            raise InvalidExtension(ext, "Expected %s"%self.get_mtypes().keys())
 
-    def check_type( self, designation, version,  mtype):
-       if mtype not in self.get_mtypes()[ ( designation, version ) ]:
-           raise InvalidType(self.mtype, "Expected: %s"%
-                              self.mtype[ (designation, version ) ] )
+    def check_type(self, designation, version, mtype):
+        if mtype not in self.get_mtypes()[(designation, version)]:
+            raise InvalidType(self.get_mtypes(), "Expected: %s"%
+                              self.get_mtypes()[(designation, version)])
 
-    def get_state(self, ext ):
-        state = "state" +  str( self.supported_extensions )
-        return SHA256.new( str.encode( state ) ).digest()[:4]
+    def get_state(self, ext):
+        state = "state" +  str(self.supported_ext())
+        return SHA256.new(str.encode(state)).digest()[:4]
 
-    def check_error( self, error_payload ):
-        if error_payload == {} :
+    def check_error(self, error_payload):
+        if error_payload == {}:
             return True
-        self.check_key( error_payload, [ 'lurk_state'] )
-        self.check_error_bytes( error_payload[ 'lurk_state'] )
+        self.check_key(error_payload, ['lurk_state'])
+        self.check_error_bytes(error_payload['lurk_state'])
 
-    def check_error_bytes( self, error_payload_bytes ):
+    def check_error_bytes(self, error_payload_bytes):
         error = error_payload_bytes
-        if type( error ) != bytes :
-            raise InvalidFormat( type(error) , "Expected bytes" )
-        if len( error ) != 4 :
-            raise InvalidFormat( len(error) , "Expected 4 byte len" )
+        if type(error) != bytes:
+            raise InvalidFormat(type(error), "Expected bytes")
+        if len(error) != 4:
+            raise InvalidFormat(len(error), "Expected 4 byte len")
 
 
 
 
 
 class Payload:
-    def __init__( self, conf ):
-       """Generic class for lurk payload
+    def __init__(self, conf):
+        """Generic class for lurk payload
 
-       Lurk designates as Payloads the bytes associated to a specific
-       extension. In other words, a payload is all bytes after the Lurk
-       Header. The Payload class provides an abstraction for programming
-       extensions as it deals with the convertion between the binary
-       representation of th3 payload and the representation of the payload
-       structure using a dictionary.
-       The Payload class is closely tided with the Struct instance that
-       describes the object.
-       """
-       self.conf = conf
-       self.struct = None
-       self.struct_name = 'EmptyPayload'
+        Lurk designates as Payloads the bytes associated to a specific
+        extension. In other words, a payload is all bytes after the Lurk
+        Header. The Payload class provides an abstraction for programming
+        extensions as it deals with the convertion between the binary
+        representation of th3 payload and the representation of the payload
+        structure using a dictionary.
+        The Payload class is closely tided with the Struct instance that
+        describes the object.
+        """
+        self.conf = conf
+        self.struct = None
+        self.struct_name = 'EmptyPayload'
 
-    def build_payload( self, **kwargs ):
+    def build_payload(self, **kwargs):
         """ returns the container that describes the payload """
         return {}
 
-    def build(self, **kwargs ):
+    def build(self, **kwargs):
         """ converts the container describing the payload into a byte
             format """
-        payload = self.build_payload( **kwargs )
-        self.check( payload )
-        return self.struct.build( payload )
+        payload = self.build_payload(**kwargs)
+        self.check(payload)
+        return self.struct.build(payload)
 
     def parse(self, pkt_bytes):
         """ returns payload described in byte format (pkt_bytes) into a
             container """
         try:
-            payload = self.struct.parse( pkt_bytes )
-            self.check( payload )
+            payload = self.struct.parse(pkt_bytes)
+            self.check(payload)
             return payload
         except Exception as e:
-            self.treat_exception( e )
+            self.treat_exception(e)
 
-    def treat_exception( self, e ):
+    def treat_exception(self, e):
         if type(e) == MappingError:
             value = e.args[0].split()[4]
             if "designation" in e.args[0]:
-                raise InvalidExtension( value, "unvalid extension")
+                raise InvalidExtension(value, "unvalid extension")
             elif "version" in e.args[0]:
-                raise InvalidExtension( value, "unvalid extension")
+                raise InvalidExtension(value, "unvalid extension")
             elif "status" in e.args[0]:
                 raise InvalidStatus(value, "unexpected status")
             elif "type" in e.args[0]:
@@ -529,280 +534,280 @@ class Payload:
         else:
             raise InvalidFormat(type(e), e.args)
 
-    def check( self, payload ):
+    def check(self, payload):
         pass
 
     def show(self, pkt_bytes, prefix="", line_len=LINE_LEN):
         """ shows the pkt_bytes. Similar to parse but without any
             control of the configuration and uses the structure
             visualization facilities. """
-        print( indent( "%s"%self.struct_name, prefix ) )
-        s = wrap( "%s"%self.struct.parse( pkt_bytes ), line_len=line_len )
-        print( indent( s, prefix ) )
+        print(indent("%s"%self.struct_name, prefix))
+        s = wrap("%s"%self.struct.parse(pkt_bytes), line_len=line_len)
+        print(indent(s, prefix))
 
 
 
 
-class LurkMessage( Payload ):
+class LurkMessage(Payload):
 
-    def __init__( self, conf=deepcopy(default_conf) ):
+    def __init__(self, conf=deepcopy(default_conf)):
         self.conf = LurkConf(conf)
         self.struct = LURKHeader
         self.struct_name = 'Lurk Header'
         self.lurk = self.import_ext()
 
-    def import_ext( self ):
+    def import_ext(self):
         lurk_ext = {}
         mtypes = self.conf.get_mtypes()
         for ext in mtypes.keys():
-            if ext == ( "lurk", "v1" ):
+            if ext == ("lurk", "v1"):
                 import pylurk.extensions.lurk
                 ## ext_lurk is a special option. It needs the list of
                 ## extensions which are parameters outside lurkext. We
                 # provide the  full configuration file.
-                lurk_ext[ ext ] = pylurk.extensions.lurk.LurkExt( self.conf.conf )
-            elif ext == ( "tls12", "v1" ):
+                lurk_ext[ext] = pylurk.extensions.lurk.LurkExt(self.conf.conf)
+            elif ext == ("tls12", "v1"):
                 ## this is how future extensions are expected to be handled.
                 import pylurk.extensions.tls12
-                lurk_ext[ ext ] = pylurk.extensions.tls12.LurkExt(
-                                      self.conf.get_ext_conf( 'tls12', 'v1' ) )
-            else :
-                raise ConfError( ext, "unknown extension" )
+                lurk_ext[ext] = pylurk.extensions.tls12.LurkExt(
+                    self.conf.get_ext_conf('tls12', 'v1'))
+            else:
+                raise ConfError(ext, "unknown extension")
         return lurk_ext
 
-    def get_ext( self, message ):
-         """ returns the LurkExt object from a message or header """
-         ext = ( message [ 'designation' ], message[ 'version' ] )
-         return  self.lurk[ ext ]
+    def get_ext(self, message):
+        """ returns the LurkExt object from a message or header """
+        ext = (message['designation'], message['version'])
+        return  self.lurk[ext]
 
-    def get_header( self, message ):
-        return { 'designation' : message[ 'designation' ], \
-                 'version' : message[ 'version' ], \
-                 'type' : message[ 'type' ], \
-                 'status' : message[ 'status' ], \
-                 'id' : message[ 'id' ], \
-                 'length' :  message[ 'length' ] }
+    def get_header(self, message):
+        return {'designation' : message['designation'], \
+                 'version' : message['version'], \
+                 'type' : message['type'], \
+                 'status' : message['status'], \
+                 'id' : message['id'], \
+                 'length' :  message['length']}
 
-    def build_ext_payload( self, header, **kwargs ):
-        status = header[ 'status' ]
-        mtype = header[ 'type' ]
-        if status not in [ 'request', 'success' ]:
-            raise ImplementationError( status, "Expected 'request' or 'success'")
-        return self.get_ext( header).build( status, mtype, **kwargs )
+    def build_ext_payload(self, header, **kwargs):
+        status = header['status']
+        mtype = header['type']
+        if status not in ['request', 'success']:
+            raise ImplementationError(status, "Expected 'request' or 'success'")
+        return self.get_ext(header).build(status, mtype, **kwargs)
 
-    def check_ext_payload( self, header, payload ):
-        status = header[ 'status' ]
-        mtype = header[ 'type' ]
-        if status not in [ 'request', 'success' ]:
-            raise ImplementationError( status, "Expected 'request' or 'success'")
-        self.get_ext( header ).check( status, mtype, payload )
-
-
-    def parse_ext_payload( self, header, payload_bytes ):
-        status = header[ 'status' ]
-        mtype = header[ 'type' ]
-        if status not in [ 'request', 'success' ]:
-            raise ImplementationError( status, "Expected 'request' or 'success'")
-        return  self.get_ext( header ).parse( status, mtype, payload_bytes )
-
-    def show_ext_payload( self, header, payload_bytes, prefix="", line_len=LINE_LEN):
-        status = header[ 'status' ]
-        mtype = header[ 'type' ]
-        if status not in [ 'request', 'success' ]:
-            raise ImplementationError( status, "Expected 'request' or 'success'")
-        return  self.get_ext( header ).show( status, mtype, payload_bytes, \
-                                            prefix=prefix, line_len=line_len )
+    def check_ext_payload(self, header, payload):
+        status = header['status']
+        mtype = header['type']
+        if status not in ['request', 'success']:
+            raise ImplementationError(status, "Expected 'request' or 'success'")
+        self.get_ext(header).check(status, mtype, payload)
 
 
-    def serve_ext_payload( self, header, request ):
-        mtype = header[ 'type' ]
-        return self.get_ext( header).serve( mtype, request )
+    def parse_ext_payload(self, header, payload_bytes):
+        status = header['status']
+        mtype = header['type']
+        if status not in ['request', 'success']:
+            raise ImplementationError(status, "Expected 'request' or 'success'")
+        return  self.get_ext(header).parse(status, mtype, payload_bytes)
+
+    def show_ext_payload(self, header, payload_bytes, prefix="", line_len=LINE_LEN):
+        status = header['status']
+        mtype = header['type']
+        if status not in ['request', 'success']:
+            raise ImplementationError(status, "Expected 'request' or 'success'")
+        return  self.get_ext(header).show(status, mtype, payload_bytes, \
+                                            prefix=prefix, line_len=line_len)
 
 
-    def build_payload( self, **kwargs ):
+    def serve_ext_payload(self, header, request):
+        mtype = header['type']
+        return self.get_ext(header).serve(mtype, request)
+
+
+    def build_payload(self, **kwargs):
         """ builds the lurk header. Missing arguments are replaced by
             default values. Additional keys may be:
                 payload_bytes: that describes the payload carried by the
                 lurk header. It is used to derive the length.
         """
         if 'designation' in kwargs.keys():
-            designation = kwargs[ 'designation' ]
+            designation = kwargs['designation']
         else:
             designation = "lurk"
         if 'version' in kwargs.keys():
-            version = kwargs[ 'version' ]
+            version = kwargs['version']
         else:
             version = "v1"
         if 'type' in kwargs.keys():
-            mtype = kwargs[ 'type' ]
-        else :
+            mtype = kwargs['type']
+        else:
             mtype = "ping"
         if 'status' in kwargs.keys():
-            status = kwargs[ 'status' ]
+            status = kwargs['status']
         else:
             status = "request"
         if 'id' in kwargs.keys():
-            hdr_id = kwargs[ 'id' ]
+            hdr_id = kwargs['id']
         else:
-            hdr_id = randbits( 8 * 8 )
+            hdr_id = randbits(8 * 8)
         if 'length' in kwargs.keys():
-            length = kwargs[ 'length' ]
+            length = kwargs['length']
         else:
             length = HEADER_LEN
-        header = { 'designation' : designation, 'version' : version, \
+        header = {'designation' : designation, 'version' : version, \
                    'type' : mtype, 'status' : status, 'id' : hdr_id, \
-                   'length' : length }
+                   'length' : length}
         if 'payload' in kwargs.keys():
-            payload = kwargs[ 'payload' ]
-            if status in [ 'request', 'success' ]:
-                payload_bytes = self.build_ext_payload( header, **payload )
-                payload = self.parse_ext_payload( header, payload_bytes )
+            payload = kwargs['payload']
+            if status in ['request', 'success']:
+                payload_bytes = self.build_ext_payload(header, **payload)
+                payload = self.parse_ext_payload(header, payload_bytes)
             else: ## if the message is an error message
-                payload_bytes = LURKErrorPayload.build( payload )
-                payload = LURKErrorPayload.parse( payload_bytes )
-            header[ 'length' ] += len ( payload_bytes )
-            return { **header, 'payload' : payload }
+                payload_bytes = LURKErrorPayload.build(payload)
+                payload = LURKErrorPayload.parse(payload_bytes)
+            header['length'] += len(payload_bytes)
+            return {**header, 'payload' : payload}
         else:
             if 'payload_bytes' in kwargs.keys():
-                payload_bytes = kwargs[ 'payload_bytes' ]
+                payload_bytes = kwargs['payload_bytes']
             else:
                 payload_bytes = b''
-            header[ 'length' ] += len( payload_bytes )
-            return { **header, 'payload_bytes' : payload_bytes }
+            header['length'] += len(payload_bytes)
+            return {**header, 'payload_bytes' : payload_bytes}
 
 
 
-    def build( self,  **kwargs ):
-        message = self.build_payload( **kwargs )
-        self.check( message )
-        header = self.get_header( message )
+    def build(self, **kwargs):
+        message = self.build_payload(**kwargs)
+        self.check(message)
+        header = self.get_header(message)
         if 'payload' in message.keys():
-            payload = message[ 'payload' ]
-            if header[ 'status' ] in [ "success", "request" ]:
-                payload_bytes = self.build_ext_payload( header, **payload )
+            payload = message['payload']
+            if header['status'] in ["success", "request"]:
+                payload_bytes = self.build_ext_payload(header, **payload)
             else: ## the payload is an error payload
-                payload_bytes = LURKErrorPayload.build( payload )
+                payload_bytes = LURKErrorPayload.build(payload)
         elif 'payload_bytes' in message.keys():
-            payload_bytes = message[ 'payload_bytes' ]
-        header[ 'length' ] = HEADER_LEN + len( payload_bytes )
-        return self.struct.build( header ) + payload_bytes
+            payload_bytes = message['payload_bytes']
+        header['length'] = HEADER_LEN + len(payload_bytes)
+        return self.struct.build(header) + payload_bytes
 
-    def check( self, message ):
-        header = [ 'designation', 'version','type', 'status', 'id', 'length' ]
-        try :
-            header.append( 'payload' )
-            self.conf.check_key( message, header )
-        except ( InvalidFormat ) :
-            header.remove( 'payload' )
-            header.append( 'payload_bytes' )
-            self.conf.check_key( message, header)
-        header = self.get_header( message )
+    def check(self, message):
+        header = ['designation', 'version', 'type', 'status', 'id', 'length']
+        try:
+            header.append('payload')
+            self.conf.check_key(message, header)
+        except InvalidFormat:
+            header.remove('payload')
+            header.append('payload_bytes')
+            self.conf.check_key(message, header)
+        header = self.get_header(message)
 
-        self.conf.check_extension( header[ 'designation' ], header[ 'version' ] )
-        self.conf.check_type( header[ 'designation' ], header[ 'version'], \
-                              header[ 'type' ] )
+        self.conf.check_extension(header['designation'], header['version'])
+        self.conf.check_type(header['designation'], header['version'], \
+                              header['type'])
         if 'payload' in message.keys():
-            payload = message[ 'payload' ]
-            if header[ 'status' ] in [ "success", "request" ]:
-                self.check_ext_payload( header, payload )
+            payload = message['payload']
+            if header['status'] in ["success", "request"]:
+                self.check_ext_payload(header, payload)
             else:
-                self.conf.check_error( payload )
+                self.conf.check_error(payload)
         elif 'payload_bytes' in message.keys():
-            payload = message[ 'payload_bytes' ]
-            if header[ 'status' ] in [ "success", "request" ]:
+            payload = message['payload_bytes']
+            if header['status'] in ["success", "request"]:
                 pass
             else:
-                self.conf.check_error_bytes( message[ 'payload_bytes' ] )
+                self.conf.check_error_bytes(message['payload_bytes'])
         else:
-            raise ImplementationError( message, \
+            raise ImplementationError(message, \
                       "Expecting 'payload or 'payload_bytes' key")
 
     def parse(self, pkt_bytes):
         """ parse the first packet, ignores remaining bytes. """
-        if len( pkt_bytes ) < HEADER_LEN:
-            raise InvalidFormat(len ( pkt_bytes ), \
+        if len(pkt_bytes) < HEADER_LEN:
+            raise InvalidFormat(len(pkt_bytes), \
                   "bytes packet length too short for LURK header. " +\
-                  "Expected length %s bytes"%HEADER_LEN  )
+                  "Expected length %s bytes"%HEADER_LEN)
         try:
-            header = self.struct.parse( pkt_bytes )
+            header = self.struct.parse(pkt_bytes)
         except Exception as e:
-            self.treat_exception( e )
-        payload_bytes = pkt_bytes[ HEADER_LEN : header[ 'length' ] ]
-        if header[ 'status' ] in [ "success", "request" ]:
-            payload = self.parse_ext_payload( header, payload_bytes )
+            self.treat_exception(e)
+        payload_bytes = pkt_bytes[HEADER_LEN : header['length']]
+        if header['status'] in ["success", "request"]:
+            payload = self.parse_ext_payload(header, payload_bytes)
         else: ## the payload is an error payload
-            payload = LURKErrorPayload.parse( payload_bytes )
-        message =  { **header, 'payload' : payload }
-        self.check( message )
+            payload = LURKErrorPayload.parse(payload_bytes)
+        message = {**header, 'payload' : payload}
+        self.check(message)
         return message
 
 
     def serve(self, request):
         try:
-            if request[ 'status' ] != "request":
-                raise InvalidStatus(request[ 'status' ], "Expected 'request'")
+            if request['status'] != "request":
+                raise InvalidStatus(request['status'], "Expected 'request'")
         except KeyError:
-            raise ImplementationError( request, "No key status" )
-        header = self.get_header( request )
-        try :
+            raise ImplementationError(request, "No key status")
+        header = self.get_header(request)
+        try:
             if 'payload_bytes' in request.keys():
-                req_payload = self.parse_ext_payload( header, request[ 'payload_bytes' ] )
+                req_payload = self.parse_ext_payload(header, request['payload_bytes'])
             elif 'payload' in request.keys():
-                 req_payload = request[ 'payload' ]
+                req_payload = request['payload']
             else:
-                raise ImplementationError( request, "Expected 'payload'" +\
-                                           "or 'payload_bytes' keys" )
-            resp_payload = self.serve_ext_payload( header, req_payload )
-            header[ 'status' ] = "success"
-            resp_bytes = self.build_ext_payload( header, **resp_payload )
-            header[ 'length' ] = HEADER_LEN + len( resp_bytes )
-            return { **header, 'payload' : resp_payload }
-        except Exception as e :
-            try :
-                resp_payload = { 'lurk_state' : self.conf.get_state( header ) }
-                resp_bytes = LURKErrorPayload.build( resp_payload )
-                header[ 'status' ] = e.status
-                header[ 'length' ] = HEADER_LEN + len( resp_bytes )
-                return { **header, 'payload' : resp_payload }
-            except Exception as e :
-                raise ImplementationError( e, "implementation Error")
+                raise ImplementationError(request, "Expected 'payload'" +\
+                                           "or 'payload_bytes' keys")
+            resp_payload = self.serve_ext_payload(header, req_payload)
+            header['status'] = "success"
+            resp_bytes = self.build_ext_payload(header, **resp_payload)
+            header['length'] = HEADER_LEN + len(resp_bytes)
+            return {**header, 'payload' : resp_payload}
+        except Exception as e:
+            try:
+                resp_payload = {'lurk_state' : self.conf.get_state(header)}
+                resp_bytes = LURKErrorPayload.build(resp_payload)
+                header['status'] = e.status
+                header['length'] = HEADER_LEN + len(resp_bytes)
+                return {**header, 'payload' : resp_payload}
+            except Exception as e:
+                raise ImplementationError(e, "implementation Error")
 
 
     def show(self, pkt_bytes, prefix="", line_len=LINE_LEN):
-        print( indent( "%s"%self.struct_name, prefix ) )
-        if type ( pkt_bytes ) == dict:
-            self.check( pkt_bytes )
-            pkt_bytes = self.build( **pkt_bytes )
-        if len( pkt_bytes) < HEADER_LEN :
-            print("Not enough bytes, cannot parse LURK Header" )
-            print("Expecting %s, got %s"%( HEADER_LEN, len( pkt_bytes) ) )
-            print("pkt_bytes: %s"%pkt_bytes )
+        print(indent("%s"%self.struct_name, prefix))
+        if type(pkt_bytes) == dict:
+            self.check(pkt_bytes)
+            pkt_bytes = self.build(**pkt_bytes)
+        if len(pkt_bytes) < HEADER_LEN:
+            print("Not enough bytes, cannot parse LURK Header")
+            print("Expecting %s, got %s"%(HEADER_LEN, len(pkt_bytes)))
+            print("pkt_bytes: %s"%pkt_bytes)
         else:
-            print( indent( "%s"%self.struct.parse(pkt_bytes[:HEADER_LEN] ), \
-                       prefix ) )
-            header = self.struct.parse(pkt_bytes[ : HEADER_LEN ] )
-            if len( pkt_bytes ) >= header[ 'length' ]:
-                payload_bytes = pkt_bytes[ HEADER_LEN : header[ 'length'] ]
+            print(indent("%s"%self.struct.parse(pkt_bytes[:HEADER_LEN]), \
+                       prefix))
+            header = self.struct.parse(pkt_bytes[: HEADER_LEN])
+            if len(pkt_bytes) >= header['length']:
+                payload_bytes = pkt_bytes[HEADER_LEN : header['length']]
             else:
-                raise InvalidFormat( ( header, pkt_bytes ), \
-                          "pkt_bytes too short %s bytes"%len (pkt_bytes ) )
-            if header[ 'status' ] in [ "success", "request" ]:
+                raise InvalidFormat((header, pkt_bytes), \
+                          "pkt_bytes too short %s bytes"%len(pkt_bytes))
+            if header['status'] in ["success", "request"]:
 
-                self.show_ext_payload( header, payload_bytes, \
+                self.show_ext_payload(header, payload_bytes, \
                                prefix=prefix, line_len=line_len)
             else: ## the payload is an error payload
-                LURKErrorPayload.parse( payload_bytes )
+                LURKErrorPayload.parse(payload_bytes)
 
 
 class LurkServer():
 
     def __init__(self, conf=deepcopy(default_conf)):
         self.init_conf(conf)
-        self.conf = LurkConf( conf )
-        self.conf.set_role( 'server' )
-        self.message = LurkMessage( conf=self.conf.conf )
+        self.conf = LurkConf(conf)
+        self.conf.set_role('server')
+        self.message = LurkMessage(conf=self.conf.conf)
 
-    def init_conf( self, conf ):
+    def init_conf(self, conf):
         """ Provides minor changes to conf so the default conf can be used
 
         Args:
@@ -812,7 +817,7 @@ class LurkServer():
         Returns:
             conf (dict): the updated conf dictionary
         """
-        conf[ 'role' ] = 'server'
+        conf['role'] = 'server'
         return conf
 
 
@@ -821,12 +826,12 @@ class LurkServer():
         associated to the errors encountered by reading the payload part.
         """
         response_bytes = b''
-        while len( pkt_bytes ) >= HEADER_LEN :
+        while len(pkt_bytes) >= HEADER_LEN:
             try:
-                request = self.message.parse( pkt_bytes )
-                response = self.message.serve ( request )
-                response_bytes += self.message.build( **response )
-                pkt_bytes = pkt_bytes[ request['length' ] : ]
+                request = self.message.parse(pkt_bytes)
+                response = self.message.serve(request)
+                response_bytes += self.message.build(**response)
+                pkt_bytes = pkt_bytes[request['length'] :]
             except:
                 ## stop when an error is encountered
                 return response_bytes
@@ -850,7 +855,7 @@ class LurkBaseClient:
                                data="accept")
 
 
-    def init_conf( self, conf ):
+    def init_conf(self, conf):
         """ Provides minor changes to conf so the default conf can be used
 
         Args:
@@ -862,6 +867,10 @@ class LurkBaseClient:
         """
         self.conf.set_role('client')
         self.conf_check_conf()
+
+    def conf_check(self):
+        """ Checks configuration
+        """
 
     def unpack_bytes(self, bytes_pkt):
         """splits concatenation of lurk message
@@ -876,13 +885,13 @@ class LurkBaseClient:
 
         Returns:
             pkt_bytes_dict (dict): a dictionary of every subpackets
-                indexed with their id { pkt['id']: pkt }
+                indexed with their id {pkt['id']: pkt}
         """
         bytes_pkt_dict = {}
         while len(bytes_pkt) != 0:
             header = LURKHeader.parse(bytes_pkt)
-            bytes_nbr =  HEADER_LEN + header['length']
-            bytes_pkt_dict[ header['id'] ] = bytes_pkt[: bytes_nbr ]
+            bytes_nbr = HEADER_LEN + header['length']
+            bytes_pkt_dict[header['id']] = bytes_pkt[: bytes_nbr]
             bytes_pkt = bytes_pkt[bytes_nbr :]
         return bytes_pkt_dict
 
@@ -893,7 +902,7 @@ class LurkBaseClient:
         elif self.connection_type in ['udp', 'udp+dtls']:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setblocking(False)
-        if self.connection_type in ['tcp+tls', 'https'] :
+        if self.connection_type in ['tcp+tls', 'https']:
             context = self.conf.get_tls_context()
             self.sock = context.wrap_socket(self.sock, server_side=False,\
                             do_handshake_on_connect=False,\
@@ -917,8 +926,8 @@ class LurkBaseClient:
                 raise ImplementationError(attempt_nbr, "TCP connection" +\
                       "attempts exceeds MAX_ATTEMPTS " +\
                       "= %s"%MAX_ATTEMPTS +\
-                      "TCP session not established" )
-        if self.connection_type == 'tcp+tls' :
+                      "TCP session not established")
+        if self.connection_type == 'tcp+tls':
             attempt_nbr = 0
             error_nbr = -1
             while attempt_nbr <= MAX_ATTEMPTS:
@@ -937,7 +946,7 @@ class LurkBaseClient:
                     raise ImplementationError(attempt_nbr, "TLS Handshake" +\
                           "attempts exceeds MAX_ATTEMPTS " +\
                           "= %s"%MAX_ATTEMPTS +\
-                          "TLS session not established" )
+                          "TLS session not established")
 
     def closing(self):
         """ Closing the connection
@@ -964,8 +973,8 @@ class LurkBaseClient:
         bytes_requests = b''
         for input_request in request_list:
             print(" --- resolve : input_request: %s"%input_request)
-            request = self.message.build_payload( **input_request )
-            bytes_requests += self.message.build( **request )
+            request = self.message.build_payload(**input_request)
+            bytes_requests += self.message.build(**request)
         bytes_resolutions, bytes_errors = self.bytes_resolve(bytes_requests)
         resolutions_list = []
         for resol in bytes_resolutions:
@@ -1025,8 +1034,8 @@ class LurkBaseClient:
         try:
             header_response = LURKHeader.parse(bytes_response)
             header_request = LURKHeader.parse(bytes_requests_dict[\
-                                 header_response['id'] ])
-            for key in [ 'designation', 'version', 'type' ]:
+                                 header_response['id']])
+            for key in ['designation', 'version', 'type']:
                 if header_request[key] != header_response[key]:
                     return False
             if header_response['status'] == 'request':
@@ -1066,7 +1075,7 @@ class LurkUDPClient(LurkBaseClient):
         Args:
             bytes_Requests_dict (dict): the dictionary that associated
                 to the id the byte representation of the request (bytes_request)
-                { id : bytes_request }
+                {id : bytes_request}
         Returns:
             bytes_response (bytes): the corresponding bytes_responses.
                 When bytes_requests is composed of multiple bytes_request
@@ -1084,9 +1093,9 @@ class LurkUDPClient(LurkBaseClient):
         ## make sure, there is a correct number of bytes
         while len(bytes_pkt) >= HEADER_LEN:
             try:
-                bytes_nbr =  HEADER_LEN + LURKHeader.parse(bytes_pkt)['length']
-                bytes_response = bytes_pkt[: bytes_nbr ]
-                if self.is_response(bytes_response, bytes_requests_dict) == False:
+                bytes_nbr = HEADER_LEN + LURKHeader.parse(bytes_pkt)['length']
+                bytes_response = bytes_pkt[: bytes_nbr]
+                if self.is_response(bytes_response, bytes_requests_dict) is False:
                     continue
                 bytes_responses += bytes_response
                 bytes_pkt = bytes_pkt[bytes_nbr :]
@@ -1103,7 +1112,7 @@ When inheriting from ThreadingMixIn for threaded connection behavior, you should
 """
 class BaseUDPServer(UDPServer):
 
-    def __init__(self, lurk_conf, RequestHandlerClass ):
+    def __init__(self, lurk_conf, RequestHandlerClass):
         self.conf = LurkConf(deepcopy(lurk_conf))
         self.lurk = LurkServer(self.conf.get_conf())
         self.server_address = self.conf.get_server_address()
@@ -1143,10 +1152,10 @@ class UDPHandle(BaseRequestHandler):
 class LurkUDPServer:
 
     def __init__(self, conf=deepcopy(default_conf), thread=True):
-        if thread == False:
-           self.server = BaseUDPServer(conf, UDPHandle )
+        if thread is False:
+            self.server = BaseUDPServer(conf, UDPHandle)
         else:
-           self.server = ThreadedUDPServer(conf, UDPHandle)
+            self.server = ThreadedUDPServer(conf, UDPHandle)
         self.server.serve_forever()
 
 class PoolMixIn(ThreadingMixIn):
@@ -1225,7 +1234,7 @@ class BaseTCPServer(TCPServer):
 
         This function listen to events on the listening socket
         (self.socket) as well as other sockets associated to accepted
-        communications ( sock = self.sock.accept()).
+        communications (sock = self.sock.accept()).
 
         The main difference with the original function is the original
         function only listened to events on the main socket (self.socket).
@@ -1305,7 +1314,7 @@ class BaseTCPServer(TCPServer):
         if selector_key.data == "accept":
             request, client_address = self.socket.accept()
             request.setblocking(False)
-            if self.connection_type == 'tcp+tls' :
+            if self.connection_type == 'tcp+tls':
                 context = self.conf.get_tls_context()
                 request = context.wrap_socket(request, server_side=True,\
                                               do_handshake_on_connect=False)
@@ -1349,7 +1358,7 @@ class TCPHandle(BaseRequestHandler):
             self.server.fd_busy[self.request.fileno()]
             return
         except KeyError:
-            self.server.fd_busy[self.request.fileno()]  = time()
+            self.server.fd_busy[self.request.fileno()] = time()
 
         try:
             bytes_recv = self.request.recv(HEADER_LEN)
@@ -1357,31 +1366,25 @@ class TCPHandle(BaseRequestHandler):
             del self.server.fd_busy[self.request.fileno()]
             return
 
-        print("--- Receiving Header (len : %s)bytes_recv: %s"%(len(bytes_recv), binascii.hexlify(bytes_recv)))
-        print("--- request: %s"%str(self.request))
         header = LURKHeader.parse(bytes_recv)
-        print(" --- header: %s"%header)
-        bytes_nbr = header[ 'length' ]
+        bytes_nbr = header['length']
 
         while len(bytes_recv) < bytes_nbr:
             try:
                 bytes_recv += self.request.recv(min(bytes_nbr - len(bytes_recv), 1024))
             except ssl.SSLError as err:
-                       if err.args[0] == ssl.SSL_ERROR_WANT_READ:
-                           select([self.request], [], [])
-                       elif err.args[0] == ssl.SSL_ERROR_WANT_WRITE:
-                           select([self.request], [], [])
-                       else:
-                           raise
+                if err.args[0] == ssl.SSL_ERROR_WANT_READ:
+                    select([self.request], [], [])
+                elif err.args[0] == ssl.SSL_ERROR_WANT_WRITE:
+                    select([self.request], [], [])
+                else:
+                    raise
             except BlockingIOError:
-                select([self.request],[], [], 5)
-        print("--- Receiving bytes_recv: %s"%binascii.hexlify(bytes_recv))
-        print("--- Responding :%s"%binascii.hexlify(self.server.byte_serve(bytes_recv)))
+                select([self.request], [], [], 5)
         attempt_nbr = 0
         while attempt_nbr <= MAX_ATTEMPTS:
             try:
                 self.request.sendall(self.server.byte_serve(bytes_recv))
-                print("--- Response SENT")
                 break
             except ssl.SSLError as err:
                 if err.args[0] == ssl.SSL_ERROR_WANT_WRITE:
@@ -1395,20 +1398,18 @@ class TCPHandle(BaseRequestHandler):
                 raise ImplementationError(attempt_nbr, "Reading Header" +\
                       "attempts exceeds MAX_ATTEMPTS " +\
                       "= %s"%MAX_ATTEMPTS +\
-                      "Lurk Header not read" )
-        print("{} data:".format(threading.current_thread().name))
+                      "Lurk Header not read")
         del self.server.fd_busy[self.request.fileno()]
         return
 
 class LurkTCPServer:
 
     def __init__(self, conf=deepcopy(default_conf), thread=True):
-        if thread == False:
-           self.server = BaseTCPServer(conf, TCPHandle )
+        if thread is False:
+            self.server = BaseTCPServer(conf, TCPHandle)
         else:
-           self.server = ThreadedTCPServer(conf, TCPHandle)
+            self.server = ThreadedTCPServer(conf, TCPHandle)
         self.server.serve_forever()
-
 
 
 class LurkTCPClient(LurkBaseClient):
@@ -1419,7 +1420,7 @@ class LurkTCPClient(LurkBaseClient):
         Args:
             bytes_Requests_dict (dict): the dictionary that associated
                 to the id the byte representation of the request (bytes_request)
-                { id : bytes_request }
+                {id : bytes_request}
         Returns:
             bytes_response (bytes): the corresponding bytes_responses.
                 When bytes_requests is composed of multiple bytes_request
@@ -1431,26 +1432,21 @@ class LurkTCPClient(LurkBaseClient):
         else:
             response_nbr = len(bytes_requests_dict.keys())
         while response_nbr > 0:
-           bytes_response = self.bytes_receive_single_response()
-           if self.is_response(bytes_response, bytes_requests_dict) == False:
-               continue
-           bytes_responses += bytes_response
-           response_nbr -= 1
-
+            bytes_response = self.bytes_receive_single_response()
+            if self.is_response(bytes_response, bytes_requests_dict) is False:
+                continue
+            bytes_responses += bytes_response
+            response_nbr -= 1
         return bytes_responses
 
     def bytes_receive_single_response(self):
-        print("bytes_receive_single_response")
         bytes_recv = b''
-        while len(bytes_recv) < HEADER_LEN :
+        while len(bytes_recv) < HEADER_LEN:
             rlist, wlist, xlist = select([self.sock], [], [])
-            print("--rlist: %s, xlist: %s"%(rlist, xlist))
             if len(rlist) > 0:
                 bytes_recv = self.sock.recv(HEADER_LEN)
-        print("bytes_recv (header): %s"%binascii.hexlify(bytes_recv))
-        print("len(bytes_recv): %s, %s"%(len(bytes_recv), HEADER_LEN))
         header = LURKHeader.parse(bytes_recv)
-        bytes_nbr = header[ 'length' ]
+        bytes_nbr = header['length']
 
         bytes_recv += self.sock.recv(min(bytes_nbr - len(bytes_recv), 4096))
         return bytes_recv
@@ -1459,10 +1455,10 @@ class LurkTCPClient(LurkBaseClient):
 class LurkHTTPServer:
 
     def __init__(self, conf=deepcopy(default_conf), thread=True):
-        if thread == False:
-           self.server = BaseHTTPServer(conf, HTTPHandle)
+        if thread is False:
+            self.server = BaseHTTPServer(conf, HTTPHandle)
         else:
-           self.server = ThreadedHTTPServer(conf, HTTPHandle)
+            self.server = ThreadedHTTPServer(conf, HTTPHandle)
         self.server.serve_forever()
 
 
@@ -1477,7 +1473,7 @@ class  BaseHTTPServer(HTTPServer):
         self.connection_type = self.conf.get_connection_type()
         super().__init__(self.server_address, RequestHandlerClass)
         self.allow_reuse_address = True
-        HTTPServer.__init__(self,self.server_address, RequestHandlerClass)
+        HTTPServer.__init__(self, self.server_address, RequestHandlerClass)
 
         if self.connection_type == 'https':
             context = self.conf.get_tls_context()
@@ -1487,7 +1483,7 @@ class  BaseHTTPServer(HTTPServer):
 class ThreadedHTTPServer(ThreadingMixIn, BaseHTTPServer):
     pass
 
-class HTTPHandle (BaseHTTPRequestHandler):
+class HTTPHandle(BaseHTTPRequestHandler):
     '''
     This class handles HTTP GET and HTTP POST requests
     '''
@@ -1516,12 +1512,9 @@ class HTTPHandle (BaseHTTPRequestHandler):
        # send response
         self.send_response(200)
         self.end_headers()
-        print("generating data")
         self.server.lurk.byte_serve(data)
-        print("sending response: %s"%self.server.lurk.byte_serve(data))
         #send the response bytes to the client
         self.wfile.write(self.server.lurk.byte_serve(data))
-        print("{}".format(threading.current_thread().name))
 
 
 class LurkHTTPClient(LurkTCPClient):
@@ -1549,9 +1542,8 @@ class LurkHTTPClient(LurkTCPClient):
         """
         url = self.connection_type + '://' + str(self.server_address[0]) + \
                                      ':' + str(self.server_address[1])
-        req = urllib.request.Request(url, bytes_request , method='POST')
+        req = urllib.request.Request(url, bytes_request, method='POST')
 
-        print("sending: bytes_Request: %s"%binascii.hexlify(bytes_request))
         if self.connection_type == 'https':
             tls_context = self.conf.get_tls_context()
         else:
@@ -1559,15 +1551,10 @@ class LurkHTTPClient(LurkTCPClient):
 
         resp = urllib.request.urlopen(req, context=tls_context)
         self.pending_resp.append(resp)
-        print("resp: %s"%resp)
-        print("bytes_request sent (%s): %s"%(len(bytes_request), \
-                                             binascii.hexlify(bytes_request)))
 
     def  bytes_receive(self, bytes_requests_dict=None):
-        print("bytes_receive: self.pending_request : %s"%self.pending_resp)
         for resp_index in range(len(self.pending_resp)):
             resp = self.pending_resp[resp_index]
             response_bytes = b''
-            print("receiving: %s"%binascii.hexlify(response_bytes))
             response_bytes = response_bytes + resp.read(4096)
         return response_bytes
