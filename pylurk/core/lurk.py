@@ -508,6 +508,7 @@ class Payload:
             format """
         payload = self.build_payload(**kwargs)
         self.check(payload)
+        print("core/build: %s"%payload)
         return self.struct.build(payload)
 
     def parse(self, pkt_bytes):

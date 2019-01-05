@@ -425,7 +425,6 @@ ServerECDHParams = Struct(
 
 
 TLS12ECDHERequestPayload = Struct(
-#    Embedded(TLS12Base),
     "key_id" / KeyPairID , 
     "freshness_funct" / FreshnessFunct,
     "client_random" / Random,
@@ -436,7 +435,7 @@ TLS12ECDHERequestPayload = Struct(
         "poo_prf" / Default( POOPRF, "null" ),
         "rG" / IfThenElse( this.poo_prf == 'null', 
              Pass, 
-             Switch( this.ecdhe_params.curve_param.curve, 
+             Switch(this._.ecdhe_params.curve_param.curve, 
                 {
                 "secp256r1" : UncompressedPointRepresentation_256, 
                 "secp384r1" : UncompressedPointRepresentation_384,
@@ -445,7 +444,7 @@ TLS12ECDHERequestPayload = Struct(
                }) ), 
         "tG" / IfThenElse( this.poo_prf == 'null',
               Pass, 
-              Switch( this.ecdhe_params.curve_param.curve, 
+              Switch(this._.ecdhe_params.curve_param.curve, 
                   {
                   "secp256r1" : UncompressedPointRepresentation_256, 
                   "secp384r1" : UncompressedPointRepresentation_384,

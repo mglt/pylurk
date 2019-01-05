@@ -1,23 +1,56 @@
 import sys
 import os
+import signal
+import binascii
+import multiprocessing as mp
+import pkg_resources
+data_dir = pkg_resources.resource_filename(__name__, '../data/')
+
 ##sys.path.append(os.path.abspath("../"))
 
 from os.path import isfile
-from pylurk.core.lurk import *
+from copy import deepcopy
+from time import sleep
 from Cryptodome.PublicKey import RSA, DSA, ECC
 from Cryptodome.Hash import HMAC, SHA256, SHA512
 from Cryptodome.Signature import pkcs1_15, DSS
 from Cryptodome.Cipher import PKCS1_v1_5
+from fabric import Connection
 
 
-import binascii
-
+#from pylurk.core.lurk import *
+from pylurk.core.conf import default_conf
+from pylurk.core.lurk import LurkConf, ConfError, ImplementationError, \
+                             LurkMessage, LurkServer, \
+                             LurkUDPClient, LurkUDPServer, \
+                             LurkTCPClient, LurkTCPServer, \
+                             LurkHTTPClient, LurkHTTPServer
+from pylurk.extensions.tls12 import Tls12EcdheConf
 
 ## client server high level testing
 
 
 def check_request_response( request, response, designation, \
                             version, mtype ):
+    """Checks request/response match expected exchange
+
+    Checks if the request and response match a given type of exchange
+    defined by (designation, type, version). In addition, response is 
+    checks against the request.
+
+    Args:
+        request (dict): the request expressed as a dictionary
+        response (dict): the response expressed as a dictionary
+        designation (str): the extension of the exchange. Typical values
+            may be 'lurk' or 'tls12'
+        version (int): the version of the designation
+        mtype (str): the type of request within the extension
+            (designation, version)
+
+    Raises:
+        ImplementationError when an unexpected value is found.
+    
+    """
     if request[ 'designation' ] != designation : 
         raise ImplementationError( request, \
             "Expected designation : %s."%designation )
@@ -53,7 +86,24 @@ def check_request_response( request, response, designation, \
 
 def message_exchange( designation, version, mtype,  \
                  payload={} ):
-    """ generates an prints a valid query / response using LurkMessage  """
+    """ generates an prints a valid query / response using LurkMessage  
+
+    This function is useful to test the development of a Lurk Extension. 
+    By using the LurkMessage, there is no client / server communication using 
+    transport layer such as tcp, udp nor the handling of such communication 
+    protocols. 
+
+    Args:
+        designation (str): the extension of the exchange. Typical values
+            may be 'lurk' or 'tls12'
+        version (int): the version of the designation
+        mtype (str): the type of request within the extension
+            (designation, version)
+        payload (dict): the dictionary that represent the Lurk payload
+            parameters. These parameters do not include the parameters of the 
+            Lurk Header. 
+        
+    """
     print("\n-- testing: desig.: %s, vers.: %s "%(designation, version) +\
           "mtype: %s"%(mtype))
     print( ">> Request")
@@ -78,7 +128,27 @@ def message_exchange( designation, version, mtype,  \
 
 def resolve_exchange( client, designation, version, mtype,  \
                  payload={}, silent=False ):
-    """ generates an prints a valid query / response using resolve  """
+    """ generates an prints a valid query / response using resolve  
+
+    This function tests a request/response exchange performed by a Lurk
+    Client and a Lurk Server.
+
+    Args:
+        client (obj): instance of a Client object. The object needs to
+            have a resolve function.  
+        designation (str): the extension of the exchange. Typical values
+            may be 'lurk' or 'tls12'
+        version (int): the version of the designation
+        mtype (str): the type of request within the extension
+            (designation, version)
+        payload (dict): the dictionary that represent the Lurk payload
+            parameters. These parameters do not include the parameters of the 
+            Lurk Header. 
+        silent (bool): indicates if request/response needs to be
+            displayed or not. By default, silent is set to False and request /
+            responses are displayed. 
+
+    """
     print("-- testing: desig.: %s, vers.: %s "%(designation, version) +
           "mtype: %s"%(mtype))
     resolutions, errors = client.resolve( [{'designation' : designation, \
@@ -87,9 +157,12 @@ def resolve_exchange( client, designation, version, mtype,  \
     print("resolutions: %s"%resolutions)
     print("errors: %s"%errors)
 
-    request = resolutions[0][0]
-    response = resolutions[0][1]
-        
+    try:
+        request = resolutions[0][0]
+        response = resolutions[0][1]
+    except IndexError:
+        raise ImplementationError(resolutions, "No response received")   
+
     if silent == False:
         msg = LurkMessage()
         print( ">> Request")
@@ -100,6 +173,232 @@ def resolve_exchange( client, designation, version, mtype,  \
 
     check_request_response( request, response, designation, \
                             version, mtype )
+
+def set_title(title):
+    """ print title in a square box
+
+    To enhance the readability of the tests, this function prints in the
+    terminal teh string title in a square box.
+
+    Args:
+        title (str): the string
+    """
+    space = "    "
+    title = space + title + space
+    h_line = '+'
+    for character in title:
+        h_line += '-'
+    h_line += '+\n'
+    return h_line + '|' + title + '|\n' + h_line + '\n\n'
+
+def set_lurk(role, **kwargs):
+    """ set lurk client or server
+
+    Set a LURK client or LURK server with specific connectivity
+    parameters.
+
+    Args:
+        connection_type (str): the type of connectivity. Acceptable values are 'udp',
+            'tcp', 'tcp+tls', 'http', 'https'. The default value is 'udp.
+        ip_address (str): the ip address of the LURK server. The default
+            value is 127.0.0.1.
+        port (int): the port value of the LURK server. Default value is 6789
+        background (bool): starts the LURK server in a daemon process
+            when set to True.
+        thread (bool): enables multithreading of the LURK server when
+            set to True.
+
+    """
+
+    try:
+        connection_type = kwargs['connection_type']
+    except KeyError:
+        connection_type = 'udp'
+    try:
+        ip_address = kwargs['ip_address']
+    except KeyError:
+        ip_address = '127.0.0.1'
+    try:
+        port = kwargs['port']
+    except KeyError:
+        port = 6789
+    try:
+        background = kwargs['background']
+    except KeyError:
+        background = True
+    try:
+        thread = kwargs['thread']
+    except KeyError:
+        thread = True
+
+    conf = LurkConf(deepcopy(default_conf))
+    conf.set_role(role)
+    conf.set_connectivity(type=connection_type, ip_address=ip_address, port=port)
+
+    role_list = ['client', 'server']
+    connection_type_list = ['udp', 'udp+dtls', 'tcp', 'tcp+tls', 'http', 'https']
+    if role not in role_list:
+        ConfError(role, "UNKNOWN. Expecting value in %s"%role_list)
+    if connection_type not in connection_type_list:
+        ConfError(connection_type, "UNKNOWN connection_type. Expecting value " +\
+                  "in %s"%connection_type_list)
+
+    if role == 'client':
+        print("Setting client %s"%connection_type)
+        if connection_type in ['udp', 'udp+dtls']:
+            client = LurkUDPClient(conf=conf.get_conf())
+        elif connection_type in ['tcp', 'tcp+tls']:
+            client = LurkTCPClient(conf=conf.get_conf())
+        elif connection_type in ['http', 'https']:
+            client = LurkHTTPClient(conf=conf.get_conf())
+        return client
+    elif role == 'server':
+        print("Setting server %s"%connection_type)
+        if connection_type in ['udp', 'udp+dtls']:
+            if background is True:
+                server = mp.Process(target=LurkUDPServer, args=(conf.get_conf(),),\
+                   kwargs={'thread' : thread}, name="%s server"%connection_type, daemon=True)
+            else: #background == False:
+                server = LurkUDPServer(conf.get_conf(), thread=thread)
+        elif connection_type in ['tcp', 'tcp+tls']:
+            if background is True:
+                server = mp.Process(target=LurkTCPServer, args=(conf.get_conf(),),\
+                   kwargs={'thread' : thread}, name="%s server"%connection_type, daemon=True)
+            else: # background == False:
+                server = LurkTCPServer(conf.get_conf(), thread=thread)
+        elif connection_type in ['http', 'https']:
+            if background is True:
+                server = mp.Process(target=LurkHTTPServer, args=(conf.get_conf(),),\
+                   kwargs={'thread' : thread}, name="%s server"%connection_type, daemon=True)
+            else: #background == False:
+                server = LurkHTTPServer(conf.get_conf(), thread=thread)
+        if background is True:
+            server.start()
+        return server
+
+def tls12_client_server_exchanges(connection_type, background=True, thread=True):
+    """ Testing basic exchanges between LURK client / Server
+
+    Tests basic exchanges with a basic LURK client / LURK server
+    configuration. It takes the default values for ip_address and port
+
+    Note that with ecdhe, the ecdhe_private key is generated outside th3
+    payload generation as the private key is needed to generates the
+    ecdhe_params as well as the poo (with prf_poo different from
+    'null'). Providing 'ecdhe_private' in the payload insures the same
+    key is used to generate ecdhe_params as well as the poo. If not
+    provided poo cannot be generated and an error is raised.   
+
+    Args:
+        connection_type (str): the connection_type of connectivity.
+            Acceptable values are 'udp','tcp', 'tcp+tls', 'http', 
+            'https'. The default value is 'udp.
+        background (bool): starts the LURK server in a daemon process
+            when set to True.
+        thread (bool): enables multithreading of the LURK server when
+            set to True.
+
+    """
+
+    print(set_title(connection_type.upper() + " LURK CLIENT / SERVER - MULTI-Threads TESTS" +\
+                 " - background: %s, thread: %s"%(background, thread)))
+    if background is True:
+        server = set_lurk('server', connection_type=connection_type,
+                          background=background, thread=thread)
+        sleep(3)
+    client = set_lurk('client', connection_type=connection_type)
+
+    designation = 'tls12'
+    version = 'v1'
+
+    for mtype in [\
+                  'rsa_master', 'rsa_master_with_poh',  \
+                  'rsa_extended_master', 'rsa_extended_master_with_poh', \
+                  'ecdhe', \
+                  'ping', 'capabilities']:
+        if mtype in ['ping', 'capabilities']:
+            resolve_exchange(client, designation, version, mtype,\
+                              payload={}, silent=True)
+        elif 'rsa' in mtype:
+            for freshness_funct in ["null", "sha256"]:
+                for prf_hash in [ "sha256", "sha384", "sha512" ]:
+                    print("---- %s, %s, %s"%(mtype, freshness_funct, prf_hash))
+                    resolve_exchange(client, designation, version, mtype,
+                        payload={'freshness_funct':freshness_funct,\
+                                 'prf_hash':prf_hash}, \
+                        silent=False)
+        elif mtype == 'ecdhe':
+           for ecdhe_curve in ['secp256r1', 'secp384r1', 'secp512r1' ]:
+                ecdhe_private = Tls12EcdheConf().default_ecdhe_private(\
+                                    ecdhe_curve=ecdhe_curve)
+                for freshness_funct in ["null", "sha256"]:
+                    for poo_prf in [ "null", "sha256_128", "sha256_256" ]:
+                        print("---- %s, %s, %s"%(mtype, freshness_funct, poo_prf))
+                        resolve_exchange(client, designation, version, mtype,
+                            payload={'freshness_funct':freshness_funct,\
+                                     'poo_prf':poo_prf, \
+                                     'echde_private':ecdhe_private}, \
+                            silent=False)
+
+##            print("---- %s, %s"%(mtype, freshness_funct))
+##            resolve_exchange(client, designation, version, mtype,
+##                             payload={'freshness_funct' :freshness_funct}, silent=False)
+    if background is True:
+        server.terminate()
+    client.closing()
+
+
+def str2bool(value):
+    """ Interpret output as Booleann value
+
+    Boolean value can be expressed through various ways. This function
+    get the inputs and deduce the corresponding boolean value.
+
+    Args:
+        value (str): input value that represent a boolean. Considered values
+            are: 'yes'/'no', 'y'/'n', 'true'/'false', 't'/'f', '1'/'0
+
+    Returns:
+        bool (bool): corresponding boolean value
+    """
+
+    if value.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    if value.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    raise argparse.ArgumentTypeError('Boolean value expected.')
+
+def set_ssh(remote_host, remote_user):
+    if remote_user is None or remote_host is None:
+        raise ImplementationError( kwargs, "remote_user expected")
+    return Connection(host=remote_host, user=remote_user)
+
+
+def start_server(connection_type=None, background=True, thread=True, \
+                 remote_host=None, remote_user=None):
+
+    if remote_host is None:
+        server = set_lurk('server', type=connection_type, background=background, \
+                 thread=thread )
+        print(server.pid)
+        return server.pid
+    remote_session = set_ssh(remote_host, remote_user)
+    remote_session.run("""python3 -m pylurk.utils.start_server --connection_type %s 
+                       --background True --thread %s"""%(connection_type, thread))
+    return remote_session.stdout
+
+def stop_server(server_pid, remote_host=None, remote_user=None):
+    print((server_pid, remote_host, remote_user))
+    if remote_host is None:
+        os.kill(server_pid, signal.SIGTERM)
+    if remote_user is None:
+        raise ImplementationError( kwargs, "remote_user expected")
+    remote_session = set_ssh(remote_host, remote_user)
+    remote_session.run("kill -15 %s"%server_pid)
+
+
+
+
 
 
 

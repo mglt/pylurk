@@ -6,6 +6,7 @@ from pylurk.extensions.lurk import LurkVoidPayload
 from time import time
 
 from secrets import randbits, token_bytes
+from math import ceil
 import tinyec.ec as ec
 import tinyec.registry as reg
 
@@ -1954,6 +1955,7 @@ class Tls12EcdheConf ( Tls12RsaMasterConf ):
                 validated. 
         """ 
         ec_point_keys = [ 'form', 'x', 'y' ]
+        print("ec_point : %s"%ec_point)
         self.check_key( ec_point, ec_point_keys )  
         if ec_point[ 'form' ] != "uncompressed" :
             raise InvalidECPointFormat( ec_point[ 'form' ], \
@@ -2185,15 +2187,23 @@ class Tls12EcdheConf ( Tls12RsaMasterConf ):
             ## generated 
             try : 
                c = self.compute_c( poo_prf, base, ecdhe_params )
-               r = randbits( k / 2 ) 
+               name_curve = ecdhe_params['curve_param']['curve']
+               k = self.get_ec_point_len( name_curve)
+               r = randbits(ceil(k/2)) 
+               print("ecdhe_private (%s): %s"%(type(ecdhe_private), ecdhe_private))
+               print("c (%s): %s"%(type(c), c))
+               b = ecdhe_private
                t = c * b + r
+               curve = reg.get_curve( name_curve )
                rG = r * curve.g
                tG = t * curve.g
                return { 'poo_prf' : poo_prf, \
-                        'rG' : { 'x' : rG.x, 'y' : rG.y }, 
-                        'tG' : { 'x' : tG.x, 'y' : tG.y } }
+                        'rG' : {'form': 'uncompressed', 'x' : rG.x, 'y' : rG.y }, 
+                        'tG' : {'form':'uncompressed', 'x' : tG.x, 'y' : tG.y } }
+
             except NameError:
-                raise InvalidPOO( kwargs, "cannot generate poo " +\
+                raise InvalidPOO( (poo_prf, base, ecdhe_params, ecdhe_private ),\
+                          "cannot generate poo " +\
                           "generating echde_params. Please either " +\
                           "provide both of them or none." )
         else:
@@ -2220,8 +2230,11 @@ class Tls12EcdheConf ( Tls12RsaMasterConf ):
             InvalidPOOPRF: when the ppo_prf is not recognized
         """
         
-        data = TLS12Base.build( base ) + \
-                ServerECDHParams.build( ecdhe_params ) + "tls12 poo"
+        data = KeyPairID.build(base['key_id']) +\
+               FreshnessFunct.build(base['freshness_funct']) +\
+               Random.build(base['client_random']) +\
+               Random.build(base['server_random']) +\
+               ServerECDHParams.build( ecdhe_params ) + str.encode("tls12 poo")
         c = SHA256.new( data=data ).digest()
         if poo_prf == "sha256_128":
             c = c[ : 128 ]
@@ -2230,7 +2243,7 @@ class Tls12EcdheConf ( Tls12RsaMasterConf ):
         else:
             raise InvalidPOOPRF( poo_prf, "supported poo_prf are" +
                                             "null, sha256_128, sha256_256" )
-
+        return int.from_bytes(c, byteorder='big')
 
 class Tls12EcdheRequestPayload(Tls12Payload):
 
@@ -2321,17 +2334,24 @@ class Tls12EcdheResponsePayload(Tls12Payload):
         if poo_prf == 'null':
             pass
         else:
-            ecdhe_params = request[ 'echde_params' ]
-            name_curve = ecdhe_params[ 'curve_params' ][ 'curve' ]
+            ecdhe_params = request[ 'ecdhe_params' ]
+            name_curve = ecdhe_params[ 'curve_param' ][ 'curve' ]
             curve = reg.get_curve( name_curve )
             public_key = ecdhe_params[ 'public' ]
             bG = ec.Point( curve, public_key[ 'x'],  public_key[ 'y' ] )
-            rG = ec.Point( curve, request[ 'rG' ][ 'x' ], request[ 'rG'][ 'y' ] )
-            rG = ec.Point( curve, request[ 'rG' ][ 'x' ], request[ 'rG'][ 'y' ] )
-            base = self.conf.extract_base( request )
+            poo_params = request['poo_params']
+            rG = ec.Point( curve, poo_params['rG']['x'], poo_params['rG']['y'] )
+            tG = ec.Point( curve, poo_params['tG']['x'], poo_params['tG']['y'] )
+##            base = self.conf.extract_base( request )
+            base = { 'key_id' : request['key_id'] ,\
+                     'freshness_funct' : request['freshness_funct'] ,\
+                     'client_random' : request['client_random'], \
+                     'server_random' : request['server_random']}
             c = self.conf.compute_c( poo_prf, base, ecdhe_params )
-            if c.bG + rG != tG :
-                raise InvalidPOO( ( c.bG + rG, tG ), "Expected Equals" ) 
+            print("c*bG + rG: %s"%str(c * bG + rG))
+            print("tG: %s"%str(tG))
+            if c * bG + rG != tG :
+                raise InvalidPOO( ( c * bG + rG, tG ), "Expected Equals" ) 
 
         server_random = self.conf.pfs( request[ 'server_random' ],\
                                        request['freshness_funct'] ) 
