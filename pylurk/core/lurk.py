@@ -508,7 +508,6 @@ class Payload:
             format """
         payload = self.build_payload(**kwargs)
         self.check(payload)
-        print("core/build: %s"%payload)
         return self.struct.build(payload)
 
     def parse(self, pkt_bytes):
@@ -840,7 +839,7 @@ class LurkServer():
 
 
 
-MAX_ATTEMPTS = 3
+MAX_ATTEMPTS = 10
 
 class LurkBaseClient:
 
@@ -973,7 +972,7 @@ class LurkBaseClient:
         """
         bytes_requests = b''
         for input_request in request_list:
-            print(" --- resolve : input_request: %s"%input_request)
+##            print(" --- resolve : input_request: %s"%input_request)
             request = self.message.build_payload(**input_request)
             bytes_requests += self.message.build(**request)
         bytes_resolutions, bytes_errors = self.bytes_resolve(bytes_requests)
@@ -1008,9 +1007,7 @@ class LurkBaseClient:
         """
         self.bytes_send(bytes_request)
         bytes_requests_dict = self.unpack_bytes(bytes_request)
-        print("bytes_resolve : self.bytes_receive START")
         bytes_responses = self.bytes_receive(bytes_requests_dict)
-        print("bytes_resolve : self.bytes_receive DONE")
         bytes_responses_dict = self.unpack_bytes(bytes_responses)
         bytes_resolutions = []
         bytes_errors = []
@@ -1050,13 +1047,13 @@ class LurkBaseClient:
         """ sending bytes_pkt bytes
 
         """
-        print("bytes_send: self.sock: %s"%self.sock)
         rlist, wlist, xlist = select([], [self.sock], [])
         sent_status = self.sock.sendall(bytes_request)
-        if sent_status == None:
-            print("bytes_request sent (%s): %s"%(len(bytes_request), \
-                                             binascii.hexlify(bytes_request)))
-        else:
+##        if sent_status == None:
+##            print("bytes_request sent (%s): %s"%(len(bytes_request), \
+##                                             binascii.hexlify(bytes_request)))
+##        else:
+        if sent_status != None:
             print("Not all data (%s) has been sent: %s"(len(bytes_request), \
                                    binascii.hexlify(bytes_request)))
 
@@ -1197,12 +1194,10 @@ class BaseTCPServer(TCPServer):
         self.lurk = LurkServer(self.conf.get_conf())
         self.server_address = self.conf.get_server_address()
         self.connection_type = self.conf.get_connection_type()
-        print("server_address: %s"%str(self.server_address))
         super().__init__(self.server_address, RequestHandlerClass)
 #        if self.connection_type == 'tcp+tls':
 #            context = self.conf.get_tls_context()
 #            self.socket = context.wrap_socket(self.socket, server_side=True)
-        print("--- self.socket: %s"%self.socket)
         self.selector = selectors.DefaultSelector()
         self.selector.register(fileobj=self.socket, \
                                events=selectors.EVENT_READ, \
@@ -1256,7 +1251,7 @@ class BaseTCPServer(TCPServer):
                     if self._BaseServer__shutdown_request:
                         break
                     try:
-                        print("serve_forever: %s"%str(selector_key))
+                        ##print("serve_forever: %s"%str(selector_key))
                         self.fd_busy[selector_key.fileobj.fileno()]
                     except KeyError:
                         self._handle_request_noblock(selector_key, event)
