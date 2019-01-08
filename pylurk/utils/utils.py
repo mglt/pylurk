@@ -370,7 +370,7 @@ def str2bool(value):
 
 def set_ssh(remote_host, remote_user):
     if remote_user is None or remote_host is None:
-        raise ImplementationError( kwargs, "remote_user expected")
+        raise ImplementationError("", "remote_user expected")
     return Connection(host=remote_host, user=remote_user)
 
 
@@ -391,8 +391,9 @@ def stop_server(server_pid, remote_host=None, remote_user=None):
     print((server_pid, remote_host, remote_user))
     if remote_host is None:
         os.kill(server_pid, signal.SIGTERM)
-    if remote_user is None:
-        raise ImplementationError( kwargs, "remote_user expected")
+        return
+    elif remote_user is None:
+        raise ImplementationError( "", "remote_user expected")
     remote_session = set_ssh(remote_host, remote_user)
     remote_session.run("kill -15 %s"%server_pid)
 

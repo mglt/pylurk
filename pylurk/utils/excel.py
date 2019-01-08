@@ -5,7 +5,7 @@ def print_dict(dictionary, sheet, row_id, column_id):
     '''
     Method that recursively prints nested dictionaries in an excel sheet.
     IMPORTANT NOTE: this method can not be used by itself as it does not save the sheet. It is a helper function that is called within write_to_excel
-    :param dictionary: nested dictionary to print (tuples within the dictionary are supported)
+    :param dictionary: nested dictionary to print (tuples within the dictionary are supported, list of dictionaries within the dictionary is also supported)
     :param sheet: excel sheet object
     :param row_id: row where to start printing
     :param column_id: column where to start printing
@@ -22,9 +22,20 @@ def print_dict(dictionary, sheet, row_id, column_id):
             if isinstance(value, tuple):
                 v = "( "
                 for t in value:
-                    v +=t+", "
+                    v +=str(t)+", "
                 v +=" )"
                 sheet.cell(row=row_id, column=column_id + 1).value = v
+            elif isinstance(value, list):
+                v="["
+
+                for t in value:
+                    #if list of dictionaries
+                    if isinstance(t, dict):
+                        row_id = print_dict(t, sheet, row_id+1, column_id + 1)
+                    else:
+
+                        v+=str(t)+", "
+                        sheet.cell(row=row_id, column=column_id + 1).value = v
             else:
                 sheet.cell(row=row_id, column=column_id + 1).value = value
             row_id+=1
@@ -52,7 +63,6 @@ def write_to_excel ( excel_file, sheet_name, row_id, column_id, **kwargs):
     }
     :return: the row_id at which we can start writing in the specified sheet (leaves 1 empty row)
     '''
-
 
     #check if excel file exists and create it otherwise
     if (os.path.isfile(excel_file) == False):

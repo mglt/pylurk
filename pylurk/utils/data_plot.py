@@ -62,72 +62,73 @@ def boxplot (sheet_name, excel_file, graph_params, fig_path):
     :return:
     '''
 
-    # read the sheet containing the values that we want to plot
-    df = pd.read_excel(excel_file, sheet_name=sheet_name, engine=None)
+    try:
+        # read the sheet containing the values that we want to plot
+        df = pd.read_excel(excel_file, sheet_name=sheet_name, engine=None)
 
-    handlers= [] #boxes corresponding to legend list
-    legends =[] #legends list
-    ticks = [] #xticks positions
-    labels =[] #labels at the specified xticks
+        handlers= [] #boxes corresponding to legend list
+        legends =[] #legends list
+        ticks = [] #xticks positions
+        labels =[] #labels at the specified xticks
 
-    count =0
+        count =0
 
-    #postion at which the box should be drawn
-    pos=graph_params['start_position']
+        #postion at which the box should be drawn
+        pos=graph_params['start_position']
 
-    #specify that we want to perform several plots
-    fig, ax = plt.subplots()
+        #specify that we want to perform several plots
+        fig, ax = plt.subplots()
 
-    # loop over the different groups to plot
-    for group_info in graph_params['groups']:
+        # loop over the different groups to plot
+        for group_info in graph_params['groups']:
 
-        tick =pos
+            tick =pos
 
-        #loop over the data to plot in each group
-        for data_plot in group_info['data']:
-            #draw a box for each data
-            box = ax.boxplot(df[data_plot], positions=[pos], widths=graph_params['box_width'],
-                          patch_artist=True, boxprops=dict(facecolor=group_info['color'][count], hatch=group_info['hatch'][count]), medianprops=dict(color='black', linewidth=2) )
-            #add legends and handlers for each box, only if provided
-            try:
-               if group_info['legends'][count]!= None:
-                 legends.append(group_info['legends'][count])
-                 handlers.append(box["boxes"][0])
-            except:
-                pass
+            #loop over the data to plot in each group
+            for data_plot in group_info['data']:
+                #draw a box for each data
+                box = ax.boxplot(df[data_plot], positions=[pos], widths=graph_params['box_width'],
+                              patch_artist=True, boxprops=dict(facecolor=group_info['color'][count], hatch=group_info['hatch'][count]), medianprops=dict(color='black', linewidth=2) )
+                #add legends and handlers for each box, only if provided
+                try:
+                   if group_info['legends'][count]!= None:
+                     legends.append(group_info['legends'][count])
+                     handlers.append(box["boxes"][0])
+                except:
+                    pass
 
-            count +=1
-            #make sure that boxes in the same group are group together
-            pos = pos+graph_params['box_width']
+                count +=1
+                #make sure that boxes in the same group are group together
+                pos = pos+graph_params['box_width']
 
-        #set the label for each group in the middle of all the boxes of the group
-        tick = (2*tick+(len(group_info['data'])-1)*graph_params['box_width'])/2
-        ticks.append(tick)
-        labels.append(group_info['tick_label'])
+            #set the label for each group in the middle of all the boxes of the group
+            tick = (2*tick+(len(group_info['data'])-1)*graph_params['box_width'])/2
+            ticks.append(tick)
+            labels.append(group_info['tick_label'])
 
-        count = 0
-        #leave a space of 1 between the boxes of different groups
-        pos = pos+1
+            count = 0
+            #leave a space of 1 between the boxes of different groups
+            pos = pos+1
 
-    #add the legend and specify its location
-    ax.legend(handlers, legends, loc=graph_params['legend']['location'], prop=matplotlib.font_manager.FontProperties(**graph_params['legend']['font_properties']))
+        #add the legend and specify its location
+        ax.legend(handlers, legends, loc=graph_params['legend']['location'], prop=matplotlib.font_manager.FontProperties(**graph_params['legend']['font_properties']))
 
-    #show grid
-    plt.grid(b= graph_params['show_grid'], color='grey', linestyle='-', linewidth=0.25)
-    #set the length of xaxis
-    plt.xlim(0, pos+1)
-    #add a label for xaxis
-    plt.xlabel(graph_params['xlabel'],**graph_params['font_properties'])
-    #add label for yaxis
-    plt.ylabel(graph_params['ylabel'], **graph_params['font_properties'])
-    #add title for the figure
-    plt.title(graph_params['title'],**graph_params['font_properties'])
-    #set the labels on xaxis
-    plt.xticks(ticks=ticks, labels=labels,**graph_params['ticks_font_properties'])
-    # set font for yaxis ticks
-    plt.yticks(**graph_params['ticks_font_properties'])
-    #save the graph
-    plt.savefig(fig_path)
-
-
+        #show grid
+        plt.grid(b= graph_params['show_grid'], color='grey', linestyle='-', linewidth=0.25)
+        #set the length of xaxis
+        plt.xlim(0, pos+1)
+        #add a label for xaxis
+        plt.xlabel(graph_params['xlabel'],**graph_params['font_properties'])
+        #add label for yaxis
+        plt.ylabel(graph_params['ylabel'], **graph_params['font_properties'])
+        #add title for the figure
+        plt.title(graph_params['title'],**graph_params['font_properties'])
+        #set the labels on xaxis
+        plt.xticks(ticks=ticks, labels=labels,**graph_params['ticks_font_properties'])
+        # set font for yaxis ticks
+        plt.yticks(**graph_params['ticks_font_properties'])
+        #save the graph
+        plt.savefig(fig_path)
+    except FileNotFoundError:
+        print ("Excel File %s or graph  path %s is not found to read data and generate graph"%excel_file,fig_path )
 
