@@ -85,7 +85,7 @@ def check_request_response( request, response, designation, \
             "Expected matching id" )
 
 def message_exchange( designation, version, mtype,  \
-                 payload={} ):
+                 payload={}, silent=False ):
     """ generates an prints a valid query / response using LurkMessage  
 
     This function is useful to test the development of a Lurk Extension. 
@@ -108,12 +108,8 @@ def message_exchange( designation, version, mtype,  \
           "mtype: %s"%(mtype))
     print( ">> Request")
     msg = LurkMessage()
-    header = {}
-    header[ 'designation' ]  = designation
-    header[ 'version' ] = version
-    header[ 'type' ] = mtype
-    header[ 'status' ]  = "request"
-    print( " basic_exchange: header : %s"%header )
+    header = {'designation':designation, 'version': version, \
+              'type':mtype, 'status':"request" }
     request_bytes = msg.build( **header, payload=payload   ) 
     msg.show( request_bytes )
     request = msg.parse( request_bytes )
@@ -121,8 +117,10 @@ def message_exchange( designation, version, mtype,  \
     print("<< Response")
     response = msg.serve( request )
     response_bytes = msg.build( **response )
-    msg.show( response_bytes )
-    
+    msg.show( response_bytes)
+
+    if silent == False:
+        pass 
     check_request_response( request, response, designation, \
                             version, mtype )
 
@@ -274,7 +272,7 @@ def set_lurk(role, **kwargs):
             server.start()
         return server
 
-def tls12_test_ecdhe_payloads():
+def tls12_conf_ecdhe_payloads():
     """ returns payloads associated to various configuration parameters
 
     The returned payloads test all configuration parameters associated
@@ -302,7 +300,7 @@ def tls12_test_ecdhe_payloads():
                                      'sig_and_hash':sig_and_hash})
     return payloads
 
-def tls12_test_rsa_payloads():
+def tls12_conf_rsa_payloads():
     """ returns payloads associated to various configuration parameters
 
     The returned payloads test all configuration parameters associated
@@ -321,6 +319,42 @@ def tls12_test_rsa_payloads():
             payloads.append({'freshness_funct':freshness_funct,\
                              'prf_hash':prf_hash})
     return payloads
+
+
+def tls12_serve_payloads(silent=False):
+    """ Tests tls12 classes build and serve methods
+
+    """
+    from pylurk.extensions.tls12 import LurkExt
+    lurk_ext = LurkExt('server')
+    designation = 'tls12'
+    version = 'v1'
+    for mtype in [\
+                  'rsa_master', 'rsa_master_with_poh',  \
+                  'rsa_extended_master', 'rsa_extended_master_with_poh', \
+                  'ecdhe', \
+                  'ping', 'capabilities']:
+        print("-- %s, %s, %s "%(designation, version, mtype))
+        req = lurk_ext.ext_class[('request', mtype)]
+        resp = lurk_ext.ext_class[('success', mtype)]
+        try:
+
+            if mtype in ['ping', 'capabilities']:
+                payloads =[{}]
+            elif 'rsa' in mtype:
+                payloads = tls12_conf_ecdhe_payloads()
+            elif mtype == 'ecdhe':
+                payloads = tls12_conf_ecdhe_payloads()
+
+            for payload in payloads:
+                req_payload = req.build_payload(**payload)
+                if silent is False:
+                    req.show(req_payload)
+                res_payload = resp.serve(req_payload)
+                if silent is False:
+                    resp.show(res_payload)
+        except Exception as err:
+            raise ImplementationError((mtype, payload), err)
 
 
 def tls12_client_server_exchanges(connection_type, background=True, thread=True):
@@ -358,30 +392,30 @@ def tls12_client_server_exchanges(connection_type, background=True, thread=True)
     designation = 'tls12'
     version = 'v1'
 
-    for mtype in [\
-                  'rsa_master', 'rsa_master_with_poh',  \
-                  'rsa_extended_master', 'rsa_extended_master_with_poh', \
-                  'ecdhe', \
-                  'ping', 'capabilities']:
-        print("-- testing: desig.: %s, vers.: %s "%(designation, version) +
-          "mtype: %s"%(mtype))
-        if mtype in ['ping', 'capabilities']:
-            resolve_exchange(client, designation, version, mtype,\
-                              payload={}, silent=True)
-        elif 'rsa' in mtype:
-            rsa_payloads = tls12_test_ecdhe_payloads()
-            for payload in rsa_payloads:
-                resolve_exchange(client, designation, version, mtype,
-                        payload=payload, silent=True)
-        elif mtype == 'ecdhe':
-           ecdhe_payloads = tls12_test_ecdhe_payloads()
-           for payload in ecdhe_payloads:
-                resolve_exchange(client, designation, version, mtype,
-                                payload=payload, silent=True)
-    if background is True:
-        server.terminate()
-    client.closing()
+    try:
+        for mtype in [\
+                      'rsa_master', 'rsa_master_with_poh',  \
+                      'rsa_extended_master', 'rsa_extended_master_with_poh', \
+                      'ecdhe', \
+                      'ping', 'capabilities']:
+            print("-- %s, %s, %s "%(designation, version, mtype))
 
+            if mtype in ['ping', 'capabilities']:
+                payloads =[{}]
+            elif 'rsa' in mtype:
+                payloads = tls12_conf_ecdhe_payloads()
+            elif mtype == 'ecdhe':
+                payloads = tls12_conf_ecdhe_payloads()
+            for payload in payloads:
+                resolve_exchange(client, designation, version, mtype,\
+                                 payload=payload, silent=True)
+        if background is True:
+            server.terminate()
+        client.closing()
+    except Exception as err:
+        header = {'designation':designation, 'version': version, \
+                  'type':mtype, 'status':"request" }
+        raise ImplementationError((header, payload), err)
 
 def str2bool(value):
     """ Interpret output as Booleann value

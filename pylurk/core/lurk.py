@@ -1525,6 +1525,8 @@ class HTTPHandle(BaseHTTPRequestHandler):
         #send the response bytes to the client
         self.wfile.write(self.server.lurk.byte_serve(data))
 
+    def log_message(self, format, *args):
+        pass
 
 class LurkHTTPClient(LurkTCPClient):
 
