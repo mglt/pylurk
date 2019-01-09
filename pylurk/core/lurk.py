@@ -537,11 +537,24 @@ class Payload:
     def check(self, payload):
         pass
 
-    def show(self, pkt_bytes, prefix="", line_len=LINE_LEN):
+    def show(self, payload, prefix="", line_len=LINE_LEN):
         """ shows the pkt_bytes. Similar to parse but without any
             control of the configuration and uses the structure
-            visualization facilities. """
+            visualization facilities. 
+
+        Args:
+            payload (bytes or dict) represents the payload. The payload
+                format can be bytes or a dictionary
+            prefix (str): the begining of the printed line. It can be a
+                indentation with a number of white spaces or a specific mark
+            line_len (int): the maximum len for a line
+        """
         print(indent("%s"%self.struct_name, prefix))
+
+        if isinstance(payload, bytes):
+            pkt_bytes = payload
+        elif isinstance(payload, dict):
+            pkt_bytes = self.struct.build(payload)
         s = wrap("%s"%self.struct.parse(pkt_bytes), line_len=line_len)
         print(indent(s, prefix))
 

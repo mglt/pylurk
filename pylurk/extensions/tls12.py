@@ -1327,12 +1327,8 @@ class Tls12RsaMasterConf:
         try:
             # cipher_suite = handshake_messages[ 1 ][ 'body' ][ 'cipher_suite' ]
             ## bytes_handshake = HandshakeMessages.build( handshake_messages )
-##            print("---- handshake_messages: %s"%handshake_messages )
-##            print("---- master_secret: %s"%master_secret )
             c_finished = self.compute_finished( handshake_messages, \
                              master_secret )
-##            print("---- verify_data: %s"%verify_data )
-##            print("---- c_finished: %s"%c_finished )
             if finished[ 'verify_data' ] != c_finished:
                 raise InvalidFinished( finished, "computed finished: %s"%c_finished ) 
         except NameError:
@@ -1622,7 +1618,6 @@ class Tls12RsaMasterWithPoHRequestPayload(Tls12RsaMasterRequestPayload):
 
     def check( self, payload, crypto_check=False):
         keys = [ 'key_id', 'freshness_funct', 'handshake_messages', 'finished' ]
-##        print( "-- payload: %s"%payload)
         self.conf.check_key( payload, keys )
         self.conf.check_key_id( payload[ 'key_id' ] )
         self.conf.check_freshness_funct( payload[ 'freshness_funct' ] )
@@ -1706,7 +1701,6 @@ class Tls12ExtRsaMasterConf( Tls12RsaMasterConf ):
             master_secret (bin): the master secret.
         """
         server_hello = request[ 'handshake_messages' ][ 1 ][ 'body' ]
-##        print( "server_hello: %s"%server_hello )
         prf_hash = self.prf_hash_from_cipher( server_hello[ 'cipher_suite' ] )
         server_random = self.pfs( server_hello[ 'random' ], \
             request[ 'freshness_funct' ] )  
@@ -1737,7 +1731,6 @@ class Tls12ExtRsaMasterRequestPayload(Tls12RsaMasterRequestPayload):
 
     def check(self, payload ):
         keys = [ 'key_id', 'freshness_funct', 'handshake_messages' ]
-##        print( "--payload keys: %s"%list( payload.keys())  )
         self.conf.check_key( payload, keys )
         self.conf.check_key_id( payload[ 'key_id' ] )
         self.conf.check_freshness_funct( payload[ 'freshness_funct' ] )
@@ -1931,7 +1924,7 @@ class Tls12EcdheConf ( Tls12RsaMasterConf ):
             k = 256
         elif name_curve == 'secp384r1' :
             k = 384
-        elif name_curve == 'secp512r1' :
+        elif name_curve == 'secp521r1' :
             k = 512
         else: 
             raise InvalidECCurve( name_curve, 
@@ -1955,7 +1948,6 @@ class Tls12EcdheConf ( Tls12RsaMasterConf ):
                 validated. 
         """ 
         ec_point_keys = [ 'form', 'x', 'y' ]
-##        print("ec_point : %s"%ec_point)
         self.check_key( ec_point, ec_point_keys )  
         if ec_point[ 'form' ] != "uncompressed" :
             raise InvalidECPointFormat( ec_point[ 'form' ], \
@@ -2027,7 +2019,6 @@ class Tls12EcdheConf ( Tls12RsaMasterConf ):
         ## the current version includes always the rG / tG these keys
         ## are empty when associated with 'null'. future version should
         ## remove these fields completely. 
-##        print( "poo_param :%s"%poo_params )
         poo_keys = [ 'poo_prf', 'rG', 'tG' ]
         self.check_key( poo_params, poo_keys )
         poo_prf = poo_params[ 'poo_prf' ]
@@ -2042,16 +2033,6 @@ class Tls12EcdheConf ( Tls12RsaMasterConf ):
             tG = poo_params[ 'tG' ]
             for ec_point in [ rG, tG ]:
                 self.check_ec_point( ec_point, ec_len=ec_len)
-
-##    def get_pfs_prf_from_prf( self, prf ):
-##        if prf == "intrinsic_null":
-##            return 'null'
-##
-## elif prf == "intrinsic_sha256":
-##            return "sha256"
-##        else:
-##            raise InvalidFreshnessFunct( prf, 
-##                "Expected 'intrinsic_sha256' or 'intrinsic_null' for ECDSA" )
 
     def default_sig_and_hash( self, **kwargs ):
         """ Default value for sig_and_hash
@@ -2133,7 +2114,7 @@ class Tls12EcdheConf ( Tls12RsaMasterConf ):
             b = self.default_ecdhe_private( **kwargs )
             name_curve = self.default_ecdhe_curve( **kwargs )
             curve = reg.get_curve( name_curve )
-            client_public_key = curve.g * b
+            client_public_key = b * curve.g
             ec_params = { 'curve_type' : "name_curve", 'curve' : name_curve }
             ec_point = { 'form' : "uncompressed", \
                          'x' : client_public_key.x, \
@@ -2189,9 +2170,9 @@ class Tls12EcdheConf ( Tls12RsaMasterConf ):
                c = self.compute_c( poo_prf, base, ecdhe_params )
                name_curve = ecdhe_params['curve_param']['curve']
                k = self.get_ec_point_len( name_curve)
-               r = randbits(ceil(k/2)) 
-##               print("ecdhe_private (%s): %s"%(type(ecdhe_private), ecdhe_private))
-##               print("c (%s): %s"%(type(c), c))
+               r = randbits(ceil(k/2))
+               ##
+               ecdhe_public = ecdhe_params['public']
                b = ecdhe_private
                t = c * b + r
                curve = reg.get_curve( name_curve )
@@ -2278,7 +2259,6 @@ class Tls12EcdheRequestPayload(Tls12Payload):
             poo_prf = self.conf.default_poo_prf( **kwargs )
             poo_params = self.conf.build_poo_params( poo_prf, base, \
                                                     ecdhe_params, ecdhe_private )
-##            print("build_payload - poo_params: %s"%poo_params)
         return  { **base, \
             'sig_and_hash' : self.conf.default_sig_and_hash( **kwargs ), \
             'ecdhe_params' : ecdhe_params, \
@@ -2342,14 +2322,11 @@ class Tls12EcdheResponsePayload(Tls12Payload):
             poo_params = request['poo_params']
             rG = ec.Point( curve, poo_params['rG']['x'], poo_params['rG']['y'] )
             tG = ec.Point( curve, poo_params['tG']['x'], poo_params['tG']['y'] )
-##            base = self.conf.extract_base( request )
             base = { 'key_id' : request['key_id'] ,\
                      'freshness_funct' : request['freshness_funct'] ,\
                      'client_random' : request['client_random'], \
                      'server_random' : request['server_random']}
             c = self.conf.compute_c( poo_prf, base, ecdhe_params )
-##            print("c*bG + rG: %s"%str(c * bG + rG))
-##            print("tG: %s"%str(tG))
             if c * bG + rG != tG :
                 raise InvalidPOO( ( c * bG + rG, tG ), "Expected Equals" ) 
 

@@ -149,18 +149,16 @@ def resolve_exchange( client, designation, version, mtype,  \
             responses are displayed. 
 
     """
-    print("-- testing: desig.: %s, vers.: %s "%(designation, version) +
-          "mtype: %s"%(mtype))
     resolutions, errors = client.resolve( [{'designation' : designation, \
                           'version' : version,'status'  : "request", \
                           'type' : mtype, 'payload' : payload}] )
-    print("resolutions: %s"%resolutions)
-    print("errors: %s"%errors)
 
     try:
         request = resolutions[0][0]
         response = resolutions[0][1]
     except IndexError:
+        print("resolutions: %s"%resolutions)
+        print("errors: %s"%errors)
         raise ImplementationError(resolutions, "No response received")   
 
     if silent == False:
@@ -276,6 +274,55 @@ def set_lurk(role, **kwargs):
             server.start()
         return server
 
+def tls12_test_ecdhe_payloads():
+    """ returns payloads associated to various configuration parameters
+
+    The returned payloads test all configuration parameters associated
+    to ecdhe authentication.
+
+    Returns:
+        payloads (lst): list of payloads
+
+    Todo:
+        read parameters values from default_conf
+    """
+
+    payloads = []
+    for freshness_funct in ["null", "sha256"]:
+        for ecdhe_curve in ['secp256r1', 'secp384r1', 'secp521r1' ]:
+            ecdhe_private = Tls12EcdheConf().default_ecdhe_private(\
+                                        ecdhe_curve=ecdhe_curve)
+            for h, sig in [('sha256', 'rsa'), ('sha512', 'rsa'),\
+                                 ('sha256', 'ecdsa'), ('sha512', 'ecdsa')]:
+                sig_and_hash = {'sig':sig, 'hash':h}
+                for poo_prf in [ "null", "sha256_128", "sha256_256" ]:
+                    payloads.append({'freshness_funct':freshness_funct, \
+                                     'ecdhe_private':ecdhe_private,\
+                                     'poo_prf':poo_prf,\
+                                     'sig_and_hash':sig_and_hash})
+    return payloads
+
+def tls12_test_rsa_payloads():
+    """ returns payloads associated to various configuration parameters
+
+    The returned payloads test all configuration parameters associated
+    to rsa authentication methods.
+
+    Returns:
+        payloads (lst): list of payloads
+
+    Todo:
+        read parameters values from default_conf
+    """
+
+    payloads = []
+    for freshness_funct in ["null", "sha256"]:
+        for prf_hash in [ "sha256", "sha384", "sha512" ]:
+            payloads.append({'freshness_funct':freshness_funct,\
+                             'prf_hash':prf_hash})
+    return payloads
+
+
 def tls12_client_server_exchanges(connection_type, background=True, thread=True):
     """ Testing basic exchanges between LURK client / Server
 
@@ -316,33 +363,21 @@ def tls12_client_server_exchanges(connection_type, background=True, thread=True)
                   'rsa_extended_master', 'rsa_extended_master_with_poh', \
                   'ecdhe', \
                   'ping', 'capabilities']:
+        print("-- testing: desig.: %s, vers.: %s "%(designation, version) +
+          "mtype: %s"%(mtype))
         if mtype in ['ping', 'capabilities']:
             resolve_exchange(client, designation, version, mtype,\
                               payload={}, silent=True)
         elif 'rsa' in mtype:
-            for freshness_funct in ["null", "sha256"]:
-                for prf_hash in [ "sha256", "sha384", "sha512" ]:
-                    print("---- %s, %s, %s"%(mtype, freshness_funct, prf_hash))
-                    resolve_exchange(client, designation, version, mtype,
-                        payload={'freshness_funct':freshness_funct,\
-                                 'prf_hash':prf_hash}, \
-                        silent=False)
+            rsa_payloads = tls12_test_ecdhe_payloads()
+            for payload in rsa_payloads:
+                resolve_exchange(client, designation, version, mtype,
+                        payload=payload, silent=True)
         elif mtype == 'ecdhe':
-           for ecdhe_curve in ['secp256r1', 'secp384r1', 'secp512r1' ]:
-                ecdhe_private = Tls12EcdheConf().default_ecdhe_private(\
-                                    ecdhe_curve=ecdhe_curve)
-                for freshness_funct in ["null", "sha256"]:
-                    for poo_prf in [ "null", "sha256_128", "sha256_256" ]:
-                        print("---- %s, %s, %s"%(mtype, freshness_funct, poo_prf))
-                        resolve_exchange(client, designation, version, mtype,
-                            payload={'freshness_funct':freshness_funct,\
-                                     'poo_prf':poo_prf, \
-                                     'echde_private':ecdhe_private}, \
-                            silent=False)
-
-##            print("---- %s, %s"%(mtype, freshness_funct))
-##            resolve_exchange(client, designation, version, mtype,
-##                             payload={'freshness_funct' :freshness_funct}, silent=False)
+           ecdhe_payloads = tls12_test_ecdhe_payloads()
+           for payload in ecdhe_payloads:
+                resolve_exchange(client, designation, version, mtype,
+                                payload=payload, silent=True)
     if background is True:
         server.terminate()
     client.closing()

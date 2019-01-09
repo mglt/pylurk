@@ -127,13 +127,13 @@ default_conf = {
            ## acceptable ecdsa curves when 'ecdsa' is chosen in
            ## 'sig_andhahs'. This parameter must not be specified
            ## when 'rsa' is the only acceptable signature.  
-          'ecdsa_curves' : ['secp256r1', 'secp384r1', 'secp512r1' ], 
+          'ecdsa_curves' : ['secp256r1', 'secp384r1', 'secp521r1' ], 
            ## acceptable curves for ecdhe. This is used to check
            ## the provided ecdhe_params before signing those. It is
            ## only required for the server. Client only needs then
            ## when they generate the parameters and SHOULD be omitted
            ## in the configuration. 
-          'ecdhe_curves' : ['secp256r1', 'secp384r1', 'secp512r1' ],
+          'ecdhe_curves' : ['secp256r1', 'secp384r1', 'secp521r1' ],
            ## defines how proo-of ownership is generated.
           'poo_prf' : [ "null", "sha256_128", "sha256_256" ], 
           'cipher_suites' : [ 'TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256', \
