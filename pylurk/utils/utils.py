@@ -211,25 +211,16 @@ def set_lurk(role, **kwargs):
             set to True.
 
     """
-    conn_conf ={'type':'',
-                'ip_address':'',
-                'port':'',
-                'key':'',
-                'cert':'',
-                'key_peer':'',
-                'cert_peer':'',
-                }
+    conn_conf ={ }
     for k in ['type', 'ip_address', 'port', 'key', 'cert', \
               'key_peer', 'cert_peer']:
         try:
             conn_conf[k]=kwargs['connectivity_conf'][k]
         except KeyError:
             try:
-                print('h2h')
-                conn_conf[k]
+               conn_conf[k]
             except KeyError:
-                print('hh')
-                conn_conf[k] = default_conf['connectivity'][k]
+              conn_conf[k] = default_conf['connectivity'][k]
     try:
         background = kwargs['background']
 
