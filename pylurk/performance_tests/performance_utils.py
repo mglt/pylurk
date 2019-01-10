@@ -9,7 +9,7 @@ from copy import deepcopy
 from time import time
 import openpyxl
 import pandas as pd
-from pylurk.utils.utils import start_server, stop_server
+from pylurk.utils.utils import start_server, stop_server, set_lurk
 from pylurk.utils.data_plot import boxplot
 from pylurk.utils.excel import write_to_excel
 
@@ -28,29 +28,6 @@ def get_payload_params(mtype, **kwargs):
     payload_params = payload_request.build_payload(**kwargs)
 
     return payload_params
-
-def get_client ( connectivity_conf):
-    '''
-    This method will initiate and return a Lurk client object based on the connectivity type
-    :param conectivity_conf: dictionary for the connectivity information, mainly: type, ip address, port, tls certifications and keys
-    :return: LurKClient object corresponding to the protocol
-    '''
-
-    clt_conf = LurkConf(deepcopy(default_conf))
-    clt_conf.set_role('client')
-    clt_conf.set_connectivity(type=connectivity_conf['type'], ip_address=connectivity_conf['ip_address'], port=connectivity_conf['port'])
-
-    connection_type = connectivity_conf['type']
-
-    if connection_type in ['udp', 'udp+dtls']:
-        client = LurkUDPClient(conf=clt_conf.get_conf())
-    elif connection_type in ['tcp', 'tcp+tls']:
-        client = LurkTCPClient(conf=clt_conf.get_conf())
-    elif connection_type in ['http', 'https']:
-        client = LurkHTTPClient(conf=clt_conf.get_conf())
-
-    return client
-
 
 def latency_test (payload_params, connectivity_conf, graph_params, sheet_name, graph_path, excel_file = "results.xlsx",  thread = False, request_nb_list = [50], set_nb =20):
     '''
@@ -197,6 +174,7 @@ def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file=
     :param set_nb: nb of sets to test
     :param column_id column id in which we want to start writing in the excel sheet
     :return: column_id in the excel sheet where we can start writing without overwriting any existing values
+    @todo setup remote connection to server
     '''
 
     row_id = 1
@@ -225,7 +203,7 @@ def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file=
 
 
         #start server corresponding to the key
-        process_id = start_server(connection_type=connectivity_conf['server_conf'][connectivity_key]['type'], thread=thread)
+        process_id = start_server(connectivity_conf=connectivity_conf['server_conf'][connectivity_key], thread=thread)
 
         for params_value in test_params:
             # write the column name reflecting the test we are performing
@@ -242,7 +220,7 @@ def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file=
 
                 for i in range(0, request_nb):
                     # create a client per request
-                    client = get_client(connectivity_conf['client_conf'][connectivity_key])
+                    client = set_lurk('client', connectivity_conf=connectivity_conf['client_conf'][connectivity_key])
                     client.resolve([{'designation': 'tls12', \
                                      'version': 'v1', 'status': "request", \
                                      'type': params_value['type'], 'payload': generated_payload_params}])
@@ -261,7 +239,7 @@ def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file=
                 book.save(excel_file)
 
                 # print some log info
-                print("%s %s resolutions in %s sec." % (set, params_value['column_name'], total_time))
+                print(" %s resolutions in %s sec." % ( params_value['column_name'], total_time))
 
             test_count = test_count + 1
 

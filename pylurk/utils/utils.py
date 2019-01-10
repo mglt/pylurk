@@ -194,32 +194,45 @@ def set_lurk(role, **kwargs):
     parameters.
 
     Args:
-        connection_type (str): the type of connectivity. Acceptable values are 'udp',
-            'tcp', 'tcp+tls', 'http', 'https'. The default value is 'udp.
-        ip_address (str): the ip address of the LURK server. The default
-            value is 127.0.0.1.
-        port (int): the port value of the LURK server. Default value is 6789
+        connectivity_conf: dictionary containing the connectivity information as follows:
+         connectivity_conf = {
+              'type' : "udp",  # "local", "tcp", "tcp+tls", http, https
+              'ip_address' : "127.0.0.1", #can be the remote_host if remote connection is desired
+              'port' : 6789,
+              'key' : join( data_dir, 'key_tls12_rsa_server.key'),
+              'cert' : join( data_dir, 'cert_tls12_rsa_server.crt'),
+              'key_peer' : join( data_dir, 'key_tls12_rsa_client.key'),
+              'cert_peer' : join( data_dir, 'cert_tls12_rsa_client.crt'),
+
+    }
         background (bool): starts the LURK server in a daemon process
             when set to True.
         thread (bool): enables multithreading of the LURK server when
             set to True.
 
     """
-
-    try:
-        connection_type = kwargs['connection_type']
-    except KeyError:
-        connection_type = 'udp'
-    try:
-        ip_address = kwargs['ip_address']
-    except KeyError:
-        ip_address = '127.0.0.1'
-    try:
-        port = kwargs['port']
-    except KeyError:
-        port = 6789
+    conn_conf ={'type':'',
+                'ip_address':'',
+                'port':'',
+                'key':'',
+                'cert':'',
+                'key_peer':'',
+                'cert_peer':'',
+                }
+    for k in ['type', 'ip_address', 'port', 'key', 'cert', \
+              'key_peer', 'cert_peer']:
+        try:
+            conn_conf[k]=kwargs['connectivity_conf'][k]
+        except KeyError:
+            try:
+                print('h2h')
+                conn_conf[k]
+            except KeyError:
+                print('hh')
+                conn_conf[k] = default_conf['connectivity'][k]
     try:
         background = kwargs['background']
+
     except KeyError:
         background = True
     try:
@@ -227,9 +240,13 @@ def set_lurk(role, **kwargs):
     except KeyError:
         thread = True
 
+
     conf = LurkConf(deepcopy(default_conf))
     conf.set_role(role)
-    conf.set_connectivity(type=connection_type, ip_address=ip_address, port=port)
+
+    conf.set_connectivity(type=conn_conf['type'], ip_address=conn_conf['ip_address'], port=conn_conf['port'],
+                          key=conn_conf['key'], cert = conn_conf['cert'], key_peer=conn_conf['key_peer'], cert_peer=conn_conf['cert_peer'])
+    connection_type = conn_conf['type']
 
     role_list = ['client', 'server']
     connection_type_list = ['udp', 'udp+dtls', 'tcp', 'tcp+tls', 'http', 'https']
@@ -250,6 +267,10 @@ def set_lurk(role, **kwargs):
         return client
     elif role == 'server':
         print("Setting server %s"%connection_type)
+
+        #initialize server
+        server=None
+
         if connection_type in ['udp', 'udp+dtls']:
             if background is True:
                 server = mp.Process(target=LurkUDPServer, args=(conf.get_conf(),),\
@@ -383,11 +404,12 @@ def tls12_client_server_exchanges(connection_type, background=True, thread=True)
 
     print(set_title(connection_type.upper() + " LURK CLIENT / SERVER - MULTI-Threads TESTS" +\
                  " - background: %s, thread: %s"%(background, thread)))
+    connectivity_conf = {'type': connection_type}
     if background is True:
-        server = set_lurk('server', connection_type=connection_type,
+        server = set_lurk('server', connectivity_conf=connectivity_conf,
                           background=background, thread=thread)
         sleep(3)
-    client = set_lurk('client', connection_type=connection_type)
+    client = set_lurk('client', connectivity_conf=connectivity_conf)
 
     designation = 'tls12'
     version = 'v1'
@@ -403,7 +425,7 @@ def tls12_client_server_exchanges(connection_type, background=True, thread=True)
             if mtype in ['ping', 'capabilities']:
                 payloads =[{}]
             elif 'rsa' in mtype:
-                payloads = tls12_conf_ecdhe_payloads()
+                payloads = tls12_conf_rsa_payloads()
             elif mtype == 'ecdhe':
                 payloads = tls12_conf_ecdhe_payloads()
             for payload in payloads:
@@ -443,23 +465,48 @@ def set_ssh(remote_host, remote_user):
     return Connection(host=remote_host, user=remote_user)
 
 
-def start_server(connection_type=None, background=True, thread=True, \
-                 remote_host=None, remote_user=None):
+def start_server(connectivity_conf, background=True, thread=True, \
+                 remote_connection=False):
+    '''
+    This method start a local or remote server using ssh of any type (udp, udp+dtls, tcp, tcp+tls, hhtp, https)
+    :param connectivity_conf: dictionary containing the connectivity information as follows:
+    connectivity_conf = {
+              'type' : "udp",  # "local", "tcp", "tcp+tls", http, https
+              'ip_address' : "127.0.0.1", #can be the remote_host if remote connection is desired
+              'port' : 6789,
+              'key' : join( data_dir, 'key_tls12_rsa_server.key'),
+              'cert' : join( data_dir, 'cert_tls12_rsa_server.crt'),
+              'key_peer' : join( data_dir, 'key_tls12_rsa_client.key'),
+              'cert_peer' : join( data_dir, 'cert_tls12_rsa_client.crt'),
+              'remote_user': 'admin@myhost', #needed for ssh connection
+    }
+    :param background: if set to true will start the server in the background as a process
+    :param thread: if set to true will enable multi-threading on the server side
+    :param remote_connection: if set to true will enable ssh connection to a remote server
+    :return:
+    '''
 
-    if remote_host is None:
-        server = set_lurk('server', type=connection_type, background=background, \
+    if remote_connection is False:
+        server = set_lurk('server', connectivity_conf=connectivity_conf, background=background, \
                  thread=thread )
-        print(server.pid)
         return server.pid
+
+    try:
+        remote_user = connectivity_conf['remote_user']
+        remote_host = connectivity_conf['ip_address']
+    except KeyError:
+       print ("Requiring remote connection to server with missing remote_host and/or remote_user")
+       return
+
     remote_session = set_ssh(remote_host, remote_user)
     remote_session.run("""python3 -m pylurk.utils.start_server --connection_type %s 
-                       --background True --thread %s"""%(connection_type, thread))
+                       --background True --thread %s"""%(connectivity_conf['type'], thread))
     return remote_session.stdout
 
 def stop_server(server_pid, remote_host=None, remote_user=None):
-    print((server_pid, remote_host, remote_user))
     if remote_host is None:
         os.kill(server_pid, signal.SIGTERM)
+        sleep(5)
         return
     elif remote_user is None:
         raise ImplementationError( "", "remote_user expected")

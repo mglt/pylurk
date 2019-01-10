@@ -1207,6 +1207,7 @@ class BaseTCPServer(TCPServer):
         self.lurk = LurkServer(self.conf.get_conf())
         self.server_address = self.conf.get_server_address()
         self.connection_type = self.conf.get_connection_type()
+        self.allow_reuse_address = True
         super().__init__(self.server_address, RequestHandlerClass)
 #        if self.connection_type == 'tcp+tls':
 #            context = self.conf.get_tls_context()
@@ -1374,7 +1375,8 @@ class TCPHandle(BaseRequestHandler):
         except:
             del self.server.fd_busy[self.request.fileno()]
             return
-
+        if ( bytes_recv == b''):
+            return
         header = LURKHeader.parse(bytes_recv)
         bytes_nbr = header['length']
 

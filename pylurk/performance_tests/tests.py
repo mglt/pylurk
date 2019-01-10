@@ -750,16 +750,6 @@ def transport_protocol_test( sheet_name, excel_file, graph_path, thread, request
 
 def security_overhead_test( sheet_name, excel_file, graph_path, thread, request_nb, set_nb):
     payload_params = {
-        'tcp': [
-            {
-                'type': 'rsa_master',
-                'column_name': 'rsa_master_tcp_prf_sha256_pfs_sha256',
-                'ref': 'rsa_master_tcp_prf_sha256_pfs_sha256',
-                'prf_hash': 'sha256',
-                'freshness_funct': 'sha256',
-            },
-
-        ],
         'tcp+tls': [
             {
                 'type': 'rsa_master',
@@ -770,6 +760,17 @@ def security_overhead_test( sheet_name, excel_file, graph_path, thread, request_
             },
 
         ],
+        'tcp': [
+            {
+                'type': 'rsa_master',
+                'column_name': 'rsa_master_tcp_prf_sha256_pfs_sha256',
+                'ref': 'rsa_master_tcp_prf_sha256_pfs_sha256',
+                'prf_hash': 'sha256',
+                'freshness_funct': 'sha256',
+            },
+
+        ],
+
         'http': [
             {
                 'type': 'rsa_master',
@@ -809,7 +810,7 @@ def security_overhead_test( sheet_name, excel_file, graph_path, thread, request_
                 'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
             },
             'tcp+tls': {
-                'type': "tcp",
+                'type': "tcp+tls",
                 'ip_address': "127.0.0.1",
                 'port': 6789,
                 'key': join(data_dir, 'key_tls12_rsa_server.key'),
@@ -827,7 +828,7 @@ def security_overhead_test( sheet_name, excel_file, graph_path, thread, request_
                 'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
             },
             'https':{
-                'type': "http",
+                'type': "https",
                 'ip_address': "127.0.0.1",
                 'port': 6789,
                 'key': join(data_dir, 'key_tls12_rsa_server.key'),
@@ -849,7 +850,7 @@ def security_overhead_test( sheet_name, excel_file, graph_path, thread, request_
                 'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
             },
             'tcp+tls': {
-                'type': "tcp",
+                'type': "tcp+tls",
                 'ip_address': "127.0.0.1",
                 'port': 6789,
                 'key': join(data_dir, 'key_tls12_rsa_client.key'),
@@ -868,7 +869,7 @@ def security_overhead_test( sheet_name, excel_file, graph_path, thread, request_
 
             },
             'https': {
-                'type': "http",
+                'type': "https",
                 'ip_address': "127.0.0.1",
                 'port': 6789,
                 'key': join(data_dir, 'key_tls12_rsa_client.key'),
@@ -1057,29 +1058,29 @@ def  multithreading_test( sheet_name, excel_file, graph_path, thread, request_nb
         # start by setting payload parameters
         udplocal_param = {
                              'type': 'rsa_master',
-                             'column_name': 'udpLocal_ref_' + request_nb + '_request',
-                             'ref': 'udpLocal_ref_' + request_nb_list[0] + '_request',
+                             'column_name': 'udpLocal_ref_' + str(request_nb) + '_request',
+                             'ref': 'udpLocal_ref_' + str(request_nb_list[0]) + '_request',
                              'prf_hash': 'sha256',
                              'freshness_funct': 'sha256',
                          }
         udp_param = {
                         'type': 'rsa_master',
-                        'column_name': 'udp_ref' + request_nb + '_request',
-                        'ref': 'udp_ref_' + request_nb_list[0] + '_request',
+                        'column_name': 'udp_ref' + str(request_nb) + '_request',
+                        'ref': 'udp_ref_' + str(request_nb_list[0]) + '_request',
                         'prf_hash': 'sha256',
                         'freshness_funct': 'sha256',
                     }
         tcp_param = {
                         'type': 'rsa_master',
-                        'column_name': 'tcp_ref' + request_nb + '_request',
-                        'ref': 'tcp_ref_' + request_nb_list[0] + '_request',
+                        'column_name': 'tcp_ref' + str(request_nb) + '_request',
+                        'ref': 'tcp_ref_' + str(request_nb_list[0]) + '_request',
                         'prf_hash': 'sha256',
                         'freshness_funct': 'sha256',
                     }
         http_param = {
                          'type': 'rsa_master',
-                         'column_name': 'http_ref' + request_nb + '_request',
-                         'ref': 'http_ref_' + request_nb_list[0] + '_request',
+                         'column_name': 'http_ref' + str(request_nb) + '_request',
+                         'ref': 'http_ref_' + str(request_nb_list[0]) + '_request',
                          'prf_hash': 'sha256',
                          'freshness_funct': 'sha256',
                      },
@@ -1094,8 +1095,8 @@ def  multithreading_test( sheet_name, excel_file, graph_path, thread, request_nb
             group = {'tick_label': request_nb,
                      'color': ['white','white','white','white' ],#['blue', 'green', 'orange', 'cyan'],
                      'hatch': ['*','/', 'o',  'x'],
-                     'data': ['udpLocal_ref_' + request_nb + '_request', 'udp_ref' + request_nb + '_request',
-                              'tcp_ref' + request_nb + '_request', 'http_ref' + request_nb + '_request'],
+                     'data': ['udpLocal_ref_' + str(request_nb) + '_request', 'udp_ref' + str(request_nb) + '_request',
+                              'tcp_ref' + str(request_nb) + '_request', 'http_ref' + str(request_nb) + '_request'],
                      'legends': ['Local', 'UDP', 'TCP', 'HTTP']
                      }
             # add groups to display in the graph
@@ -1116,21 +1117,21 @@ if __name__=="__main__":
     results_dir =  'results/'
     graph_dir =  results_dir+'graphs/'
 
-    print ("--------------------Starting Authentication Methods Test----------------------------")
-    authentication_methods_test('authentication', results_dir+'authentication_methods.xlsx', graph_dir, thread, request_nb, set_nb)
-    print("--------------------Starting Mechanism Overhead pfs Test----------------------------")
-    mechanism_overhead_pfs_test('pfs', results_dir+'mechanism_overhead_pfs.xlsx', graph_dir, thread, request_nb, set_nb)
-    print("--------------------Starting Mechanism Overhead poh Test----------------------------")
-    mechanism_overhead_poh_test('poh', results_dir+'mechanism_overhead_poh.xlsx', graph_dir, thread, request_nb, set_nb)
-
-    #print("--------------------Starting Mechanism Overhead poo Test----------------------------")
-    #mechanism_overhead_poo_test('poo', results_dir+'mechanism_overhead_poo.xlsx', graph_dir, thread, request_nb, set_nb)
-
-    print("--------------------Starting Security Overhead Test----------------------------")
-    security_overhead_test('security', results_dir + 'security_overhead.xlsx', graph_dir, thread, request_nb, set_nb)
-
-    #print("--------------------Starting Transport Protocol Test----------------------------")
-    transport_protocol_test('transport', results_dir+'transport_protocol.xlsx', graph_dir, thread, request_nb, set_nb)
+    # print ("--------------------Starting Authentication Methods Test----------------------------")
+    # authentication_methods_test('authentication', results_dir+'authentication_methods.xlsx', graph_dir, thread, request_nb, set_nb)
+    # print("--------------------Starting Mechanism Overhead pfs Test----------------------------")
+    # mechanism_overhead_pfs_test('pfs', results_dir+'mechanism_overhead_pfs.xlsx', graph_dir, thread, request_nb, set_nb)
+    # print("--------------------Starting Mechanism Overhead poh Test----------------------------")
+    # mechanism_overhead_poh_test('poh', results_dir+'mechanism_overhead_poh.xlsx', graph_dir, thread, request_nb, set_nb)
+    #
+    # print("--------------------Starting Mechanism Overhead poo Test----------------------------")
+    # mechanism_overhead_poo_test('poo', results_dir+'mechanism_overhead_poo.xlsx', graph_dir, thread, request_nb, set_nb)
+    #
+    # print("--------------------Starting Security Overhead Test----------------------------")
+    # security_overhead_test('security', results_dir + 'security_overhead.xlsx', graph_dir, thread, request_nb, set_nb)
+    #
+    # print("--------------------Starting Transport Protocol Test----------------------------")
+    # transport_protocol_test('transport', results_dir+'transport_protocol.xlsx', graph_dir, thread, request_nb, set_nb)
 
 
 
