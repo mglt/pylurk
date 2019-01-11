@@ -109,10 +109,14 @@ def latency_test (payload_params, connectivity_conf, graph_params, sheet_name, g
     # print the parameters to the excel_file
     write_to_excel(excel_file, parameters_sheet_name, 1, 1, test_params = test_params)
     column_id = 1
+    count =0
+    print_set = True
     for request_nb in request_nb_list:
+        if (count!=0):
+            print_set=False
         #get latency by running the tests
-        column_id = run_latency_test(payload_params, connectivity_conf, latency_sheet_name, excel_file = excel_file, thread = thread, request_nb= request_nb, set_nb=set_nb, column_id=column_id)
-
+        column_id = run_latency_test(payload_params, connectivity_conf, latency_sheet_name, excel_file = excel_file, thread = thread, request_nb= request_nb, set_nb=set_nb, column_id=column_id, print_set_id = print_set)
+        count+=1
     #read the sheet containing the latencies and compute and write the ratios based on the reference results
     calculate_ratio(payload_params, latency_sheet_name, ratio_sheet_name, excel_file = excel_file)
 
@@ -121,7 +125,7 @@ def latency_test (payload_params, connectivity_conf, graph_params, sheet_name, g
     boxplot(latency_sheet_name, excel_file, graph_params, graph_path+latency_sheet_name+".png")
 
 
-def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file="results.xlsx", thread = False, request_nb=50, set_nb=20, column_id=1):
+def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file="results.xlsx", thread = False, request_nb=50, set_nb=20, column_id=1, print_set_id = True):
     '''
     This method performs the latency test and print the results into the specified sheet name
     :param payload_params: dictionary with payload parameters containing the list of tests setups to perform.
@@ -172,7 +176,8 @@ def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file=
     :param thread:if set to true, it will allow the server to execute the clients requests in parallel using multithreading
     :param request_nb: nb of requests  per set to report their latency. it corresponds to the number of clients to create and each client generates one request
     :param set_nb: nb of sets to test
-    :param column_id column id in which we want to start writing in the excel sheet
+    :param column_id: column id in which we want to start writing in the excel sheet
+    :param print_set_id: if set to true will print the set id in the excel sheet. This is useful when we have multiple call for this method and we want to print the set id once
     :return: column_id in the excel sheet where we can start writing without overwriting any existing values
     @todo setup remote connection to server
     '''
@@ -194,10 +199,11 @@ def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file=
 
     # get the sheet
     sheet = book[sheet_name]
+    test_count = 0
 
-    sheet.cell(row=row_id, column=column_id).value = 'Set'
-
-    test_count = 1
+    if (print_set_id):
+        sheet.cell(row=row_id, column=column_id).value = 'Set'
+        test_count = 1
 
     for connectivity_key, test_params in payload_params.items():
 
@@ -205,7 +211,12 @@ def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file=
         #start server corresponding to the key
         process_id = start_server(connectivity_conf=connectivity_conf['server_conf'][connectivity_key], thread=thread)
 
+        # create a client
+        client = set_lurk('client', connectivity_conf=connectivity_conf['client_conf'][connectivity_key],
+                          resolver_mode='stub')
+
         for params_value in test_params:
+
             # write the column name reflecting the test we are performing
             sheet.cell(row=row_id, column=column_id + test_count).value = params_value['column_name']
 
@@ -215,12 +226,10 @@ def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file=
             # loop over the set nb
             for j in range(0, set_nb):
 
-                # get total processing time for all requests
                 time_start = time()
 
                 for i in range(0, request_nb):
-                    # create a client per request
-                    client = set_lurk('client', connectivity_conf=connectivity_conf['client_conf'][connectivity_key])
+
                     client.resolve([{'designation': 'tls12', \
                                      'version': 'v1', 'status': "request", \
                                      'type': params_value['type'], 'payload': generated_payload_params}])
