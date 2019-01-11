@@ -16,7 +16,7 @@ from Cryptodome.Hash import HMAC, SHA256, SHA512
 from Cryptodome.Signature import pkcs1_15, DSS
 from Cryptodome.Cipher import PKCS1_v1_5
 from fabric import Connection
-
+from time import time
 
 #from pylurk.core.lurk import *
 from pylurk.core.conf import default_conf
@@ -125,7 +125,7 @@ def message_exchange( designation, version, mtype,  \
                             version, mtype )
 
 def resolve_exchange( client, designation, version, mtype,  \
-                 payload={}, silent=False ):
+                 payload={}, silent=False):
     """ generates an prints a valid query / response using resolve  
 
     This function tests a request/response exchange performed by a Lurk
@@ -147,10 +147,12 @@ def resolve_exchange( client, designation, version, mtype,  \
             responses are displayed. 
 
     """
+    time_start = time()
     resolutions, errors = client.resolve( [{'designation' : designation, \
-                          'version' : version,'status'  : "request", \
-                          'type' : mtype, 'payload' : payload}] )
-
+                      'version' : version,'status'  : "request", \
+                      'type' : mtype, 'payload' : payload}] )
+    time_stop = time()
+    print("    -- type: %s -> %s sec"%(mtype, time_stop - time_start))
     try:
         request = resolutions[0][0]
         response = resolutions[0][1]
@@ -222,8 +224,11 @@ def set_lurk(role, **kwargs):
             except KeyError:
               conn_conf[k] = default_conf['connectivity'][k]
     try:
+        resolver_mode = kwargs['resolver_mode']
+    except KeyError:
+        resolver_mode = 'stub'
+    try:
         background = kwargs['background']
-
     except KeyError:
         background = True
     try:
@@ -250,11 +255,14 @@ def set_lurk(role, **kwargs):
     if role == 'client':
         print("Setting client %s"%connection_type)
         if connection_type in ['udp', 'udp+dtls']:
-            client = LurkUDPClient(conf=conf.get_conf())
+            client = LurkUDPClient(conf=conf.get_conf(), \
+                                   resolver_mode=resolver_mode)
         elif connection_type in ['tcp', 'tcp+tls']:
-            client = LurkTCPClient(conf=conf.get_conf())
+            client = LurkTCPClient(conf=conf.get_conf(), \
+                                   resolver_mode=resolver_mode)
         elif connection_type in ['http', 'https']:
-            client = LurkHTTPClient(conf=conf.get_conf())
+            client = LurkHTTPClient(conf=conf.get_conf(), \
+                                    resolver_mode=resolver_mode)
         return client
     elif role == 'server':
         print("Setting server %s"%connection_type)
@@ -362,7 +370,10 @@ def tls12_serve_payloads(silent=False):
                 req_payload = req.build_payload(**payload)
                 if silent is False:
                     req.show(req_payload)
+                time_start = time()
                 res_payload = resp.serve(req_payload)
+                time_stop = time()
+                print("    -- type: %s -> %s sec"%(mtype, time_stop - time_start))
                 if silent is False:
                     resp.show(res_payload)
         except Exception as err:
@@ -400,7 +411,9 @@ def tls12_client_server_exchanges(connection_type, background=True, thread=True)
         server = set_lurk('server', connectivity_conf=connectivity_conf,
                           background=background, thread=thread)
         sleep(3)
-    client = set_lurk('client', connectivity_conf=connectivity_conf)
+    resolution_mode = 'stub'
+    client = set_lurk('client', connectivity_conf=connectivity_conf, \
+                      resolution_mode=resolution_mode)
 
     designation = 'tls12'
     version = 'v1'

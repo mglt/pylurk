@@ -856,8 +856,9 @@ MAX_ATTEMPTS = 10
 
 class LurkBaseClient:
 
-    def __init__(self, conf):
+    def __init__(self, conf, resolver_mode='stub'):
         self.conf = LurkConf(conf)
+        self.resolver_mode = resolver_mode
         self.server_address = self.conf.get_server_address()
         self.connection_type = self.conf.get_connection_type()
         self.message = LurkMessage(conf=self.conf.get_conf())
@@ -914,7 +915,10 @@ class LurkBaseClient:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         elif self.connection_type in ['udp', 'udp+dtls']:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.setblocking(False)
+        if self.resolver_mode == 'resolver':
+            self.sock.setblocking(False)
+        else:
+            self.sock.setblocking(True)
         if self.connection_type in ['tcp+tls', 'https']:
             context = self.conf.get_tls_context()
             self.sock = context.wrap_socket(self.sock, server_side=False,\
@@ -969,7 +973,26 @@ class LurkBaseClient:
         self.sock.close()
 
     def resolve(self, request_list):
-        """ Resolve wit ha list of payloads
+        if self.resolver_mode == 'stub':
+            return self.stub_resolve(request_list)
+        elif self.resolver_mode == 'resolver':
+            return self.resolver_resolve(request_list)
+        else:
+            raise ConfError(resolver_mode, "Unexpected value for " +\
+                            "resolver_mode. Expected values are " +\
+                            "'stub' or 'resolver'")
+
+    def resolver_resolve(self, request_list):
+        """ Resolve with a list of payloads
+
+        The code is based on non blocking sockets and is intended to
+        read and write simultaneously on the same socket. 
+
+        Todo:
+            The resolver function is not finished and the code is only
+            there as a starting point for a resolver. Invoking select 
+            resulted in poor performances for a single
+            resolution.  
 
         Args:
             request_list (list): contains a list of requests. Each
@@ -999,13 +1022,23 @@ class LurkBaseClient:
         return resolutions_list, errors_list
 
 
-    def bytes_resolve(self, bytes_request):
+    def bytes_resolver_resolve(self, bytes_request):
         """ sends bytes_request and returns bytes_responses
 
         Takes the bytes_requests and evaluate whether their is one
         request or multiple requests and builds an dictionnary
         {id:bytes_request}. This dictionary is latter used to determine
         if all queries have been answered.
+
+
+        The code is based on non blocking sockets and is intended to
+        read and write simultaneously on the same socket. 
+
+        Todo:
+            The resolver function is not finished and the code is only
+            there as a starting point for a resolver. Invoking select 
+            resulted in poor performances for a single
+            resolution.  
 
         Args:
             bytes_request (bytes): the request in byte format. This can
@@ -1035,6 +1068,52 @@ class LurkBaseClient:
                 bytes_errors.append(bytes_requests_dict[req_id])
         return bytes_resolutions, bytes_errors
 
+    def stub_resolve(self, request_list):
+        """ Resolve wit ha list of payloads
+
+        Args:
+            request_list (list): contains a list of requests. Each
+                request is represented by a dictionary. The dictionary contains
+                the element necessary to build the LURK request. Missing
+                are derived from default values. Each dictionary
+                is taken as a **kwargs to build the associated request
+
+        Returns:
+            resolutions_list (list): the list of (request, repsonse).
+                request and response are represented as dictionaries.
+            error_list (list): the list of non resolved requested.
+        """
+        bytes_requests = b''
+        for input_request in request_list:
+##            print(" --- resolve : input_request: %s"%input_request)
+            request = self.message.build_payload(**input_request)
+            bytes_requests += self.message.build(**request)
+        bytes_resolutions, bytes_errors = self.bytes_stub_resolve(bytes_requests)
+        resolutions_list = []
+        for resol in bytes_resolutions:
+            resolutions_list.append((self.message.parse(resol[0]), \
+                                     self.message.parse(resol[1])))
+        errors_list = []
+        for error in bytes_errors:
+            errors_list.append(self.message.parse(error))
+        return resolutions_list, errors_list
+
+    def bytes_stub_resolve(self, bytes_request):
+        """ Simple resolution in blocking mode 
+       
+            Implements a stub resolver
+        """
+        sent_status = self.sock.sendall(bytes_request)
+        if sent_status != None:
+            print("Not all data (%s) has been sent: %s"(len(bytes_request), \
+                                   binascii.hexlify(bytes_request)))
+            bytes_resolutions = []
+            bytes_errors = [bytes_request]
+        else:
+            bytes_response = self.sock.recv(4096)
+            bytes_resolutions = [(bytes_request, bytes_response)]
+            bytes_errors = []
+        return bytes_resolutions, bytes_errors
 
     def is_response(self, bytes_response, bytes_requests_dict):
         if bytes_requests_dict == None:
@@ -1532,8 +1611,9 @@ class HTTPHandle(BaseHTTPRequestHandler):
 
 class LurkHTTPClient(LurkTCPClient):
 
-    def __init__(self, conf):
+    def __init__(self, conf, resolver_mode='stub'):
         self.conf = LurkConf(conf)
+        self.resolver_mode=resolver_mode
         self.server_address = self.conf.get_server_address()
         self.connection_type = self.conf.get_connection_type()
         self.message = LurkMessage(conf=self.conf.get_conf())
@@ -1547,6 +1627,28 @@ class LurkHTTPClient(LurkTCPClient):
 
         """
         self.pending_resp = []
+
+
+    def bytes_stub_resolve(self, bytes_request):
+        """ Simple resolution in blocking mode 
+       
+            Implements a stub resolver
+        """
+        url = self.connection_type + '://' + str(self.server_address[0]) + \
+                                     ':' + str(self.server_address[1])
+        req = urllib.request.Request(url, bytes_request, method='POST')
+
+        if self.connection_type == 'https':
+            tls_context = self.conf.get_tls_context()
+        else:
+            tls_context = None
+
+        resp = urllib.request.urlopen(req, context=tls_context)
+        bytes_response = b''
+        bytes_response = bytes_response + resp.read(4096)
+        bytes_resolutions = [(bytes_request, bytes_response)]
+        bytes_errors = []
+        return bytes_resolutions, bytes_errors
 
 
     def bytes_send(self, bytes_request):
