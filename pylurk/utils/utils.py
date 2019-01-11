@@ -493,6 +493,7 @@ def start_server(connectivity_conf, background=True, thread=True, \
     if remote_connection is False:
         server = set_lurk('server', connectivity_conf=connectivity_conf, background=background, \
                  thread=thread )
+        sleep(5)
         return server.pid
 
     try:

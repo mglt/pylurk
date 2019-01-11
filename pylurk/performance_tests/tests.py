@@ -725,7 +725,7 @@ def transport_protocol_test( sheet_name, excel_file, graph_path, thread, request
                          'color': ['white','white','white'],#['blue', 'green', 'orange'],
                          # color of the box of each data in data, set 'White if no color is desired
                          'hatch': [ '*','/', 'o'], # pattern of each box in data. Set '' if no hatch is desired. It can take one of the following patterns = ('-', '+', 'x', '\\', '*', 'o', 'O', '.', '/')
-                         'data': ['rsa_master_udp_ref_prf_sha256_pfs_sha256', 'rsa_master_tcp_ref_prf_sha256_pfs_sha256', 'rsa_master_http_ref_prf_sha256_pfs_sha256'],
+                         'data': [ 'rsa_master_udp_prf_sha256_pfs_sha256', 'rsa_master_tcp_prf_sha256_pfs_sha256', 'rsa_master_http_prf_sha256_pfs_sha256'],
                          # colummn name of the data to plot as defined in excel sheet
                          'legends': ['UDP', 'TCP', 'HTTP']      # legend corresponding to each data, set None if no legend to be added to a specified data or provide an empty list
                          },
@@ -1054,6 +1054,7 @@ def  multithreading_test( sheet_name, excel_file, graph_path, thread, request_nb
             'http': [],
 
         }
+
     for request_nb in request_nb_list:
         # start by setting payload parameters
         udplocal_param = {
@@ -1065,47 +1066,47 @@ def  multithreading_test( sheet_name, excel_file, graph_path, thread, request_nb
                          }
         udp_param = {
                         'type': 'rsa_master',
-                        'column_name': 'udp_ref' + str(request_nb) + '_request',
+                        'column_name': 'udp_ref_' + str(request_nb) + '_request',
                         'ref': 'udp_ref_' + str(request_nb_list[0]) + '_request',
                         'prf_hash': 'sha256',
                         'freshness_funct': 'sha256',
                     }
         tcp_param = {
                         'type': 'rsa_master',
-                        'column_name': 'tcp_ref' + str(request_nb) + '_request',
+                        'column_name': 'tcp_ref_' + str(request_nb) + '_request',
                         'ref': 'tcp_ref_' + str(request_nb_list[0]) + '_request',
                         'prf_hash': 'sha256',
                         'freshness_funct': 'sha256',
                     }
         http_param = {
                          'type': 'rsa_master',
-                         'column_name': 'http_ref' + str(request_nb) + '_request',
+                         'column_name': 'http_ref_' + str(request_nb) + '_request',
                          'ref': 'http_ref_' + str(request_nb_list[0]) + '_request',
                          'prf_hash': 'sha256',
                          'freshness_funct': 'sha256',
-                     },
+                     }
 
-        payload_params[ 'udpLocal'].append (udplocal_param)
+        payload_params['udpLocal'].append(udplocal_param)
         payload_params['udp'].append(udp_param)
         payload_params['tcp'].append(tcp_param)
         payload_params['http'].append(http_param)
 
-        # skip reference (do not plot reference
+
+        # skip reference (do not plot reference)
         if request_nb != request_nb_list[0]:
             group = {'tick_label': request_nb,
                      'color': ['white','white','white','white' ],#['blue', 'green', 'orange', 'cyan'],
                      'hatch': ['*','/', 'o',  'x'],
-                     'data': ['udpLocal_ref_' + str(request_nb) + '_request', 'udp_ref' + str(request_nb) + '_request',
-                              'tcp_ref' + str(request_nb) + '_request', 'http_ref' + str(request_nb) + '_request'],
+                     'data': ['udpLocal_ref_' + str(request_nb) + '_request', 'udp_ref_' + str(request_nb) + '_request',
+                              'tcp_ref_' + str(request_nb) + '_request', 'http_ref_' + str(request_nb) + '_request'],
                      'legends': ['Local', 'UDP', 'TCP', 'HTTP']
                      }
             # add groups to display in the graph
             graph_params['groups'].append(group)
 
 
-
     latency_test(payload_params, connectivity_conf, graph_params, sheet_name, graph_path, excel_file=excel_file,
-                    thread=thread, request_nb_list=request_nb_list, set_nb=set_nb)
+                  thread=thread, request_nb_list=request_nb_list, set_nb=set_nb)
 
 
 
@@ -1117,25 +1118,25 @@ if __name__=="__main__":
     results_dir =  'results/'
     graph_dir =  results_dir+'graphs/'
 
-    # print ("--------------------Starting Authentication Methods Test----------------------------")
-    # authentication_methods_test('authentication', results_dir+'authentication_methods.xlsx', graph_dir, thread, request_nb, set_nb)
-    # print("--------------------Starting Mechanism Overhead pfs Test----------------------------")
-    # mechanism_overhead_pfs_test('pfs', results_dir+'mechanism_overhead_pfs.xlsx', graph_dir, thread, request_nb, set_nb)
-    # print("--------------------Starting Mechanism Overhead poh Test----------------------------")
-    # mechanism_overhead_poh_test('poh', results_dir+'mechanism_overhead_poh.xlsx', graph_dir, thread, request_nb, set_nb)
-    #
-    # print("--------------------Starting Mechanism Overhead poo Test----------------------------")
-    # mechanism_overhead_poo_test('poo', results_dir+'mechanism_overhead_poo.xlsx', graph_dir, thread, request_nb, set_nb)
-    #
-    # print("--------------------Starting Security Overhead Test----------------------------")
-    # security_overhead_test('security', results_dir + 'security_overhead.xlsx', graph_dir, thread, request_nb, set_nb)
-    #
-    # print("--------------------Starting Transport Protocol Test----------------------------")
-    # transport_protocol_test('transport', results_dir+'transport_protocol.xlsx', graph_dir, thread, request_nb, set_nb)
+    print ("--------------------Starting Authentication Methods Test----------------------------")
+    authentication_methods_test('authentication', results_dir+'authentication_methods.xlsx', graph_dir, thread, request_nb, set_nb)
+    print("--------------------Starting Mechanism Overhead pfs Test----------------------------")
+    mechanism_overhead_pfs_test('pfs', results_dir+'mechanism_overhead_pfs.xlsx', graph_dir, thread, request_nb, set_nb)
+    print("--------------------Starting Mechanism Overhead poh Test----------------------------")
+    mechanism_overhead_poh_test('poh', results_dir+'mechanism_overhead_poh.xlsx', graph_dir, thread, request_nb, set_nb)
+
+    print("--------------------Starting Mechanism Overhead poo Test----------------------------")
+    mechanism_overhead_poo_test('poo', results_dir+'mechanism_overhead_poo.xlsx', graph_dir, thread, request_nb, set_nb)
+
+    print("--------------------Starting Security Overhead Test----------------------------")
+    security_overhead_test('security', results_dir + 'security_overhead.xlsx', graph_dir, thread, request_nb, set_nb)
+
+    print("--------------------Starting Transport Protocol Test----------------------------")
+    transport_protocol_test('transport', results_dir+'transport_protocol.xlsx', graph_dir, thread, request_nb, set_nb)
 
 
-
+    #
     thread = True
     request_nb_list = [1, 10, 25, 50, 100, 200]
     print("--------------------Starting Multithreading Test----------------------------")
-    multithreading_test('multithread',  results_dir+'multithreading.xlsx', graph_dir, True, request_nb_list, set_nb)
+    multithreading_test('multithread',  results_dir+'multithreading.xlsx', graph_dir, thread, request_nb_list, set_nb)
