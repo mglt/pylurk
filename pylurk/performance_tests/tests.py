@@ -492,7 +492,7 @@ def mechanism_overhead_poo_test (sheet_name, excel_file, graph_path, thread, req
                          'color': ['white'],#['blue'],  # color of the box of each data in data, set 'White if no color is desired
                          'hatch': ['*'],  # pattern of each box in data. Set '' if no hatch is desired. It can take one of the following patterns = ('-', '+', 'x', '\\', '*', 'o', 'O', '.', '/')
                          'data': ['ecdhe_poo_sha256_128_sig_sha256rsa_pfs_sha256'],  # colummn name of the data to plot as defined in excel sheet
-                         'legends': None # legend corresponding to each data, set None if no legend to be added to a specified data or provide an empty list
+                         'legends': ['With PoO'] # legend corresponding to each data, set None if no legend to be added to a specified data or provide an empty list
                          },
                         {'tick_label': 'sha256_256',
                          'color': ['white'],#['blue' ],
