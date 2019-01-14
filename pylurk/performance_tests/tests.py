@@ -389,7 +389,7 @@ def mechanism_overhead_poh_test (sheet_name, excel_file, graph_path, thread, req
                          # pattern of each box in data. Set '' if no hatch is desired. It can take one of the following patterns = ('-', '+', 'x', '\\', '*', 'o', 'O', '.', '/')
                          'data': ['rsa_master_with_poh_prf_sha256_pfs_sha256'],
                          # colummn name of the data to plot as defined in excel sheet
-                         'legends': ['Without PoH', 'With PoH']
+                         'legends': [ 'With PoH']
                          # legend corresponding to each data, set None if no legend to be added to a specified data or provide an empty list
                          },
                         {'tick_label': 'RSA_Extended',
@@ -492,13 +492,13 @@ def mechanism_overhead_poo_test (sheet_name, excel_file, graph_path, thread, req
                          'color': ['white'],#['blue'],  # color of the box of each data in data, set 'White if no color is desired
                          'hatch': ['*'],  # pattern of each box in data. Set '' if no hatch is desired. It can take one of the following patterns = ('-', '+', 'x', '\\', '*', 'o', 'O', '.', '/')
                          'data': ['ecdhe_poo_sha256_128_sig_sha256rsa_pfs_sha256'],  # colummn name of the data to plot as defined in excel sheet
-                         'legends': [] # legend corresponding to each data, set None if no legend to be added to a specified data or provide an empty list
+                         'legends': None # legend corresponding to each data, set None if no legend to be added to a specified data or provide an empty list
                          },
                         {'tick_label': 'sha256_256',
                          'color': ['white'],#['blue' ],
                          'hatch': ['*'],
                          'data': ['ecdhe_poo_sha256_256_sig_sha256rsa_pfs_sha256'],
-                         'legends': [],
+                         'legends': None,
                          },
 
 
@@ -1135,7 +1135,7 @@ if __name__=="__main__":
     transport_protocol_test('transport', results_dir+'transport_protocol.xlsx', graph_dir, thread, request_nb, set_nb)
 
 
-    #
+
     thread = True
     request_nb_list = [1, 10, 25, 50, 100, 200]
     print("--------------------Starting Multithreading Test----------------------------")
