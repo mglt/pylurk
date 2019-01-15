@@ -12,7 +12,7 @@ def authentication_methods_test (sheet_name, excel_file, graph_path, thread, req
     :param excel_file: path to the excel file that will contain the results. The file is created if it does not exists
     :param graph_path: path to the graphs depicting the results (e.g. results/ (do not start the path with "/")
     :param thread: True or False depicting if we want to
-    :param request_nb_list: requests number to test per set.
+    :param request_nb: requests number to test per set.
     :param set_nb: number of sets to test
     :return:
     '''
@@ -162,6 +162,18 @@ def authentication_methods_test (sheet_name, excel_file, graph_path, thread, req
     latency_test (payload_params, connectivity_conf, graph_params, sheet_name, graph_path, excel_file = excel_file, thread=thread, request_nb_list = [request_nb], set_nb =set_nb)
 
 def mechanism_overhead_pfs_test (sheet_name, excel_file, graph_path, thread, request_nb, set_nb):
+    '''
+     This method performs some latency tests on authentication methods (RSA, RSA_extended and ECDHE) by varying the pfs (null (reference), 256),
+     ECDHE: 'sig_and_hash': ('sha256', 'rsa').
+     It saves the results in the specified excel file and plot them in 2 box graphs (one for latency values and another for ratios)
+     :param sheet_name: the excel sheet name to store the results
+     :param excel_file: path to the excel file that will contain the results. The file is created if it does not exists
+     :param graph_path: path to the graphs depicting the results (e.g. results/ (do not start the path with "/")
+     :param thread: True or False depicting if we want to
+     :param request_nb: requests number to test per set.
+     :param set_nb: number of sets to test
+     :return:
+     '''
     payload_params = {
         'udpLocal': [
             {
@@ -294,6 +306,17 @@ def mechanism_overhead_pfs_test (sheet_name, excel_file, graph_path, thread, req
                  thread=thread, request_nb_list=[request_nb], set_nb=set_nb)
 
 def mechanism_overhead_poh_test (sheet_name, excel_file, graph_path, thread, request_nb, set_nb):
+    '''
+     This method performs some latency tests to check the overhead of the proof of handshake on authentication methods (RSA, RSA_extended)
+     It saves the results in the specified excel file and plot them in 2 box graphs (one for latency values and another for ratios)
+     :param sheet_name: the excel sheet name to store the results
+     :param excel_file: path to the excel file that will contain the results. The file is created if it does not exists
+     :param graph_path: path to the graphs depicting the results (e.g. results/ (do not start the path with "/")
+     :param thread: True or False depicting if we want to
+     :param request_nb: requests number to test per set.
+     :param set_nb: number of sets to test
+     :return:
+     '''
     payload_params = {
         'udpLocal': [
             {
@@ -405,7 +428,18 @@ def mechanism_overhead_poh_test (sheet_name, excel_file, graph_path, thread, req
     latency_test(payload_params, connectivity_conf, graph_params, sheet_name, graph_path, excel_file=excel_file,
                  thread=thread, request_nb_list=[request_nb], set_nb=set_nb)
 
-def mechanism_overhead_poo_test (sheet_name, excel_file, graph_path, thread, request_nb_list, set_nb):
+def mechanism_overhead_poo_test (sheet_name, excel_file, graph_path, thread, request_nb, set_nb):
+    '''
+     This method performs some latency tests to check the overhead of the proof of ownership on ECDHE by varying the poo_prf (null (reference), 128, 256),
+     It saves the results in the specified excel file and plot them in 2 box graphs (one for latency values and another for ratios)
+     :param sheet_name: the excel sheet name to store the results
+     :param excel_file: path to the excel file that will contain the results. The file is created if it does not exists
+     :param graph_path: path to the graphs depicting the results (e.g. results/ (do not start the path with "/")
+     :param thread: True or False depicting if we want to
+     :param request_nb: requests number to test per set.
+     :param set_nb: number of sets to test
+     :return:
+     '''
     payload_params = {
         'udpLocal': [
             {
@@ -507,7 +541,24 @@ def mechanism_overhead_poo_test (sheet_name, excel_file, graph_path, thread, req
     latency_test(payload_params, connectivity_conf, graph_params, sheet_name, graph_path, excel_file=excel_file,
                  thread=thread, request_nb_list=[request_nb], set_nb=set_nb)
 
-def transport_protocol_test( sheet_name, excel_file, graph_path, thread, request_nb, set_nb):
+def transport_protocol_test( sheet_name, excel_file, graph_path, thread, request_nb, set_nb, server_ip,remote_user, server_password):
+    '''
+    This performs the transport protocol tests between a client and a server
+    :param sheet_name: the excel sheet name to store the results
+    :param excel_file: path to the excel file that will contain the results. The file is created if it does not exists
+    :param graph_path: path to the graphs depicting the results (e.g. results/ (do not start the path with "/")
+    :param thread: True or False depicting if we want to
+    :param request_nb: requests number to test per set.
+    :param set_nb: number of sets to test
+    :param server_ip: Ip of the server to which we want to connect remotly
+    :param remote_user: username of remote server
+    :param server_password: password of remote server
+    :return:
+    '''
+    ip_address = server_ip
+    remote_user = remote_user
+    password = server_password
+
     payload_params = {
         'udpLocal':[
             {
@@ -610,7 +661,7 @@ def transport_protocol_test( sheet_name, excel_file, graph_path, thread, request
 
     #define connectivity conf fo client and server
     data_dir = pkg_resources.resource_filename(__name__, '../data/')
-    # @TODO change IP address and port, keys and cert
+
     connectivity_conf= {
         'server_conf': {
             'udpLocal':{#run upd for client and server locally
@@ -624,30 +675,36 @@ def transport_protocol_test( sheet_name, excel_file, graph_path, thread, request
             },
             'udp':{
                 'type': "udp",
-                'ip_address': "127.0.0.1",
+                'ip_address': ip_address,
                 'port': 6789,
                 'key': join(data_dir, 'key_tls12_rsa_server.key'),
                 'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
+                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
+                'remote_user': remote_user,
+                'password': password
             },
             'tcp':{
                 'type': "tcp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
+                'ip_address': ip_address,
+                'port': 80,
                 'key': join(data_dir, 'key_tls12_rsa_server.key'),
                 'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
+                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
+                'remote_user': remote_user,
+                'password': password
             },
             'http':{
                 'type': "http",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
+                'ip_address': ip_address,
+                'port': 80,
                 'key': join(data_dir, 'key_tls12_rsa_server.key'),
                 'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
+                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
+                'remote_user': remote_user,
+                'password': password
             },
 
         },
@@ -748,7 +805,24 @@ def transport_protocol_test( sheet_name, excel_file, graph_path, thread, request
                  thread=thread, request_nb_list=[request_nb], set_nb=set_nb)
 
 
-def security_overhead_test( sheet_name, excel_file, graph_path, thread, request_nb, set_nb):
+def security_overhead_test( sheet_name, excel_file, graph_path, thread, request_nb, set_nb, server_ip,remote_user, server_password):
+    '''
+      This performs the security overhead latency tests (tcp, tcp+tls, http, https) between a client and a server
+      :param sheet_name: the excel sheet name to store the results
+      :param excel_file: path to the excel file that will contain the results. The file is created if it does not exists
+      :param graph_path: path to the graphs depicting the results (e.g. results/ (do not start the path with "/")
+      :param thread: True or False depicting if we want to
+      :param request_nb: requests number to test per set.
+      :param set_nb: number of sets to test
+      :param server_ip: Ip of the server to which we want to connect remotly
+      :param remote_user: username of remote server
+      :param server_password: password of remote server
+      :return:
+      '''
+    ip_address = server_ip
+    remote_user = remote_user
+    password = server_password
+
     payload_params = {
         'tcp+tls': [
             {
@@ -796,45 +870,55 @@ def security_overhead_test( sheet_name, excel_file, graph_path, thread, request_
 
     #define connectivity conf fo client and server
     data_dir = pkg_resources.resource_filename(__name__, '../data/')
-    # @TODO change IP address and port, keys and cert
+
     connectivity_conf= {
         'server_conf': {
 
             'tcp':{
                 'type': "tcp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
+                'ip_address': ip_address,
+                'port': 80,
                 'key': join(data_dir, 'key_tls12_rsa_server.key'),
                 'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
+                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
+                'remote_user':remote_user,
+                'password': password,
+
             },
             'tcp+tls': {
                 'type': "tcp+tls",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
+                'ip_address': ip_address,
+                'port': 80,
                 'key': join(data_dir, 'key_tls12_rsa_server.key'),
                 'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
+                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
+                'remote_user': remote_user,
+                'password': password,
+
             },
             'http':{
                 'type': "http",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
+                'ip_address': ip_address,
+                'port': 80,
                 'key': join(data_dir, 'key_tls12_rsa_server.key'),
                 'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
+                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
+                'remote_user': remote_user,
+                'password': password
             },
             'https':{
                 'type': "https",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
+                'ip_address': ip_address,
+                'port': 443,
                 'key': join(data_dir, 'key_tls12_rsa_server.key'),
                 'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
+                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
+                'remote_user': remote_user,
+                'password': password
             },
 
         },
@@ -927,12 +1011,29 @@ def security_overhead_test( sheet_name, excel_file, graph_path, thread, request_
                     ]}
 
     latency_test(payload_params, connectivity_conf, graph_params, sheet_name, graph_path, excel_file=excel_file,
-                 thread=thread, request_nb_list=[request_nb], set_nb=set_nb)
+                 thread=thread, request_nb_list=[request_nb], set_nb=set_nb, remote_connection = True)
 
-def  multithreading_test( sheet_name, excel_file, graph_path, thread, request_nb_list, set_nb):
+def  multithreading_test( sheet_name, excel_file, graph_path, request_nb_list, set_nb, server_ip,remote_user, server_password, thread=True):
+    '''
+      This method performs a multithreading tests using different transport protocol (udplocal(reference), udp, tcp, http) between a client and a server
+      :param sheet_name: the excel sheet name to store the results
+      :param excel_file: path to the excel file that will contain the results. The file is created if it does not exists
+      :param graph_path: path to the graphs depicting the results (e.g. results/ (do not start the path with "/")
+      :param thread: True or False depicting if we want to
+      :param request_nb_list: list of requests number to test per set.
+      :param set_nb: number of sets to test
+      :param server_ip: Ip of the server to which we want to connect remotly
+      :param remote_user: username of remote server
+      :param server_password: password of remote server
+      :return:
+      '''
+    ip_address = server_ip
+    remote_user = remote_user
+    password = server_password
+
     # define connectivity conf fo client and server
     data_dir = pkg_resources.resource_filename(__name__, '../data/')
-    # @TODO change IP address and port, keys and cert
+
     connectivity_conf = {
         'server_conf': {
             'udpLocal': {  # run upd for client and server locally
@@ -946,30 +1047,36 @@ def  multithreading_test( sheet_name, excel_file, graph_path, thread, request_nb
             },
             'udp': {
                 'type': "udp",
-                'ip_address': "127.0.0.1",
+                'ip_address': ip_address,
                 'port': 6789,
                 'key': join(data_dir, 'key_tls12_rsa_server.key'),
                 'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
+                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
+                'remote_user': remote_user,
+                'password': password
             },
             'tcp': {
                 'type': "tcp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
+                'ip_address': ip_address,
+                'port': 80,
                 'key': join(data_dir, 'key_tls12_rsa_server.key'),
                 'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
+                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
+                'remote_user': remote_user,
+                'password': password
             },
             'http': {
                 'type': "http",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
+                'ip_address': ip_address,
+                'port': 80,
                 'key': join(data_dir, 'key_tls12_rsa_server.key'),
                 'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
+                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
+                'remote_user': remote_user,
+                'password': password
             },
 
         },
@@ -1117,7 +1224,10 @@ if __name__=="__main__":
     set_nb = 2
     results_dir =  'results/'
     graph_dir =  results_dir+'graphs/'
+    server_ip = '192.168.0.108'
 
+    remote_user='xubuntu_server'
+    password = 'xubuntu6789'
     print ("--------------------Starting Authentication Methods Test----------------------------")
     authentication_methods_test('authentication', results_dir+'authentication_methods.xlsx', graph_dir, thread, request_nb, set_nb)
     print("--------------------Starting Mechanism Overhead pfs Test----------------------------")
@@ -1129,14 +1239,14 @@ if __name__=="__main__":
     mechanism_overhead_poo_test('poo', results_dir+'mechanism_overhead_poo.xlsx', graph_dir, thread, request_nb, set_nb)
 
     print("--------------------Starting Security Overhead Test----------------------------")
-    security_overhead_test('security', results_dir + 'security_overhead.xlsx', graph_dir, thread, request_nb, set_nb)
+    security_overhead_test('security', results_dir + 'security_overhead.xlsx', graph_dir, thread, request_nb, set_nb, server_ip, remote_user, password)
 
     print("--------------------Starting Transport Protocol Test----------------------------")
-    transport_protocol_test('transport', results_dir+'transport_protocol.xlsx', graph_dir, thread, request_nb, set_nb)
+    transport_protocol_test('transport', results_dir+'transport_protocol.xlsx', graph_dir, thread, request_nb, set_nb,server_ip, remote_user, password)
 
 
 
     thread = True
     request_nb_list = [1, 10, 25, 50, 100, 200]
     print("--------------------Starting Multithreading Test----------------------------")
-    multithreading_test('multithread',  results_dir+'multithreading.xlsx', graph_dir, thread, request_nb_list, set_nb)
+    multithreading_test('multithread',  results_dir+'multithreading.xlsx', graph_dir, request_nb_list, set_nb, server_ip, remote_user, password,  thread=thread)

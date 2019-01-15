@@ -463,10 +463,11 @@ def str2bool(value):
         return False
     raise argparse.ArgumentTypeError('Boolean value expected.')
 
-def set_ssh(remote_host, remote_user):
+def set_ssh(remote_host, remote_user, password):
     if remote_user is None or remote_host is None:
         raise ImplementationError("", "remote_user expected")
-    return Connection(host=remote_host, user=remote_user)
+    return Connection(host=remote_host, user=remote_user,  connect_kwargs={
+        "password": password },)
 
 
 def start_server(connectivity_conf, background=True, thread=True, \
@@ -482,7 +483,8 @@ def start_server(connectivity_conf, background=True, thread=True, \
               'cert' : join( data_dir, 'cert_tls12_rsa_server.crt'),
               'key_peer' : join( data_dir, 'key_tls12_rsa_client.key'),
               'cert_peer' : join( data_dir, 'cert_tls12_rsa_client.crt'),
-              'remote_user': 'admin@myhost', #needed for ssh connection
+              'remote_user': 'xubuntu_server', #needed for ssh connection
+              'password:'123'#password to the remote server
     }
     :param background: if set to true will start the server in the background as a process
     :param thread: if set to true will enable multi-threading on the server side
@@ -503,9 +505,8 @@ def start_server(connectivity_conf, background=True, thread=True, \
        print ("Requiring remote connection to server with missing remote_host and/or remote_user")
        return
 
-    remote_session = set_ssh(remote_host, remote_user)
-    remote_session.run("""python3 -m pylurk.utils.start_server --connection_type %s 
-                       --background True --thread %s"""%(connectivity_conf['type'], thread))
+    remote_session = set_ssh(remote_host, remote_user, connectivity_conf['password'])
+    remote_session.run(""" python3 pylurk.utils.start_server --connectivity_conf %s --background True --thread %s"""%(connectivity_conf, thread))
     return remote_session.stdout
 
 def stop_server(server_pid, remote_host=None, remote_user=None):
