@@ -521,8 +521,10 @@ def start_server(connectivity_conf, background=True, thread=True, \
 
     with remote_session.cd (updated_conf['path_to_erilurk']):
          #use screen -d -m to keep the process running on remote server and continue to run the remaining code
+         #todo check connection reset by peer issue when trying to set the keys
+         #remote_session.run("screen -d -m python3 -m pylurk.utils.start_server --key type --value %s --key ip_address --value %s --key port --value %d --key key --value %s --key cert --value %s --key key_peer --value %s --key cert_peer --value %s --background False --thread %s" %(updated_conf['type'], updated_conf['ip_address'], updated_conf['port'], updated_conf['key'], updated_conf['cert'], updated_conf['key_peer'], updated_conf['cert_peer'], thread))#& echo $!
 
-         remote_session.run("screen -d -m python3 -m pylurk.utils.start_server --key type --value %s --key ip_address --value %s --key port --value %d --key key --value %s --key cert --value %s --key key_peer --value %s --key cert_peer --value %s --background False --thread %s" %(updated_conf['type'], updated_conf['ip_address'], updated_conf['port'], updated_conf['key'], updated_conf['cert'], updated_conf['key_peer'], updated_conf['cert_peer'], thread))#& echo $!
+         remote_session.run( "screen -d -m python3 -m pylurk.utils.start_server --key type --value %s --key ip_address --value %s --key port --value %d  --background False --thread %s" %(updated_conf['type'], updated_conf['ip_address'], updated_conf['port'], thread))  # & echo $!
 
     #wait till server gets started
     sleep (10)
