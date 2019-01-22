@@ -57,7 +57,7 @@ def latency_test (payload_params, connectivity_conf, graph_params, sheet_name, g
         For each server configuration, we should have a client configuration with the same key. This key is also used in payload_params
          For example:
               connectivity_conf= {
-        'server_conf':{
+
             'udp':{
                 'type': "udp",
                 'ip_address': "127.0.0.1",
@@ -66,19 +66,11 @@ def latency_test (payload_params, connectivity_conf, graph_params, sheet_name, g
                 'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
                 'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
+                 'remote_user':remote_user, #user name to set up ssh connection to remote server
+                'password': server_password, #password of remote server
+                'path_to_erilurk':"Desktop/HyameServer/projects/erilurk"
             }
-        },
-        'client_conf': {
-            'udp': {  # run upd for client and server locally
-                'type': "udp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-            },
-        }
+
     }
     :param graph_params a dictionary with all the information of the graph and data to plot (see utils/boxplot() for more info).
     :param sheet_name: name of the excel sheet where the data should be saved
@@ -149,8 +141,7 @@ def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file=
         For each server configuration, we should have a client configuration with the same key. This key is also used in payload_params
          For example:
               connectivity_conf= {
-        'server_conf':{
-            'udp':{
+              'udp':{
                 'type': "udp",
                 'ip_address': "127.0.0.1",
                 'port': 6789,
@@ -158,19 +149,11 @@ def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file=
                 'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
                 'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
+                 'remote_user':remote_user, #user name to set up ssh connection to remote server
+                'password': server_password, #password of remote server
+                'path_to_erilurk':"Desktop/HyameServer/projects/erilurk"
             }
-        },
-        'client_conf': {
-            'udp': {  # run upd for client and server locally
-                'type': "udp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-            },
-        }
+
     }
     :param sheet_name: name of the excel sheet where the data should be saved
     :param excel_file:  path of excel file to save the results. The file is created if it does not exist
@@ -209,8 +192,8 @@ def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file=
 
     for connectivity_key, test_params in payload_params.items():
 
-        #enable remote connection only if remote_user is
-        if (remote_connection and 'remote_user' in connectivity_conf['server_conf'][connectivity_key].keys()):
+        #enable remote connection only if remote_user is set
+        if (remote_connection and 'remote_user' in connectivity_conf[connectivity_key].keys()):
             remote = True
         elif (remote_connection):
             print("Remote user not provided to enable remote connection --- running locally")
@@ -219,11 +202,10 @@ def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file=
             remote = False
 
         #start server corresponding to the key
-        process_id = start_server(connectivity_conf=connectivity_conf['server_conf'][connectivity_key], thread=thread, remote_connection=remote)
+        process_id = start_server(connectivity_conf=connectivity_conf[connectivity_key], thread=thread, remote_connection=remote)
 
         # create a client
-        client = set_lurk('client', connectivity_conf=connectivity_conf['client_conf'][connectivity_key],
-                          resolver_mode='stub')
+        client = set_lurk('client', connectivity_conf=connectivity_conf[connectivity_key], resolver_mode='stub')
 
         for params_value in test_params:
 
@@ -263,7 +245,11 @@ def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file=
             test_count = test_count + 1
 
        #stop the server
-        stop_server(process_id)
+        if(remote==True):
+            stop_server(process_id, remote_host=connectivity_conf[connectivity_key]['ip_address'], remote_user=connectivity_conf[connectivity_key]['remote_user'], password = connectivity_conf[connectivity_key]['password'])
+        else:
+            stop_server(process_id)
+
     book.close()
 
     # column id succeeding the last column where some data was written

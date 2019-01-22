@@ -1,7 +1,7 @@
 from  os.path import join
 import pkg_resources
 from pylurk.performance_tests.performance_utils import latency_test
-
+from copy import deepcopy
 
 def authentication_methods_test (sheet_name, excel_file, graph_path, thread, request_nb, set_nb):
     '''
@@ -82,7 +82,6 @@ def authentication_methods_test (sheet_name, excel_file, graph_path, thread, req
 
     data_dir = pkg_resources.resource_filename(__name__, '../data/')
     connectivity_conf= {
-        'server_conf':{
             'udpLocal':{
                 'type': "udp",  # "udp", "local",
                 'ip_address': "127.0.0.1",
@@ -92,18 +91,7 @@ def authentication_methods_test (sheet_name, excel_file, graph_path, thread, req
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
                 'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
             }
-        },
-        'client_conf': {
-            'udpLocal': {  # run upd for client and server locally
-                'type': "udp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-            },
-        }
+
     }
 
     graph_params = {'title': '',
@@ -226,7 +214,6 @@ def mechanism_overhead_pfs_test (sheet_name, excel_file, graph_path, thread, req
 
     data_dir = pkg_resources.resource_filename(__name__, '../data/')
     connectivity_conf = {
-        'server_conf': {
             'udpLocal': {
                 'type': "udp",  # "udp", "local",
                 'ip_address': "127.0.0.1",
@@ -236,18 +223,7 @@ def mechanism_overhead_pfs_test (sheet_name, excel_file, graph_path, thread, req
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
                 'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
             }
-        },
-        'client_conf': {
-            'udpLocal': {  # run upd for client and server locally
-                'type': "udp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-            },
-        }
+
     }
 
     graph_params = {'title': '',
@@ -354,7 +330,6 @@ def mechanism_overhead_poh_test (sheet_name, excel_file, graph_path, thread, req
 
     data_dir = pkg_resources.resource_filename(__name__, '../data/')
     connectivity_conf = {
-        'server_conf': {
             'udpLocal': {
                 'type': "udp",  # "udp", "local",
                 'ip_address': "127.0.0.1",
@@ -364,18 +339,7 @@ def mechanism_overhead_poh_test (sheet_name, excel_file, graph_path, thread, req
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
                 'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
             }
-        },
-        'client_conf': {
-            'udpLocal': {  # run upd for client and server locally
-                'type': "udp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-            },
-        }
+
     }
 
     graph_params = {'title': '',
@@ -471,7 +435,6 @@ def mechanism_overhead_poo_test (sheet_name, excel_file, graph_path, thread, req
 
     data_dir = pkg_resources.resource_filename(__name__, '../data/')
     connectivity_conf = {
-        'server_conf': {
             'udpLocal': {
                 'type': "udp",  # "udp", "local",
                 'ip_address': "127.0.0.1",
@@ -481,19 +444,8 @@ def mechanism_overhead_poo_test (sheet_name, excel_file, graph_path, thread, req
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
                 'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
             }
-        },
-        'client_conf': {
-            'udpLocal': {  # run upd for client and server locally
-                'type': "udp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-            },
         }
-    }
+
 
     graph_params = {'title': '',
                     'xlabel': 'PoO',
@@ -555,9 +507,7 @@ def transport_protocol_test( sheet_name, excel_file, graph_path, thread, request
     :param server_password: password of remote server
     :return:
     '''
-    ip_address = server_ip
-    remote_user = remote_user
-    password = server_password
+
 
     payload_params = {
         'udpLocal':[
@@ -661,95 +611,33 @@ def transport_protocol_test( sheet_name, excel_file, graph_path, thread, request
 
     #define connectivity conf fo client and server
     data_dir = pkg_resources.resource_filename(__name__, '../data/')
-
-    connectivity_conf= {
-        'server_conf': {
-            'udpLocal':{#run upd for client and server locally
-                'type': "udp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
-            },
-            'udp':{
-                'type': "udp",
-                'ip_address': ip_address,
+    conf = { 'type': "tcp",
+                'ip_address': server_ip,
                 'port': 6789,
                 'key': join(data_dir, 'key_tls12_rsa_server.key'),
                 'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
                 'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'remote_user': remote_user,
-                'password': password
-            },
-            'tcp':{
-                'type': "tcp",
-                'ip_address': ip_address,
-                'port': 80,
-                'key': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'remote_user': remote_user,
-                'password': password
-            },
-            'http':{
-                'type': "http",
-                'ip_address': ip_address,
-                'port': 80,
-                'key': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'remote_user': remote_user,
-                'password': password
-            },
+                'remote_user':remote_user,
+                'password': server_password,
+                'path_to_erilurk':"Desktop/HyameServer/projects/erilurk"
+             }
 
-        },
-        'client_conf':{
-            'udpLocal': {#run upd for client and server locally
-                'type': "udp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-            },
-            'udp': {
-                'type': "udp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-            },
-            'tcp': {
-                'type': "tcp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-            },
-            'http': {
-                'type': "http",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-
-            },
-
+    connectivity_conf = {
+        # ensure local connection for udlLocal (do not set remote_user
+        'udpLocal': {
+            'ip_address': '127.0.0.1',
+            'port': 6789,
+            'key': join(data_dir, 'key_tls12_rsa_server.key'),
+            'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
+            'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
+            'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
         }
-
     }
+    for type in [  'udp','tcp', 'http']:
+        connectivity_conf[type] = deepcopy(conf)
+        connectivity_conf[type]['type'] = type
+
 
     graph_params = {'title': '',
                     'xlabel': 'Transport Protocol',
@@ -802,7 +690,7 @@ def transport_protocol_test( sheet_name, excel_file, graph_path, thread, request
                     ]}
 
     latency_test(payload_params, connectivity_conf, graph_params, sheet_name, graph_path, excel_file=excel_file,
-                 thread=thread, request_nb_list=[request_nb], set_nb=set_nb)
+                 thread=thread, request_nb_list=[request_nb], set_nb=set_nb, remote_connection=True)
 
 
 def security_overhead_test( sheet_name, excel_file, graph_path, thread, request_nb, set_nb, server_ip,remote_user, server_password):
@@ -819,9 +707,6 @@ def security_overhead_test( sheet_name, excel_file, graph_path, thread, request_
       :param server_password: password of remote server
       :return:
       '''
-    ip_address = server_ip
-    remote_user = remote_user
-    password = server_password
 
     payload_params = {
         'tcp+tls': [
@@ -871,101 +756,22 @@ def security_overhead_test( sheet_name, excel_file, graph_path, thread, request_
     #define connectivity conf fo client and server
     data_dir = pkg_resources.resource_filename(__name__, '../data/')
 
-    connectivity_conf= {
-        'server_conf': {
-
-            'tcp':{
-                'type': "tcp",
-                'ip_address': ip_address,
-                'port': 80,
+    conf = { 'type': "tcp",
+                'ip_address': server_ip,
+                'port': 6789,
                 'key': join(data_dir, 'key_tls12_rsa_server.key'),
                 'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
                 'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
                 'remote_user':remote_user,
-                'password': password,
+                'password': server_password,
+                'path_to_erilurk':"Desktop/HyameServer/projects/erilurk"
+             }
 
-            },
-            'tcp+tls': {
-                'type': "tcp+tls",
-                'ip_address': ip_address,
-                'port': 80,
-                'key': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'remote_user': remote_user,
-                'password': password,
-
-            },
-            'http':{
-                'type': "http",
-                'ip_address': ip_address,
-                'port': 80,
-                'key': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'remote_user': remote_user,
-                'password': password
-            },
-            'https':{
-                'type': "https",
-                'ip_address': ip_address,
-                'port': 443,
-                'key': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'remote_user': remote_user,
-                'password': password
-            },
-
-        },
-        'client_conf':{
-
-            'tcp': {
-                'type': "tcp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-            },
-            'tcp+tls': {
-                'type': "tcp+tls",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-            },
-            'http': {
-                'type': "http",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-
-            },
-            'https': {
-                'type': "https",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-
-            },
-
-        }
-
-    }
+    connectivity_conf = {}
+    for type in ['tcp', 'tcp+tls', 'http', 'https']:
+        connectivity_conf[type] = deepcopy(conf)
+        connectivity_conf[type]['type'] = type
 
     graph_params = {'title': '',
                     'xlabel': 'Transport Protocol',
@@ -1027,101 +833,37 @@ def  multithreading_test( sheet_name, excel_file, graph_path, request_nb_list, s
       :param server_password: password of remote server
       :return:
       '''
-    ip_address = server_ip
-    remote_user = remote_user
-    password = server_password
 
     # define connectivity conf fo client and server
     data_dir = pkg_resources.resource_filename(__name__, '../data/')
 
+    conf = { 'type': "tcp",
+                'ip_address': server_ip,
+                'port': 6789,
+                'key': join(data_dir, 'key_tls12_rsa_server.key'),
+                'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
+                'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
+                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
+                'remote_user':remote_user,
+                'password': server_password,
+                'path_to_erilurk':"Desktop/HyameServer/projects/erilurk"
+             }
+
     connectivity_conf = {
-        'server_conf': {
-            'udpLocal': {  # run upd for client and server locally
-                'type': "udp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt')
-            },
-            'udp': {
-                'type': "udp",
-                'ip_address': ip_address,
+        #ensure local connection for udlLocal (do not set remote_user
+        'udpLocal':{
+                'ip_address': '127.0.0.1',
                 'port': 6789,
                 'key': join(data_dir, 'key_tls12_rsa_server.key'),
                 'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
                 'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
                 'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'remote_user': remote_user,
-                'password': password
-            },
-            'tcp': {
-                'type': "tcp",
-                'ip_address': ip_address,
-                'port': 80,
-                'key': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'remote_user': remote_user,
-                'password': password
-            },
-            'http': {
-                'type': "http",
-                'ip_address': ip_address,
-                'port': 80,
-                'key': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'remote_user': remote_user,
-                'password': password
-            },
-
-        },
-        'client_conf': {
-            'udpLocal': {  # run upd for client and server locally
-                'type': "udp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-            },
-            'udp': {
-                'type': "udp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-            },
-            'tcp': {
-                'type': "tcp",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-            },
-            'http': {
-                'type': "http",
-                'ip_address': "127.0.0.1",
-                'port': 6789,
-                'key': join(data_dir, 'key_tls12_rsa_client.key'),
-                'cert': join(data_dir, 'cert_tls12_rsa_client.crt'),
-                'key_peer': join(data_dir, 'key_tls12_rsa_server.key'),
-                'cert_peer': join(data_dir, 'cert_tls12_rsa_server.crt'),
-
-            },
-
         }
-
     }
+    for type in [ 'udp','tcp', 'http']:
+        connectivity_conf[type] = deepcopy(conf)
+        connectivity_conf[type]['type'] = type
+
 
     graph_params = {'title': '',
                     'xlabel': 'Transport Protocol',
@@ -1213,7 +955,7 @@ def  multithreading_test( sheet_name, excel_file, graph_path, request_nb_list, s
 
 
     latency_test(payload_params, connectivity_conf, graph_params, sheet_name, graph_path, excel_file=excel_file,
-                  thread=thread, request_nb_list=request_nb_list, set_nb=set_nb)
+                  thread=thread, request_nb_list=request_nb_list, set_nb=set_nb, remote_connection=True)
 
 
 
@@ -1221,7 +963,7 @@ if __name__=="__main__":
 
     thread = False
     request_nb =1
-    set_nb = 2
+    set_nb = 1
     results_dir =  'results/'
     graph_dir =  results_dir+'graphs/'
     server_ip = '192.168.0.108'

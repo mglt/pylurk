@@ -16,6 +16,8 @@ from Cryptodome.Hash import HMAC, SHA256, SHA512
 from Cryptodome.Signature import pkcs1_15, DSS
 from Cryptodome.Cipher import PKCS1_v1_5
 from fabric import Connection
+
+
 from time import time
 
 #from pylurk.core.lurk import *
@@ -467,7 +469,7 @@ def set_ssh(remote_host, remote_user, password):
     if remote_user is None or remote_host is None:
         raise ImplementationError("", "remote_user expected")
     return Connection(host=remote_host, user=remote_user,  connect_kwargs={
-        "password": password },)
+        "password": password, })
 
 
 def start_server(connectivity_conf, background=True, thread=True, \
@@ -485,6 +487,7 @@ def start_server(connectivity_conf, background=True, thread=True, \
               'cert_peer' : join( data_dir, 'cert_tls12_rsa_client.crt'),
               'remote_user': 'xubuntu_server', #needed for ssh connection
               'password:'123'#password to the remote server
+              'path_to_erilurk': 'Desktop/HyameServer/projects/erilurk' #path to erilurk project on remote server
     }
     :param background: if set to true will start the server in the background as a process
     :param thread: if set to true will enable multi-threading on the server side
@@ -498,26 +501,47 @@ def start_server(connectivity_conf, background=True, thread=True, \
         sleep(5)
         return server.pid
 
-    try:
-        remote_user = connectivity_conf['remote_user']
-        remote_host = connectivity_conf['ip_address']
-    except KeyError:
-       print ("Requiring remote connection to server with missing remote_host and/or remote_user")
-       return
+    #default values to any missing parameters from the configuration to prevent error when running start server on the remote host
+    updated_conf = {}
+    for k in ['type', 'ip_address', 'port', 'key', 'cert','key_peer', 'cert_peer', 'remote_user', 'password', 'path_to_erilurk']:
+        try:
+            updated_conf[k] = connectivity_conf[k]
+        except KeyError:
+            try:
+                if k in ['remote_user', 'password', 'ip_address', 'path_to_erilurk']:
+                    print("Missing argument remote_host and/or remote_user and/or password and/or path_to_erilurk")
+                    return
+                else:
+                    updated_conf[k]
+            except KeyError:
+                updated_conf[k] = default_conf['connectivity'][k]
 
-    remote_session = set_ssh(remote_host, remote_user, connectivity_conf['password'])
-    remote_session.run(""" python3 pylurk.utils.start_server --connectivity_conf %s --background True --thread %s"""%(connectivity_conf, thread))
-    return remote_session.stdout
+    #connect to remote server
+    remote_session = set_ssh(updated_conf['ip_address'], updated_conf['remote_user'], updated_conf['password'])
 
-def stop_server(server_pid, remote_host=None, remote_user=None):
+    with remote_session.cd (updated_conf['path_to_erilurk']):
+         #use screen -d -m to keep the process running on remote server and continue to run the remaining code
+
+         remote_session.run("screen -d -m python3 -m pylurk.utils.start_server --key type --value %s --key ip_address --value %s --key port --value %d --key key --value %s --key cert --value %s --key key_peer --value %s --key cert_peer --value %s --background False --thread %s" %(updated_conf['type'], updated_conf['ip_address'], updated_conf['port'], updated_conf['key'], updated_conf['cert'], updated_conf['key_peer'], updated_conf['cert_peer'], thread))#& echo $!
+
+    #wait till server gets started
+    sleep (10)
+
+    #get the process of the launched server which will be of the for ip_address:port
+    processes = remote_session.run("lsof -i -P -n | grep %s" % updated_conf['ip_address'] + ":" + str(updated_conf['port']))
+
+    #return the process id of the launched server
+    return int((str(processes.stdout).split())[1])
+
+def stop_server(server_pid, remote_host=None, remote_user=None, password = None):
     if remote_host is None:
         os.kill(server_pid, signal.SIGTERM)
         sleep(5)
         return
     elif remote_user is None:
         raise ImplementationError( "", "remote_user expected")
-    remote_session = set_ssh(remote_host, remote_user)
-    remote_session.run("kill -15 %s"%server_pid)
+    remote_session = set_ssh(remote_host, remote_user, password)
+    remote_session.run("kill -15 %s" %server_pid)
 
 
 
