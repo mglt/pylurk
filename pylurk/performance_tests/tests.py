@@ -872,7 +872,7 @@ def  multithreading_test( sheet_name, excel_file, graph_path, request_nb_list, s
                     'start_position': 1,  # the position of the first box to draw
                     'show_grid': True,  # show grid in the graph
                     'legend': {
-                        'location': 'lower right',
+                        'location': 'upper right',
                         # location of the legend. Can take one of the following values:'best','upper right','upper left','lower left','lower right','right','center left','center right','lower center','upper center','center'
                         'font_properties': {
                             # 'fontname':'Calibri',
@@ -904,6 +904,7 @@ def  multithreading_test( sheet_name, excel_file, graph_path, request_nb_list, s
 
         }
 
+    count=0
     for request_nb in request_nb_list:
         # start by setting payload parameters
         udplocal_param = {
@@ -942,7 +943,9 @@ def  multithreading_test( sheet_name, excel_file, graph_path, request_nb_list, s
 
 
         # skip reference (do not plot reference)
-        if request_nb != request_nb_list[0]:
+        if request_nb == request_nb_list[0]:
+            continue
+        elif count ==1:#add the legends once
             group = {'tick_label': request_nb,
                      'color': ['white','white','white','white' ],#['blue', 'green', 'orange', 'cyan'],
                      'hatch': ['*','/', 'o',  'x'],
@@ -950,9 +953,17 @@ def  multithreading_test( sheet_name, excel_file, graph_path, request_nb_list, s
                               'tcp_ref_' + str(request_nb) + '_request', 'http_ref_' + str(request_nb) + '_request'],
                      'legends': ['Local', 'UDP', 'TCP', 'HTTP']
                      }
-            # add groups to display in the graph
-            graph_params['groups'].append(group)
-
+        else:
+            group = {'tick_label': request_nb,
+                    'color': ['white', 'white', 'white', 'white'],  # ['blue', 'green', 'orange', 'cyan'],
+                    'hatch': ['*', '/', 'o', 'x'],
+                    'data': ['udpLocal_ref_' + str(request_nb) + '_request', 'udp_ref_' + str(request_nb) + '_request',
+                             'tcp_ref_' + str(request_nb) + '_request', 'http_ref_' + str(request_nb) + '_request'],
+                    'legends': []
+                    }
+        # add groups to display in the graph
+        graph_params['groups'].append(group)
+        count+=1
 
     latency_test(payload_params, connectivity_conf, graph_params, sheet_name, graph_path, excel_file=excel_file,
                   thread=thread, request_nb_list=request_nb_list, set_nb=set_nb, remote_connection=True)
@@ -962,23 +973,15 @@ def  multithreading_test( sheet_name, excel_file, graph_path, request_nb_list, s
 if __name__=="__main__":
 
     thread = False
-    request_nb =1
-    set_nb = 1
+    request_nb =50
+    set_nb = 20
     results_dir =  'results/'
     graph_dir =  results_dir+'graphs/'
-    server_ip = '192.168.0.108'
+    server_ip = '192.168.0.102'#.108
 
     remote_user='xubuntu_server'
     password = 'xubuntu6789'
-    print ("--------------------Starting Authentication Methods Test----------------------------")
-    authentication_methods_test('authentication', results_dir+'authentication_methods.xlsx', graph_dir, thread, request_nb, set_nb)
-    print("--------------------Starting Mechanism Overhead pfs Test----------------------------")
-    mechanism_overhead_pfs_test('pfs', results_dir+'mechanism_overhead_pfs.xlsx', graph_dir, thread, request_nb, set_nb)
-    print("--------------------Starting Mechanism Overhead poh Test----------------------------")
-    mechanism_overhead_poh_test('poh', results_dir+'mechanism_overhead_poh.xlsx', graph_dir, thread, request_nb, set_nb)
 
-    print("--------------------Starting Mechanism Overhead poo Test----------------------------")
-    mechanism_overhead_poo_test('poo', results_dir+'mechanism_overhead_poo.xlsx', graph_dir, thread, request_nb, set_nb)
 
     print("--------------------Starting Security Overhead Test----------------------------")
     security_overhead_test('security', results_dir + 'security_overhead.xlsx', graph_dir, thread, request_nb, set_nb, server_ip, remote_user, password)
@@ -992,3 +995,18 @@ if __name__=="__main__":
     request_nb_list = [1, 10, 25, 50, 100, 200]
     print("--------------------Starting Multithreading Test----------------------------")
     multithreading_test('multithread',  results_dir+'multithreading.xlsx', graph_dir, request_nb_list, set_nb, server_ip, remote_user, password,  thread=thread)
+
+    thread =False
+    print("--------------------Starting Authentication Methods Test----------------------------")
+    authentication_methods_test('authentication', results_dir + 'authentication_methods.xlsx', graph_dir, thread,
+                                request_nb, set_nb)
+    print("--------------------Starting Mechanism Overhead pfs Test----------------------------")
+    mechanism_overhead_pfs_test('pfs', results_dir + 'mechanism_overhead_pfs.xlsx', graph_dir, thread, request_nb,
+                                set_nb)
+    print("--------------------Starting Mechanism Overhead poh Test----------------------------")
+    mechanism_overhead_poh_test('poh', results_dir + 'mechanism_overhead_poh.xlsx', graph_dir, thread, request_nb,
+                                set_nb)
+
+    print("--------------------Starting Mechanism Overhead poo Test----------------------------")
+    mechanism_overhead_poo_test('poo', results_dir + 'mechanism_overhead_poo.xlsx', graph_dir, thread, request_nb,
+                                set_nb)
