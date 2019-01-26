@@ -1152,5 +1152,5 @@ if __name__=="__main__":
      mechanism_overhead_poo_test('poo', results_dir + 'mechanism_overhead_poo.xlsx', graph_dir, thread, request_nb, set_nb)
 
      request_nb_list = [10, 20, 30, 40, 50, 100]
-     multithreading_test('cpu_transport', results_dir + 'cpu_overhead_protocolos.xlsx', graph_dir, request_nb_list, set_nb,
+     cpu_overhead_protocols_test('cpu_transport', results_dir + 'cpu_overhead_protocolos.xlsx', graph_dir, request_nb_list, set_nb,
                         server_ip, remote_user, password, thread=thread)
