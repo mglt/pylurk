@@ -1083,11 +1083,11 @@ def  cpu_overhead_protocols_test( sheet_name, excel_file, graph_path, request_nb
             'freshness_funct': 'sha256',
         }
 
-        payload_params['tcptls'].append(tcptls_param)
+        payload_params['tcp+tls'].append(tcptls_param)
         payload_params['udp'].append(udp_param)
         payload_params['tcp'].append(tcp_param)
         payload_params['http'].append(http_param)
-        payload_params['https'].append(http_param)
+        payload_params['https'].append(https_param)
 
 
         if count ==1:#add the legends once
@@ -1102,26 +1102,26 @@ def  cpu_overhead_protocols_test( sheet_name, excel_file, graph_path, request_nb
             group = {'tick_label': request_nb,
                     'color': ['white', 'white', 'white', 'white'],  # ['blue', 'green', 'orange', 'cyan'],
                     'hatch': ['*', '/', 'o', 'x'],
-                    'data': ['udpLocal_ref_' + str(request_nb) + '_request', 'udp_ref_' + str(request_nb) + '_request',
-                             'tcp_ref_' + str(request_nb) + '_request', 'http_ref_' + str(request_nb) + '_request'],
+                    'data': ['udp_ref_' + str(request_nb) + '_request',
+                              'tcp_ref_' + str(request_nb) + '_request', 'http_ref_' + str(request_nb) + '_request', 'tcptls_ref_' + str(request_nb) + '_request','https_ref_' + str(request_nb) + '_request',],
                     'legends': []
                     }
         # add groups to display in the graph
         graph_params['groups'].append(group)
         count+=1
 
-        cpu_overhead_test(payload_params, connectivity_conf, graph_params, sheet_name, graph_path, excel_file=excel_file,
+    cpu_overhead_test(payload_params, connectivity_conf, graph_params, sheet_name, graph_path, excel_file=excel_file,
                   thread=thread, request_nb_list=request_nb_list, set_nb=set_nb, remote_connection=True)
 
 
 if __name__=="__main__":
 
      thread = False
-     request_nb =50
-     set_nb = 20
+     request_nb =20
+     set_nb = 50
      results_dir =  'results/'
      graph_dir =  results_dir+'graphs/'
-     server_ip = '192.168.0.102'#.108
+     server_ip = '192.168.0.104'#.108
 
      remote_user='xubuntu_server'
      password = 'xubuntu6789'
@@ -1151,6 +1151,6 @@ if __name__=="__main__":
      print("--------------------Starting Mechanism Overhead poo Test----------------------------")
      mechanism_overhead_poo_test('poo', results_dir + 'mechanism_overhead_poo.xlsx', graph_dir, thread, request_nb, set_nb)
 
-     request_nb_list = [10, 20, 30, 40, 50, 100]
+     request_nb_list = [10,20,30,40,50,100]
      cpu_overhead_protocols_test('cpu_transport', results_dir + 'cpu_overhead_protocolos.xlsx', graph_dir, request_nb_list, set_nb,
                         server_ip, remote_user, password, thread=thread)
