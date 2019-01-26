@@ -1092,16 +1092,16 @@ def  cpu_overhead_protocols_test( sheet_name, excel_file, graph_path, request_nb
 
         if count ==1:#add the legends once
             group = {'tick_label': request_nb,
-                     'color': ['white','white','white','white' ],#['blue', 'green', 'orange', 'cyan'],
-                     'hatch': ['*','/', 'o',  'x'],
+                     'color': ['white','white','white','white', 'white' ],#['blue', 'green', 'orange', 'cyan'],
+                     'hatch': ['*','/', 'o',  'x','-'],
                      'data': ['udp_ref_' + str(request_nb) + '_request',
                               'tcp_ref_' + str(request_nb) + '_request', 'http_ref_' + str(request_nb) + '_request', 'tcptls_ref_' + str(request_nb) + '_request','https_ref_' + str(request_nb) + '_request',],
-                     'legends': [ 'UDP', 'TCP', 'HTTP', 'TCP+TLS']
+                     'legends': [ 'UDP', 'TCP', 'HTTP', 'TCP+TLS','HTTPS']
                      }
         else:
             group = {'tick_label': request_nb,
-                    'color': ['white', 'white', 'white', 'white'],  # ['blue', 'green', 'orange', 'cyan'],
-                    'hatch': ['*', '/', 'o', 'x'],
+                    'color': ['white', 'white', 'white', 'white','white'],  # ['blue', 'green', 'orange', 'cyan'],
+                    'hatch': ['*', '/', 'o', 'x','-'],
                     'data': ['udp_ref_' + str(request_nb) + '_request',
                               'tcp_ref_' + str(request_nb) + '_request', 'http_ref_' + str(request_nb) + '_request', 'tcptls_ref_' + str(request_nb) + '_request','https_ref_' + str(request_nb) + '_request',],
                     'legends': []

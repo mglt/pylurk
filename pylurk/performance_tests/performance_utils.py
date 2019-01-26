@@ -324,44 +324,10 @@ def calculate_ratio (payload_params, values_sheet_name, sheet_name, excel_file =
         print("Error loading the excel file "+excel_file)
 
 
-# def get_cpu_overhead (process_id, remote_address=None, remote_user=None, password=None):
-#     '''
-#     This methods returns the CPU overhead in % given by the top commend for a specific process
-#     :param process_id: id of the desired process
-#     :return: return cpu overhead, and 0 if process not found
-#     '''
-#
-#     if (remote_address is not None and remote_user is not None):
-#         #connect to remote server
-#         remote_session = set_ssh(remote_address, remote_user, password)
-#
-#         # launch the top command on the remote server
-#         print (process_id)
-#         top_results = remote_session.run("top -b -n 1 -p "+str(process_id))
-#
-#         top_results = str(top_results.stdout).splitlines()
-#     else:
-#         #launch top locally
-#         top_results = os.popen('top -b -n 1 -p '+str(process_id))
-#     #run the top command
-#     #with os.popen('top -b -n 1 -p '+str(process_id)) as pipe:
-#
-#     #loop over each line in top results
-#     for line in top_results:
-#         #split each line
-#         words = line.split()
-#
-#         if (len(words) >8 ):
-#             #get the line corresponding to the process_id
-#             if (words[0] == str(process_id)):
-#                    #return the CPU overhead in %
-#                     return words[8]
-#     #return 0 if process not found
-#     return 0
-
-def get_cpu_overhead ( remote_address=None, remote_user=None, password=None):
+def get_cpu_overhead (process_id, remote_address=None, remote_user=None, password=None):
     '''
-    This methods returns the CPU overhead in % given by the top commend for a python process
+    This methods returns the CPU overhead in % given by the top commend for a specific process
+    :param process_id: id of the desired process
     :return: return cpu overhead, and 0 if process not found
     '''
 
@@ -370,12 +336,13 @@ def get_cpu_overhead ( remote_address=None, remote_user=None, password=None):
         remote_session = set_ssh(remote_address, remote_user, password)
 
         # launch the top command on the remote server
-        top_results = remote_session.run("top -b -n 1 |grep 'python'")
+        print (process_id)
+        top_results = remote_session.run("top -b -n 1 -p "+str(process_id))
 
         top_results = str(top_results.stdout).splitlines()
     else:
         #launch top locally
-        top_results = os.popen("top -b -n 1  |grep 'python'")
+        top_results = os.popen('top -b -n 1 -p '+str(process_id))
     #run the top command
     #with os.popen('top -b -n 1 -p '+str(process_id)) as pipe:
 
@@ -385,12 +352,45 @@ def get_cpu_overhead ( remote_address=None, remote_user=None, password=None):
         words = line.split()
 
         if (len(words) >8 ):
-            #get the line corresponding to python
-            if ("python" in words[11]):
+            #get the line corresponding to the process_id
+            if (words[0] == str(process_id)):
                    #return the CPU overhead in %
                     return words[8]
     #return 0 if process not found
     return 0
+
+# def get_cpu_overhead ( remote_address=None, remote_user=None, password=None):
+#     '''
+#     This methods returns the CPU overhead in % given by the top commend for a python process
+#     :return: return cpu overhead, and 0 if process not found
+#     '''
+#
+#     if (remote_address is not None and remote_user is not None):
+#         #connect to remote server
+#         remote_session = set_ssh(remote_address, remote_user, password)
+#
+#         # launch the top command on the remote server
+#         top_results = remote_session.run("top -b -n 1 |grep 'python'")
+#
+#         top_results = str(top_results.stdout).splitlines()
+#     else:
+#         #launch top locally
+#         top_results = os.popen("top -b -n 1  |grep 'python'")
+#     #run the top command
+#     #with os.popen('top -b -n 1 -p '+str(process_id)) as pipe:
+#
+#     #loop over each line in top results
+#     for line in top_results:
+#         #split each line
+#         words = line.split()
+#
+#         if (len(words) >8 ):
+#             #get the line corresponding to python
+#             if ("python" in words[11]):
+#                    #return the CPU overhead in %
+#                     return words[8]
+#     #return 0 if process not found
+#     return 0
 
 def launch_requests (client, request_nb, mtype, payload_params):
     '''
@@ -523,8 +523,8 @@ def run_cpu_test (payload_params, connectivity_conf, sheet_name, excel_file="res
                 sleep(3)
 
                 #run thr top command locally
-                client_cpu_overhead = get_cpu_overhead()
-                server_cpu_overhead = get_cpu_overhead ( remote_address=connectivity_conf[connectivity_key]['ip_address'], remote_user=connectivity_conf[connectivity_key]['remote_user'], password=connectivity_conf[connectivity_key]['password'])
+                client_cpu_overhead = get_cpu_overhead(requests_process.pid)
+                server_cpu_overhead = get_cpu_overhead ( server_process_id, remote_address=connectivity_conf[connectivity_key]['ip_address'], remote_user=connectivity_conf[connectivity_key]['remote_user'], password=connectivity_conf[connectivity_key]['password'])
 
                 #wait till requests are launch and processed before launching for the other set
                 requests_process.join()
