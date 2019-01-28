@@ -96,7 +96,7 @@ def authentication_methods_test (sheet_name, excel_file, graph_path, thread, req
 
     graph_params = {'title': '',
                     'xlabel': 'Authentication Methods',
-                    'ylabel': 'Ratio',
+                    'ylabel': 'Latency (sec)',
                     'box_width': 0.5,  # width of each box in the graph
                     'start_position': 1,  # the position of the first box to draw
                     'show_grid': True,  # show grid in the graph
@@ -229,7 +229,7 @@ def mechanism_overhead_pfs_test (sheet_name, excel_file, graph_path, thread, req
 
     graph_params = {'title': '',
                     'xlabel': 'Authentication Methods',
-                    'ylabel': 'Ratio',
+                    'ylabel': 'Latency (sec)',
                     'box_width': 0.5,  # width of each box in the graph
                     'start_position': 1,  # the position of the first box to draw
                     'show_grid': True,  # show grid in the graph
@@ -345,7 +345,7 @@ def mechanism_overhead_poh_test (sheet_name, excel_file, graph_path, thread, req
 
     graph_params = {'title': '',
                     'xlabel': 'Authentication Methods',
-                    'ylabel': 'Ratio',
+                    'ylabel': 'Latency (sec)',
                     'box_width': 0.5,  # width of each box in the graph
                     'start_position': 1,  # the position of the first box to draw
                     'show_grid': True,  # show grid in the graph
@@ -450,7 +450,7 @@ def mechanism_overhead_poo_test (sheet_name, excel_file, graph_path, thread, req
 
     graph_params = {'title': '',
                     'xlabel': 'PoO',
-                    'ylabel': 'Ratio',
+                    'ylabel': 'Latency (sec)',
                     'box_width': 0.5,  # width of each box in the graph
                     'start_position': 1,  # the position of the first box to draw
                     'show_grid': True,  # show grid in the graph
@@ -641,8 +641,8 @@ def transport_protocol_test( sheet_name, excel_file, graph_path, thread, request
 
 
     graph_params = {'title': '',
-                    'xlabel': 'Athentification Methods',
-                    'ylabel': 'Ratio',
+                    'xlabel': 'Athentication Methods',
+                    'ylabel': 'Latency (sec)',
                     'box_width': 0.5,  # width of each box in the graph
                     'start_position': 1,  # the position of the first box to draw
                     'show_grid': True,  # show grid in the graph
@@ -776,7 +776,7 @@ def security_overhead_test( sheet_name, excel_file, graph_path, thread, request_
 
     graph_params = {'title': '',
                     'xlabel': 'Transport Protocol',
-                    'ylabel': 'Ratio',
+                    'ylabel': 'Latency (sec)',
                     'box_width': 0.5,  # width of each box in the graph
                     'start_position': 1,  # the position of the first box to draw
                     'show_grid': True,  # show grid in the graph
@@ -868,7 +868,7 @@ def  multithreading_test( sheet_name, excel_file, graph_path, request_nb_list, s
 
     graph_params = {'title': '',
                     'xlabel': 'Number of requests',
-                    'ylabel': 'Ratio',
+                    'ylabel': 'Latency (sec)',
                     'box_width': 0.5,  # width of each box in the graph
                     'start_position': 1,  # the position of the first box to draw
                     'show_grid': True,  # show grid in the graph
@@ -1127,8 +1127,8 @@ if __name__=="__main__":
      password = 'xubuntu6789'
 
 
-     print("--------------------Starting Security Overhead Test----------------------------")
-     security_overhead_test('security', results_dir + 'security_overhead.xlsx', graph_dir, thread, request_nb, set_nb, server_ip, remote_user, password)
+     # print("--------------------Starting Security Overhead Test----------------------------")
+     # security_overhead_test('security', results_dir + 'security_overhead.xlsx', graph_dir, thread, request_nb, set_nb, server_ip, remote_user, password)
 
      print("--------------------Starting Transport Protocol Test----------------------------")
      transport_protocol_test('transport', results_dir+'transport_protocol.xlsx', graph_dir, thread, request_nb, set_nb,server_ip, remote_user, password)

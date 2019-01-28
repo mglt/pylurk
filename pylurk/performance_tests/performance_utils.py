@@ -99,7 +99,7 @@ def latency_test (payload_params, connectivity_conf, graph_params, sheet_name, g
 
     parameters_sheet_name = sheet_name+"_params"
     latency_sheet_name = sheet_name+"_Val"
-    ratio_sheet_name = sheet_name+"_new_Ratio"
+    ratio_sheet_name = sheet_name+"_Ratio"
 
     # print the parameters to the excel_file
     write_to_excel(excel_file, parameters_sheet_name, 1, 1, test_params = test_params)
