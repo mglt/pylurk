@@ -99,7 +99,7 @@ def latency_test (payload_params, connectivity_conf, graph_params, sheet_name, g
 
     parameters_sheet_name = sheet_name+"_params"
     latency_sheet_name = sheet_name+"_Val"
-    ratio_sheet_name = sheet_name+"_Ratio"
+    ratio_sheet_name = sheet_name+"_new_Ratio"
 
     # print the parameters to the excel_file
     write_to_excel(excel_file, parameters_sheet_name, 1, 1, test_params = test_params)
@@ -260,7 +260,7 @@ def run_latency_test (payload_params, connectivity_conf, sheet_name, excel_file=
 
 def calculate_ratio (payload_params, values_sheet_name, sheet_name, excel_file = "results.xlsx"):
     '''
-    This method calculates the ratio values based on the reference values mentioned in payload_params and save them in the mentioned sheet_name
+    This method calculates the ratio values based on the average of the reference values mentioned in payload_params and save them in the mentioned sheet_name
     :param payload_params: dictionary with payload parameters containing the list of tests setups to perform. For example:
           payload_params = {'rsa_master_ref_prf_sha256_pfs_sha256':{
              'type': 'rsa_master',
@@ -306,8 +306,8 @@ def calculate_ratio (payload_params, values_sheet_name, sheet_name, excel_file =
                 #loop over the latency values of each column
                 for i in range (0, len(df[params_value['column_name']])):
 
-                    #calculate the ratio based on the ratio column and print it in the ratio sheet
-                    ratio = df[params_value['column_name']][i]/df[params_value['ref']][i]
+                    #calculate the ratio based on the average latency of the ref column
+                    ratio = df[params_value['column_name']][i]/calculate_average(df,params_value['ref'])
 
                     # write the set id
                     ratio_sheet.cell(row=row_id + i + 1, column=column_id).value = i
@@ -324,6 +324,21 @@ def calculate_ratio (payload_params, values_sheet_name, sheet_name, excel_file =
         print("Error loading the excel file "+excel_file)
 
 
+def calculate_average(df, column_name):
+    '''
+    This method calculates and returns the average of the values specified in the column_name
+    :param df:data frame returned by pd.read_excel()
+    :param column_name: name of column for which to calculate the average values
+    :return: average values of the column
+    '''
+    sum =0
+    # loop over the latency values of each column
+
+    for i in range(0, len(df[column_name])):
+        sum = sum+df[column_name][i]
+
+    return sum/len(df[column_name])
+
 def get_cpu_overhead (process_id, remote_address=None, remote_user=None, password=None):
     '''
     This methods returns the CPU overhead in % given by the top commend for a specific process
@@ -336,15 +351,13 @@ def get_cpu_overhead (process_id, remote_address=None, remote_user=None, passwor
         remote_session = set_ssh(remote_address, remote_user, password)
 
         # launch the top command on the remote server
-        print (process_id)
+
         top_results = remote_session.run("top -b -n 1 -p "+str(process_id))
 
         top_results = str(top_results.stdout).splitlines()
     else:
         #launch top locally
         top_results = os.popen('top -b -n 1 -p '+str(process_id))
-    #run the top command
-    #with os.popen('top -b -n 1 -p '+str(process_id)) as pipe:
 
     #loop over each line in top results
     for line in top_results:
@@ -358,6 +371,30 @@ def get_cpu_overhead (process_id, remote_address=None, remote_user=None, passwor
                     return words[8]
     #return 0 if process not found
     return 0
+
+def get_RTT (host_address, request_nb):
+    '''
+    This methods returns the averaged RTT to a certain host of a specific request_nb
+    :param host_address: host to ping
+    :param request_nb: nb of ICMP request to launch with ping and get the average rtt
+    :return: averaged RTT in ms
+    '''
+    avg_rtt =0
+    ping_results = os.popen('ping -c '+ str(request_nb)+" "+ host_address)
+
+    # loop over each line in top results
+    for line in ping_results:
+        print (line)
+        # split each line
+        words = line.split()
+
+        if (len(words) is not 0  and words[0] == 'rtt'):
+            # get the line corresponding avg rtt
+            avg_rtt = words[3].split('/')[1]
+            # return the avg RTT in ms
+            return avg_rtt
+    # return 0 if rtt failed
+    return avg_rtt
 
 # def get_cpu_overhead ( remote_address=None, remote_user=None, password=None):
 #     '''
@@ -640,5 +677,4 @@ def cpu_overhead_test (payload_params, connectivity_conf, graph_params, sheet_na
     #create and save graph
     boxplot(client_sheet_name, excel_file, graph_params, graph_path+client_sheet_name+".png")
     boxplot(server_sheet_name, excel_file, graph_params, graph_path+server_sheet_name+".png")
-
 

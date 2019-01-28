@@ -1,6 +1,6 @@
 from  os.path import join
 import pkg_resources
-from pylurk.performance_tests.performance_utils import latency_test, cpu_overhead_test
+from pylurk.performance_tests.performance_utils import latency_test, cpu_overhead_test, get_RTT
 from copy import deepcopy
 
 def authentication_methods_test (sheet_name, excel_file, graph_path, thread, request_nb, set_nb):
@@ -96,7 +96,7 @@ def authentication_methods_test (sheet_name, excel_file, graph_path, thread, req
 
     graph_params = {'title': '',
                     'xlabel': 'Authentication Methods',
-                    'ylabel': 'Latency (sec)',
+                    'ylabel': 'Ratio',
                     'box_width': 0.5,  # width of each box in the graph
                     'start_position': 1,  # the position of the first box to draw
                     'show_grid': True,  # show grid in the graph
@@ -229,7 +229,7 @@ def mechanism_overhead_pfs_test (sheet_name, excel_file, graph_path, thread, req
 
     graph_params = {'title': '',
                     'xlabel': 'Authentication Methods',
-                    'ylabel': 'Latency (sec)',
+                    'ylabel': 'Ratio',
                     'box_width': 0.5,  # width of each box in the graph
                     'start_position': 1,  # the position of the first box to draw
                     'show_grid': True,  # show grid in the graph
@@ -345,7 +345,7 @@ def mechanism_overhead_poh_test (sheet_name, excel_file, graph_path, thread, req
 
     graph_params = {'title': '',
                     'xlabel': 'Authentication Methods',
-                    'ylabel': 'Latency (sec)',
+                    'ylabel': 'Ratio',
                     'box_width': 0.5,  # width of each box in the graph
                     'start_position': 1,  # the position of the first box to draw
                     'show_grid': True,  # show grid in the graph
@@ -450,7 +450,7 @@ def mechanism_overhead_poo_test (sheet_name, excel_file, graph_path, thread, req
 
     graph_params = {'title': '',
                     'xlabel': 'PoO',
-                    'ylabel': 'Latency (sec)',
+                    'ylabel': 'Ratio',
                     'box_width': 0.5,  # width of each box in the graph
                     'start_position': 1,  # the position of the first box to draw
                     'show_grid': True,  # show grid in the graph
@@ -641,8 +641,8 @@ def transport_protocol_test( sheet_name, excel_file, graph_path, thread, request
 
 
     graph_params = {'title': '',
-                    'xlabel': 'Transport Protocol',
-                    'ylabel': 'Latency (sec)',
+                    'xlabel': 'Athentification Methods',
+                    'ylabel': 'Ratio',
                     'box_width': 0.5,  # width of each box in the graph
                     'start_position': 1,  # the position of the first box to draw
                     'show_grid': True,  # show grid in the graph
@@ -776,7 +776,7 @@ def security_overhead_test( sheet_name, excel_file, graph_path, thread, request_
 
     graph_params = {'title': '',
                     'xlabel': 'Transport Protocol',
-                    'ylabel': 'Latency (sec)',
+                    'ylabel': 'Ratio',
                     'box_width': 0.5,  # width of each box in the graph
                     'start_position': 1,  # the position of the first box to draw
                     'show_grid': True,  # show grid in the graph
@@ -867,8 +867,8 @@ def  multithreading_test( sheet_name, excel_file, graph_path, request_nb_list, s
 
 
     graph_params = {'title': '',
-                    'xlabel': 'Transport Protocol',
-                    'ylabel': 'Latency (sec)',
+                    'xlabel': 'Number of requests',
+                    'ylabel': 'Ratio',
                     'box_width': 0.5,  # width of each box in the graph
                     'start_position': 1,  # the position of the first box to draw
                     'show_grid': True,  # show grid in the graph
@@ -1117,7 +1117,7 @@ def  cpu_overhead_protocols_test( sheet_name, excel_file, graph_path, request_nb
 if __name__=="__main__":
 
      thread = False
-     request_nb =20
+     request_nb =100
      set_nb = 50
      results_dir =  'results/'
      graph_dir =  results_dir+'graphs/'
@@ -1136,7 +1136,7 @@ if __name__=="__main__":
 
 
      thread = True
-     request_nb_list = [1, 10, 25, 50, 100, 200]
+     request_nb_list = [1, 100, 200, 400, 800, 1000]
      print("--------------------Starting Multithreading Test----------------------------")
      multithreading_test('multithread',  results_dir+'multithreading.xlsx', graph_dir, request_nb_list, set_nb, server_ip, remote_user, password,  thread=thread)
 
@@ -1154,3 +1154,6 @@ if __name__=="__main__":
      request_nb_list = [10,20,30,40,50,100]
      cpu_overhead_protocols_test('cpu_transport', results_dir + 'cpu_overhead_protocolos.xlsx', graph_dir, request_nb_list, set_nb,
                         server_ip, remote_user, password, thread=thread)
+
+
+     print("Averaged RTT to %s of %s requests is %s ms"%(server_ip, request_nb, get_RTT(server_ip, request_nb)))
