@@ -969,20 +969,23 @@ def  multithreading_test( sheet_name, excel_file, graph_path, request_nb_list, s
     latency_test(payload_params, connectivity_conf, graph_params, sheet_name, graph_path, excel_file=excel_file,
                   thread=thread, request_nb_list=request_nb_list, set_nb=set_nb, remote_connection=True)
 
-def  cpu_overhead_protocols_test( sheet_name, excel_file, graph_path, request_nb_list, set_nb, server_ip,remote_user, server_password, thread=False):
+def  cpu_overhead_protocols_test( file_path, total_requests_persec, requests_per_client, iterations, wait_time, server_ip,remote_user, server_password, thread=False):
     '''
-      This method performs a multithreading tests using different transport protocol (udplocal(reference), udp, tcp, http) between a client and a server
-      :param sheet_name: the excel sheet name to store the results
-      :param excel_file: path to the excel file that will contain the results. The file is created if it does not exists
-      :param graph_path: path to the graphs depicting the results (e.g. results/ (do not start the path with "/")
-      :param thread: True or False depicting if we want to
-      :param request_nb_list: list of requests number to test per set.
-      :param set_nb: number of sets to test
-      :param server_ip: Ip of the server to which we want to connect remotly
-      :param remote_user: username of remote server
-      :param server_password: password of remote server
-      :return:
-      '''
+    This method will check the cpu overhead on the client and server side with TOp command for all transport protocols and authentication methods.
+    The top results are put in a file based on the pauload_params[column_name] _server or _client based on the client or server test results
+    the results should be averaged over total_requests_persec on iterations (as nb of sets). First 2 iterations should be disgarded
+    :param file_path: path to place te file with the top results
+    :param total_requests_persec:total requests to be sent per sec by all the clients
+    :param requests_per_client: number of requests that a client should send per second. This includes the resolve time+waiting time to reach 1 sec
+    :param total_time: total time of each test in payload_params. After this time the client and server processes are killed
+    :param iterations: number of iterations that the top command should performs
+    :param wait_time: time to wait between top command iterations
+    :param server_ip: Ip of the server to which we want to connect remotley
+    :param remote_user: username of remote server
+    :param server_password: password of remote server
+    :param thread: true if multi threading should be used
+    :return:
+    '''
 
     # define connectivity conf fo client and server
     data_dir = pkg_resources.resource_filename(__name__, '../data/')
@@ -999,120 +1002,171 @@ def  cpu_overhead_protocols_test( sheet_name, excel_file, graph_path, request_nb
                 'path_to_erilurk':"Desktop/HyameServer/projects/erilurk"
              }
 
-    connectivity_conf = {   }
+    connectivity_conf = {  #ensure local connection for udlLocal (do not set remote_user
+        'udpLocal':{
+                'ip_address': '127.0.0.1',
+                'port': 6789,
+                'key': join(data_dir, 'key_tls12_rsa_server.key'),
+                'cert': join(data_dir, 'cert_tls12_rsa_server.crt'),
+                'key_peer': join(data_dir, 'key_tls12_rsa_client.key'),
+                'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
+        }
+    }
     for type in [ 'udp','tcp', 'http', 'https', 'tcp+tls']:
         connectivity_conf[type] = deepcopy(conf)
         connectivity_conf[type]['type'] = type
 
 
-    graph_params = {'title': '',
-                    'xlabel': 'Transport Protocol',
-                    'ylabel': 'CPU Overhead (%)',
-                    'box_width': 0.5,  # width of each box in the graph
-                    'start_position': 1,  # the position of the first box to draw
-                    'show_grid': True,  # show grid in the graph
-                    'legend': {
-                        'location': 'upper right',
-                        # location of the legend. Can take one of the following values:'best','upper right','upper left','lower left','lower right','right','center left','center right','lower center','upper center','center'
-                        'font_properties': {
-                            # 'fontname':'Calibri',
-                            'size': '12',
-                            # 'weight': 'bold',
-                        }
-                    },
-                    'font_properties': {  # font properties of title, ylabel and xlabel
-                        # 'fontname':'Calibri',
-                        'size': '14',
-                        'weight': 'bold',
-                    },
-                    'ticks_font_properties': {
-                        # 'fontname':'Calibri',
-                        'size': '12',
-                        # 'weight': 'bold',
-                    },
-                    # data to plot grouped into multiple group. if no group is desired, a dictionary for each data to plot should be added
-                    'groups': [
+    payload_params = {
+        'udpLocal':[
+            {
+                'type': 'rsa_master',
+                'column_name': 'rsa_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'ref': 'rsa_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'prf_hash': 'sha256',
+                'freshness_funct': 'sha256',
+            },
+            {
+                'type': 'rsa_extended_master',
+                'column_name': 'rsa_extended_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'ref': 'rsa_extended_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'prf_hash': 'sha256',
+                'freshness_funct': 'sha256',
+            },
+            {
+                'type': 'ecdhe',
+                'column_name': 'ecdhe_udpLocal_ref_sig_sha256rsa_pfs_sha256',
+                'ref': 'ecdhe_udpLocal_ref_sig_sha256rsa_pfs_sha256',
+                'sig_and_hash': ('sha256', 'rsa'),
+                'freshness_funct': 'sha256'
+            },
 
-                    ]
+        ],
+        'udp': [
+            {
+                'type': 'rsa_master',
+                'column_name': 'rsa_master_udp_prf_sha256_pfs_sha256',
+                'ref': 'rsa_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'prf_hash': 'sha256',
+                'freshness_funct': 'sha256',
+            },
+            {
+                'type': 'rsa_extended_master',
+                'column_name': 'rsa_extended_master_udp_prf_sha256_pfs_sha256',
+                'ref': 'rsa_extended_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'prf_hash': 'sha256',
+                'freshness_funct': 'sha256',
+            },
+            {
+                'type': 'ecdhe',
+                'column_name': 'ecdhe_udp_sig_sha256rsa_pfs_sha256',
+                'ref': 'ecdhe_udpLocal_ref_sig_sha256rsa_pfs_sha256',
+                'sig_and_hash': ('sha256', 'rsa'),
+                'freshness_funct': 'sha256'
+            },
+
+        ],
+        'tcp': [
+            {
+                'type': 'rsa_master',
+                'column_name': 'rsa_master_tcp_prf_sha256_pfs_sha256',
+                'ref': 'rsa_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'prf_hash': 'sha256',
+                'freshness_funct': 'sha256',
+            },
+            {
+                'type': 'rsa_extended_master',
+                'column_name': 'rsa_extended_master_tcp_prf_sha256_pfs_sha256',
+                'ref': 'rsa_extended_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'prf_hash': 'sha256',
+                'freshness_funct': 'sha256',
+            },
+            {
+                'type': 'ecdhe',
+                'column_name': 'ecdhe_tcp_sig_sha256rsa_pfs_sha256',
+                'ref': 'ecdhe_udpLocal_ref_sig_sha256rsa_pfs_sha256',
+                'sig_and_hash': ('sha256', 'rsa'),
+                'freshness_funct': 'sha256'
+            },
+
+        ],
+        'http': [
+            {
+                'type': 'rsa_master',
+                'column_name': 'rsa_master_http_prf_sha256_pfs_sha256',
+                'ref': 'rsa_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'prf_hash': 'sha256',
+                'freshness_funct': 'sha256',
+            },
+            {
+                'type': 'rsa_extended_master',
+                'column_name': 'rsa_extended_master_http_prf_sha256_pfs_sha256',
+                'ref': 'rsa_extended_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'prf_hash': 'sha256',
+                'freshness_funct': 'sha256',
+            },
+            {
+                'type': 'ecdhe',
+                'column_name': 'ecdhe_http_sig_sha256rsa_pfs_sha256',
+                'ref': 'ecdhe_udpLocal_ref_sig_sha256rsa_pfs_sha256',
+                'sig_and_hash': ('sha256', 'rsa'),
+                'freshness_funct': 'sha256'
+            },
+
+        ],
+        'https': [
+            {
+                'type': 'rsa_master',
+                'column_name': 'rsa_master_https_prf_sha256_pfs_sha256',
+                'ref': 'rsa_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'prf_hash': 'sha256',
+                'freshness_funct': 'sha256',
+            },
+            {
+                'type': 'rsa_extended_master',
+                'column_name': 'rsa_extended_master_https_prf_sha256_pfs_sha256',
+                'ref': 'rsa_extended_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'prf_hash': 'sha256',
+                'freshness_funct': 'sha256',
+            },
+            {
+                'type': 'ecdhe',
+                'column_name': 'ecdhe_https_sig_sha256rsa_pfs_sha256',
+                'ref': 'ecdhe_udpLocal_ref_sig_sha256rsa_pfs_sha256',
+                'sig_and_hash': ('sha256', 'rsa'),
+                'freshness_funct': 'sha256'
+            },
+
+        ],
+        'tcp+tls': [
+            {
+                'type': 'rsa_master',
+                'column_name': 'rsa_master_tcptls_prf_sha256_pfs_sha256',
+                'ref': 'rsa_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'prf_hash': 'sha256',
+                'freshness_funct': 'sha256',
+            },
+            {
+                'type': 'rsa_extended_master',
+                'column_name': 'rsa_extended_master_tcptls_prf_sha256_pfs_sha256',
+                'ref': 'rsa_extended_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'prf_hash': 'sha256',
+                'freshness_funct': 'sha256',
+            },
+            {
+                'type': 'ecdhe',
+                'column_name': 'ecdhe_tcptls_sig_sha256rsa_pfs_sha256',
+                'ref': 'ecdhe_udpLocal_ref_sig_sha256rsa_pfs_sha256',
+                'sig_and_hash': ('sha256', 'rsa'),
+                'freshness_funct': 'sha256'
+            },
+
+        ],
+
     }
 
-    payload_params = {
-            'udp': [],
-            'tcp': [],
-            'http': [],
-            'tcp+tls':[],
-            'https':[],
-        }
-
-    count=0
-    for request_nb in request_nb_list:
-        # start by setting payload parameters
-        tcptls_param = {
-                             'type': 'rsa_master',
-                             'column_name': 'tcptls_ref_' + str(request_nb) + '_request',
-                             'ref': 'tcptls_ref_' + str(request_nb_list[0]) + '_request',
-                             'prf_hash': 'sha256',
-                             'freshness_funct': 'sha256',
-                         }
-        udp_param = {
-                        'type': 'rsa_master',
-                        'column_name': 'udp_ref_' + str(request_nb) + '_request',
-                        'ref': 'udp_ref_' + str(request_nb_list[0]) + '_request',
-                        'prf_hash': 'sha256',
-                        'freshness_funct': 'sha256',
-                    }
-        tcp_param = {
-                        'type': 'rsa_master',
-                        'column_name': 'tcp_ref_' + str(request_nb) + '_request',
-                        'ref': 'tcp_ref_' + str(request_nb_list[0]) + '_request',
-                        'prf_hash': 'sha256',
-                        'freshness_funct': 'sha256',
-                    }
-        http_param = {
-                         'type': 'rsa_master',
-                         'column_name': 'http_ref_' + str(request_nb) + '_request',
-                         'ref': 'http_ref_' + str(request_nb_list[0]) + '_request',
-                         'prf_hash': 'sha256',
-                         'freshness_funct': 'sha256',
-                     }
-        https_param = {
-            'type': 'rsa_master',
-            'column_name': 'https_ref_' + str(request_nb) + '_request',
-            'ref': 'https_ref_' + str(request_nb_list[0]) + '_request',
-            'prf_hash': 'sha256',
-            'freshness_funct': 'sha256',
-        }
-
-        payload_params['tcp+tls'].append(tcptls_param)
-        payload_params['udp'].append(udp_param)
-        payload_params['tcp'].append(tcp_param)
-        payload_params['http'].append(http_param)
-        payload_params['https'].append(https_param)
-
-
-        if count ==1:#add the legends once
-            group = {'tick_label': request_nb,
-                     'color': ['white','white','white','white', 'white' ],#['blue', 'green', 'orange', 'cyan'],
-                     'hatch': ['*','/', 'o',  'x','-'],
-                     'data': ['udp_ref_' + str(request_nb) + '_request',
-                              'tcp_ref_' + str(request_nb) + '_request', 'http_ref_' + str(request_nb) + '_request', 'tcptls_ref_' + str(request_nb) + '_request','https_ref_' + str(request_nb) + '_request',],
-                     'legends': [ 'UDP', 'TCP', 'HTTP', 'TCP+TLS','HTTPS']
-                     }
-        else:
-            group = {'tick_label': request_nb,
-                    'color': ['white', 'white', 'white', 'white','white'],  # ['blue', 'green', 'orange', 'cyan'],
-                    'hatch': ['*', '/', 'o', 'x','-'],
-                    'data': ['udp_ref_' + str(request_nb) + '_request',
-                              'tcp_ref_' + str(request_nb) + '_request', 'http_ref_' + str(request_nb) + '_request', 'tcptls_ref_' + str(request_nb) + '_request','https_ref_' + str(request_nb) + '_request',],
-                    'legends': []
-                    }
-        # add groups to display in the graph
-        graph_params['groups'].append(group)
-        count+=1
-
-    cpu_overhead_test(payload_params, connectivity_conf, graph_params, sheet_name, graph_path, excel_file=excel_file,
-                  thread=thread, request_nb_list=request_nb_list, set_nb=set_nb, remote_connection=True)
-
+    cpu_overhead_test(payload_params, connectivity_conf, file_path, total_requests_persec, requests_per_client,
+             iterations, wait_time, thread=thread, remote_connection=True)
 
 if __name__=="__main__":
 
@@ -1127,8 +1181,8 @@ if __name__=="__main__":
      password = 'xubuntu6789'
 
 
-     # print("--------------------Starting Security Overhead Test----------------------------")
-     # security_overhead_test('security', results_dir + 'security_overhead.xlsx', graph_dir, thread, request_nb, set_nb, server_ip, remote_user, password)
+     print("--------------------Starting Security Overhead Test----------------------------")
+     security_overhead_test('security', results_dir + 'security_overhead.xlsx', graph_dir, thread, request_nb, set_nb, server_ip, remote_user, password)
 
      print("--------------------Starting Transport Protocol Test----------------------------")
      transport_protocol_test('transport', results_dir+'transport_protocol.xlsx', graph_dir, thread, request_nb, set_nb,server_ip, remote_user, password)
@@ -1151,9 +1205,11 @@ if __name__=="__main__":
      print("--------------------Starting Mechanism Overhead poo Test----------------------------")
      mechanism_overhead_poo_test('poo', results_dir + 'mechanism_overhead_poo.xlsx', graph_dir, thread, request_nb, set_nb)
 
-     request_nb_list = [10,20,30,40,50,100]
-     cpu_overhead_protocols_test('cpu_transport', results_dir + 'cpu_overhead_protocolos.xlsx', graph_dir, request_nb_list, set_nb,
-                        server_ip, remote_user, password, thread=thread)
+     total_requests_persec = 10
+     requests_per_client = 10
+     iterations = 2
+     wait_time = 5#wait 5 sec after each iteration
 
 
-     print("Averaged RTT to %s of %s requests is %s ms"%(server_ip, request_nb, get_RTT(server_ip, request_nb)))
+     cpu_overhead_protocols_test(results_dir, total_requests_persec, requests_per_client, iterations, wait_time,
+                            server_ip, remote_user, password, thread=thread)
