@@ -1318,7 +1318,7 @@ class BaseTCPServer(TCPServer):
         pass
 
 
-    def serve_forever(self, poll_interval=0.5):
+    def serve_forever(self, poll_interval=None):
         """ serves incoming request
 
         This function listen to events on the listening socket
@@ -1335,6 +1335,7 @@ class BaseTCPServer(TCPServer):
         provided at the creation of the socket are responded, other
         are not treated.
         """
+        print("staring serve_forever")
         self._BaseServer__is_shut_down.clear()
         previous_time = 0
         try:
@@ -1344,7 +1345,6 @@ class BaseTCPServer(TCPServer):
                     if self._BaseServer__shutdown_request:
                         break
                     try:
-                        ##print("serve_forever: %s"%str(selector_key))
                         self.fd_busy[selector_key.fileobj.fileno()]
                     except KeyError:
                         self._handle_request_noblock(selector_key, event)
@@ -1358,7 +1358,7 @@ class BaseTCPServer(TCPServer):
                             delta_time = current_time - self.fd_time[fd]
                             if delta_time > self.fd_timeout and key.data == 'establish':
                                 self.close_request(key.fileobj)
-                        except KeyError:
+                        except KeyError as e:
                             ## time of self.socket is not monitored
                             ## while it triggers events
                             continue

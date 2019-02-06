@@ -191,6 +191,37 @@ def set_title(title):
     h_line += '+\n'
     return h_line + '|' + title + '|\n' + h_line + '\n\n'
 
+def default_param(role, **kwargs):
+    conn_conf ={ }
+    for k in ['type', 'ip_address', 'port', 'key', 'cert', \
+              'key_peer', 'cert_peer']:
+        try:
+            conn_conf[k]=kwargs['connectivity_conf'][k]
+        except KeyError:
+            try:
+               conn_conf[k]
+            except KeyError:
+              conn_conf[k] = default_conf['connectivity'][k]
+    try:
+        background = kwargs['background']
+    except KeyError:
+        background = True
+    try:
+        thread = kwargs['thread']
+    except KeyError:
+        thread = True
+
+
+    conf = LurkConf(deepcopy(default_conf))
+    conf.set_role(role)
+
+    conf.set_connectivity(type=conn_conf['type'], ip_address=conn_conf['ip_address'], \
+                          port=conn_conf['port'], key=conn_conf['key'], \
+                          cert = conn_conf['cert'], key_peer=conn_conf['key_peer'], \
+                          cert_peer=conn_conf['cert_peer'])
+    return conf, background, thread 
+
+
 def set_lurk(role, **kwargs):
     """ set lurk client or server
 
@@ -215,44 +246,22 @@ def set_lurk(role, **kwargs):
             set to True.
 
     """
-    conn_conf ={ }
-    for k in ['type', 'ip_address', 'port', 'key', 'cert', \
-              'key_peer', 'cert_peer']:
-        try:
-            conn_conf[k]=kwargs['connectivity_conf'][k]
-        except KeyError:
-            try:
-               conn_conf[k]
-            except KeyError:
-              conn_conf[k] = default_conf['connectivity'][k]
+#    connection_type = conn_conf['type']
+#
+#    role_list = ['client', 'server']
+#    connection_type_list = ['udp', 'udp+dtls', 'tcp', 'tcp+tls', 'http', 'https']
+#    if role not in role_list:
+#        ConfError(role, "UNKNOWN. Expecting value in %s"%role_list)
+#    if connection_type not in connection_type_list:
+#        ConfError(connection_type, "UNKNOWN connection_type. Expecting value " +\
+#                  "in %s"%connection_type_list)
     try:
         resolver_mode = kwargs['resolver_mode']
     except KeyError:
         resolver_mode = 'stub'
-    try:
-        background = kwargs['background']
-    except KeyError:
-        background = True
-    try:
-        thread = kwargs['thread']
-    except KeyError:
-        thread = True
 
-
-    conf = LurkConf(deepcopy(default_conf))
-    conf.set_role(role)
-
-    conf.set_connectivity(type=conn_conf['type'], ip_address=conn_conf['ip_address'], port=conn_conf['port'],
-                          key=conn_conf['key'], cert = conn_conf['cert'], key_peer=conn_conf['key_peer'], cert_peer=conn_conf['cert_peer'])
-    connection_type = conn_conf['type']
-
-    role_list = ['client', 'server']
-    connection_type_list = ['udp', 'udp+dtls', 'tcp', 'tcp+tls', 'http', 'https']
-    if role not in role_list:
-        ConfError(role, "UNKNOWN. Expecting value in %s"%role_list)
-    if connection_type not in connection_type_list:
-        ConfError(connection_type, "UNKNOWN connection_type. Expecting value " +\
-                  "in %s"%connection_type_list)
+    conf, background, thread = default_param(role, **kwargs)
+    connection_type = conf.get_conf()['connectivity']['type']
 
     if role == 'client':
         print("Setting client %s"%connection_type)
@@ -292,8 +301,8 @@ def set_lurk(role, **kwargs):
                 server = LurkHTTPServer(conf.get_conf(), thread=thread)
         if background is True:
             server.start()
-        return server
-
+            return server 
+            
 def tls12_conf_ecdhe_payloads():
     """ returns payloads associated to various configuration parameters
 
@@ -474,68 +483,119 @@ def set_ssh(remote_host, remote_user, password):
 
 def start_server(connectivity_conf, background=True, thread=True, \
                  remote_connection=False):
-    '''
-    This method start a local or remote server using ssh of any type (udp, udp+dtls, tcp, tcp+tls, hhtp, https)
-    :param connectivity_conf: dictionary containing the connectivity information as follows:
-    connectivity_conf = {
-              'type' : "udp",  # "local", "tcp", "tcp+tls", http, https
-              'ip_address' : "127.0.0.1", #can be the remote_host if remote connection is desired
-              'port' : 6789,
-              'key' : join( data_dir, 'key_tls12_rsa_server.key'),
-              'cert' : join( data_dir, 'cert_tls12_rsa_server.crt'),
-              'key_peer' : join( data_dir, 'key_tls12_rsa_client.key'),
-              'cert_peer' : join( data_dir, 'cert_tls12_rsa_client.crt'),
-              'remote_user': 'xubuntu_server', #needed for ssh connection
-              'password:'123'#password to the remote server
-              'path_to_erilurk': 'Desktop/HyameServer/projects/erilurk' #path to erilurk project on remote server
-    }
-    :param background: if set to true will start the server in the background as a process
-    :param thread: if set to true will enable multi-threading on the server side
-    :param remote_connection: if set to true will enable ssh connection to a remote server
-    :return:
-    '''
 
+    """ This method start a local or remote server using ssh of any type
+        (udp, udp+dtls, tcp, tcp+tls, hhtp, https)
+
+    Args:
+        - connectivity_conf (dict) containing the connectivity information 
+              as follows:
+              connectivity_conf = {
+                 'type' : 'udp', # lurk server connectivity. Default value is
+                      'udp'. Possible other values can be 'local, 'tcp', 
+                      'tcp+tls', 'http', 'https'
+                 'ip_address' : '127.0.0.1' # lurk server IP address. Default 
+                      value is '127.0.0.1'. This parameter will be used 
+                      by the lurk client as well as the by the ssh client 
+                      to identify the host on which the lurk server is started. 
+                 'port' : 6789, # lurk_server port. Default value is 6789
+                 'key' : join( data_dir, 'key_tls12_rsa_server.key'), # the 
+                      private key used for the TLS cryptographic
+                      operations. As well as the key used for TLS session 
+                      with the server (we shoudl have two different keys)
+                 'cert' : join( data_dir, 'cert_tls12_rsa_server.crt'),
+                 'key_peer' : join( data_dir, 'key_tls12_rsa_client.key'),
+                 'cert_peer' : join( data_dir, 'cert_tls12_rsa_client.crt'),
+                 'remote_user': 'xubuntu_server', #needed for ssh connection
+                 'password:'123'#password to the remote server
+                 'path_to_erilurk': 'Desktop/HyameServer/projects/erilurk' 
+                      #path to erilurk project on remote server. Should be
+                      remove when installation is performed with pip3 or
+                      any package installation. 
+              }
+        - background: if set to true will start the server in the background 
+              as a process. Doe not change much. WE SHOUDL REMOVE THIS PARAMETER
+        - thread (bool): if set to true enables multi-threading on the server side
+        - remote_connection (bool) : if set to true start the lurk
+             server on a remote host via ssh. 
+    Returns:
+        - server: the object identifying the lurk server process. When
+            executed remotely, server is the PID when executed local
+            server is a process. Note that when executed remotely, the
+            server is started as daemon. When executed locally, it is
+            the responsibility of the function to maintain server
+            running. Exiting the function kills the child processes even 
+            when tagged as daemon. As a result the function is expected
+            to do a server.join() to avoid killing the server.   
+    """
+
+    conf, background, thread = default_param('server', \
+                                   connectivity_conf=connectivity_conf, \
+                                   background=background, \
+                                   thread=thread)
+
+    conn_conf = conf.get_conf()['connectivity']
     if remote_connection is False:
-        server = set_lurk('server', connectivity_conf=connectivity_conf, background=background, \
-                 thread=thread )
-        sleep(5)
-        return server.pid
+        server = set_lurk('server', connectivity_conf=conn_conf, \
+                     background=background, thread=thread)
+        return server
 
-    #default values to any missing parameters from the configuration to prevent error when running start server on the remote host
-    updated_conf = {}
-    for k in ['type', 'ip_address', 'port', 'key', 'cert','key_peer', 'cert_peer', 'remote_user', 'password', 'path_to_erilurk']:
-        try:
-            updated_conf[k] = connectivity_conf[k]
-        except KeyError:
-            try:
-                if k in ['remote_user', 'password', 'ip_address', 'path_to_erilurk']:
-                    print("Missing argument remote_host and/or remote_user and/or password and/or path_to_erilurk")
-                    return
-                else:
-                    updated_conf[k]
+    else:
+        for k in ['remote_user', 'password', 'ip_address', 'path_to_erilurk']:
+            try: 
+                conn_conf[k] = connectivity_conf[k]
             except KeyError:
-                updated_conf[k] = default_conf['connectivity'][k]
+                ConfError(connectivity_conf, "Cannot establish " +\
+                    "ssh session. Only password is implemented." +\
+                    "Missing remote_user and/or password and/or path_to_erilurk")
 
-    #connect to remote server
-    remote_session = set_ssh(updated_conf['ip_address'], updated_conf['remote_user'], updated_conf['password'])
+###        #default values to any missing parameters from the configuration to prevent error when running start server on the remote host
+###        updated_conf = {}
+###        for k in ['type', 'ip_address', 'port', 'key', 'cert','key_peer', \
+###                 'cert_peer', 'remote_user', 'password', 'path_to_erilurk']:
+###            try:
+###                updated_conf[k] = connectivity_conf[k]
+###            except KeyError:
+###                try:
+###                    if k in ['remote_user', 'password', 'ip_address', 'path_to_erilurk']:
+###                        ConfError(connectivity_conf, "Cannot establish " +\
+###                            "ssh session. Only password is implemented." +\
+###                            "Missing remote_user and/or password and/or path_to_erilurk")
+###                    else:
+###                        updated_conf[k]
+###                except KeyError:
+###                    updated_conf[k] = default_conf['connectivity'][k]
 
-    with remote_session.cd (updated_conf['path_to_erilurk']):
-         #use screen -d -m to keep the process running on remote server and continue to run the remaining code
-         #todo check connection reset by peer issue when trying to set the keys
-         #remote_session.run("screen -d -m python3 -m pylurk.utils.start_server --key type --value %s --key ip_address --value %s --key port --value %d --key key --value %s --key cert --value %s --key key_peer --value %s --key cert_peer --value %s --background False --thread %s" %(updated_conf['type'], updated_conf['ip_address'], updated_conf['port'], updated_conf['key'], updated_conf['cert'], updated_conf['key_peer'], updated_conf['cert_peer'], thread))#& echo $!
+        #connect to remote server
+        remote_session = set_ssh(conn_conf['ip_address'], \
+                                 conn_conf['remote_user'], \
+                                 conn_conf['password'])
 
-         remote_session.run( "screen -d -m python3 -m pylurk.utils.start_server --key type --value %s --key ip_address --value %s --key port --value %d  --background False --thread %s" %(updated_conf['type'], updated_conf['ip_address'], updated_conf['port'], thread))  # & echo $!
+        with remote_session.cd (updated_conf['path_to_erilurk']):
+             ## use screen -d -m to keep the process running on remote server and
+             ## continue to run the remaining code
+             ## todo check connection reset by peer issue when trying to set the keys
+             ##  remote_session.run("screen -d -m python3 -m pylurk.utils.start_server --key type --value %s --key ip_address --value %s --key port --value %d --key key --value %s --key cert --value %s --key key_peer --value %s --key cert_peer --value %s --background False --thread %s" %(updated_conf['type'], updated_conf['ip_address'], updated_conf['port'], updated_conf['key'], updated_conf['cert'], updated_conf['key_peer'], updated_conf['cert_peer'], thread))#& echo $!
 
-    #wait till server gets started
-    sleep (10)
+             remote_session.run( "screen -d -m python3 -m pylurk.utils.start_server --key type --value %s --key ip_address --value %s --key port --value %d  --background False --thread %s" %(updated_conf['type'], updated_conf['ip_address'], updated_conf['port'], thread))  # & echo $!
 
-    #get the process of the launched server which will be of the for ip_address:port
-    processes = remote_session.run("lsof -i -P -n | grep %s" % updated_conf['ip_address'] + ":" + str(updated_conf['port']))
+        #wait till server gets started
+        sleep (2)
 
-    #return the process id of the launched server
-    return int((str(processes.stdout).split())[1])
+        #get the process of the launched server which will be of the for ip_address:port
+        processes = remote_session.run("lsof -i -P -n | grep %s" % updated_conf['ip_address'] + ":" + str(updated_conf['port']))
 
-def stop_server(server_pid, remote_host=None, remote_user=None, password = None):
+        #return the process id of the launched server
+        return int((str(processes.stdout).split())[1])
+
+
+
+def stop_server(server, remote_host=None, remote_user=None, password = None):
+    
+    if isinstance(server, mp.context.Process) :
+        server_pid = server.pid
+    else:
+        server_pid = int(server) 
     if remote_host is None:
         os.kill(server_pid, signal.SIGTERM)
         sleep(5)
