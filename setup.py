@@ -128,7 +128,7 @@ setup(
     # For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
     install_requires=['construct==2.8.22', 'pycryptodomex', 'tinyec',\
-                      'cryptography', 'fabric', \
+                      'cryptography', 'fabric', 'python-daemon-3K',  \
                       'openpyxl', 'xlrd', 'matplotlib'],  # Optional
 
     # List additional groups of dependencies here (e.g. development
