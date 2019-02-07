@@ -1165,17 +1165,18 @@ def  cpu_overhead_protocols_test( file_path, total_requests_persec, requests_per
 
     }
 
+
     cpu_overhead_test(payload_params, connectivity_conf, file_path, total_requests_persec, requests_per_client,
              iterations, wait_time, thread=thread, remote_connection=True)
 
 if __name__=="__main__":
 
      thread = False
-     request_nb =100
+     request_nb =1
      set_nb = 50
      results_dir =  'results/'
      graph_dir =  results_dir+'graphs/'
-     server_ip = '192.168.0.104'#.108
+     server_ip ='192.168.0.108'#.108
 
      remote_user='xubuntu_server'
      password = 'xubuntu6789'
@@ -1190,7 +1191,7 @@ if __name__=="__main__":
 
 
      thread = True
-     request_nb_list = [1, 100, 200, 400, 800, 1000]
+     request_nb_list = [1, 100, 200, 400, 600, 800, 1000]
      print("--------------------Starting Multithreading Test----------------------------")
      multithreading_test('multithread',  results_dir+'multithreading.xlsx', graph_dir, request_nb_list, set_nb, server_ip, remote_user, password,  thread=thread)
 
@@ -1206,10 +1207,10 @@ if __name__=="__main__":
      mechanism_overhead_poo_test('poo', results_dir + 'mechanism_overhead_poo.xlsx', graph_dir, thread, request_nb, set_nb)
 
      total_requests_persec = 10
-     requests_per_client = 10
+     requests_per_client = 2
      iterations = 2
      wait_time = 5#wait 5 sec after each iteration
 
 
      cpu_overhead_protocols_test(results_dir, total_requests_persec, requests_per_client, iterations, wait_time,
-                            server_ip, remote_user, password, thread=thread)
+                             server_ip, remote_user, password, thread=thread)

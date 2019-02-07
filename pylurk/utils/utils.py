@@ -528,65 +528,49 @@ def start_server(connectivity_conf, background=True, thread=True, \
             when tagged as daemon. As a result the function is expected
             to do a server.join() to avoid killing the server.   
     """
-
-    conf, background, thread = default_param('server', \
-                                   connectivity_conf=connectivity_conf, \
-                                   background=background, \
-                                   thread=thread)
-
-    conn_conf = conf.get_conf()['connectivity']
     if remote_connection is False:
-        server = set_lurk('server', connectivity_conf=conn_conf, \
-                     background=background, thread=thread)
-        return server
+        server = set_lurk('server', connectivity_conf=connectivity_conf, background=background, \
+                          thread=thread)
+        sleep(5)
+        return server.pid
 
-    else:
-        for k in ['remote_user', 'password', 'ip_address', 'path_to_erilurk']:
-            try: 
-                conn_conf[k] = connectivity_conf[k]
+    # default values to any missing parameters from the configuration to prevent error when running start server on the remote host
+    updated_conf = {}
+    for k in ['type', 'ip_address', 'port', 'key', 'cert', 'key_peer', 'cert_peer', 'remote_user', 'password',
+              'path_to_erilurk']:
+        try:
+            updated_conf[k] = connectivity_conf[k]
+        except KeyError:
+            try:
+                if k in ['remote_user', 'password', 'ip_address', 'path_to_erilurk']:
+                    print("Missing argument remote_host and/or remote_user and/or password and/or path_to_erilurk")
+                    return
+                else:
+                    updated_conf[k]
             except KeyError:
-                ConfError(connectivity_conf, "Cannot establish " +\
-                    "ssh session. Only password is implemented." +\
-                    "Missing remote_user and/or password and/or path_to_erilurk")
+                updated_conf[k] = default_conf['connectivity'][k]
 
-###        #default values to any missing parameters from the configuration to prevent error when running start server on the remote host
-###        updated_conf = {}
-###        for k in ['type', 'ip_address', 'port', 'key', 'cert','key_peer', \
-###                 'cert_peer', 'remote_user', 'password', 'path_to_erilurk']:
-###            try:
-###                updated_conf[k] = connectivity_conf[k]
-###            except KeyError:
-###                try:
-###                    if k in ['remote_user', 'password', 'ip_address', 'path_to_erilurk']:
-###                        ConfError(connectivity_conf, "Cannot establish " +\
-###                            "ssh session. Only password is implemented." +\
-###                            "Missing remote_user and/or password and/or path_to_erilurk")
-###                    else:
-###                        updated_conf[k]
-###                except KeyError:
-###                    updated_conf[k] = default_conf['connectivity'][k]
+    # connect to remote server
+    remote_session = set_ssh(updated_conf['ip_address'], updated_conf['remote_user'], updated_conf['password'])
 
-        #connect to remote server
-        remote_session = set_ssh(conn_conf['ip_address'], \
-                                 conn_conf['remote_user'], \
-                                 conn_conf['password'])
+    with remote_session.cd(updated_conf['path_to_erilurk']):
+        # use screen -d -m to keep the process running on remote server and continue to run the remaining code
+        # todo check connection reset by peer issue when trying to set the keys
+        # remote_session.run("screen -d -m python3 -m pylurk.utils.start_server --key type --value %s --key ip_address --value %s --key port --value %d --key key --value %s --key cert --value %s --key key_peer --value %s --key cert_peer --value %s --background False --thread %s" %(updated_conf['type'], updated_conf['ip_address'], updated_conf['port'], updated_conf['key'], updated_conf['cert'], updated_conf['key_peer'], updated_conf['cert_peer'], thread))#& echo $!
 
-        with remote_session.cd (updated_conf['path_to_erilurk']):
-             ## use screen -d -m to keep the process running on remote server and
-             ## continue to run the remaining code
-             ## todo check connection reset by peer issue when trying to set the keys
-             ##  remote_session.run("screen -d -m python3 -m pylurk.utils.start_server --key type --value %s --key ip_address --value %s --key port --value %d --key key --value %s --key cert --value %s --key key_peer --value %s --key cert_peer --value %s --background False --thread %s" %(updated_conf['type'], updated_conf['ip_address'], updated_conf['port'], updated_conf['key'], updated_conf['cert'], updated_conf['key_peer'], updated_conf['cert_peer'], thread))#& echo $!
+        remote_session.run(
+            "screen -d -m python3 -m pylurk.utils.start_server --key type --value %s --key ip_address --value %s --key port --value %d  --background False --thread %s" % (
+            updated_conf['type'], updated_conf['ip_address'], updated_conf['port'], thread))  # & echo $!
 
-             remote_session.run( "screen -d -m python3 -m pylurk.utils.start_server --key type --value %s --key ip_address --value %s --key port --value %d  --background False --thread %s" %(updated_conf['type'], updated_conf['ip_address'], updated_conf['port'], thread))  # & echo $!
+    # wait till server gets started
+    sleep(10)
 
-        #wait till server gets started
-        sleep (2)
+    # get the process of the launched server which will be of the for ip_address:port
+    processes = remote_session.run(
+        "lsof -i -P -n | grep %s" % updated_conf['ip_address'] + ":" + str(updated_conf['port']))
 
-        #get the process of the launched server which will be of the for ip_address:port
-        processes = remote_session.run("lsof -i -P -n | grep %s" % updated_conf['ip_address'] + ":" + str(updated_conf['port']))
-
-        #return the process id of the launched server
-        return int((str(processes.stdout).split())[1])
+    # return the process id of the launched server
+    return int((str(processes.stdout).split())[1])
 
 
 
