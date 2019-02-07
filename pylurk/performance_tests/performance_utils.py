@@ -13,6 +13,7 @@ from pylurk.utils.utils import start_server, stop_server, set_lurk, set_ssh
 from pylurk.utils.data_plot import boxplot
 from pylurk.utils.excel import write_to_excel
 import multiprocessing as mp
+import signal
 
 
 def get_payload_params(mtype, **kwargs):
@@ -342,7 +343,7 @@ def calculate_average(df, column_name):
 def get_cpu_overhead (file_path, iterations, wait_time, remote_host=None, remote_user=None, password=None):
     '''
     This method launches the top command on a local or remote host for a certain number of iterations with a wait_time between each iteration
-    :param file_path: the file (log.txt) or path to the file (/x/y/log.txt) where the top results should be dumped
+    :param file_path: the file (log.txt) or path to the file (/x/y/log.txt) where the top results should be dumped in the client host (localhost)
     :param iterations: number of iterations that top should perform (-n parameter)
     :param wait_time: number of seconds to wait between each 2 consecutive iterations (-d parameter)
     :param remote_host: ip address of remote host
@@ -356,7 +357,11 @@ def get_cpu_overhead (file_path, iterations, wait_time, remote_host=None, remote
         remote_session = set_ssh(remote_host, remote_user, password)
 
         # launch the top command on the remote server
-        remote_session.run('top -d'+str(wait_time)+' -n'+str(iterations)+' -b -uroot >'+file_path)
+        top_result = remote_session.run('top -d'+str(wait_time)+' -n'+str(iterations)+' -b -uroot')
+
+        #for remote connection dump the top results of the server on the client machine
+        file = open(file_path,"w+")
+        file.write(str(top_result.stdout))
     else:
         #launch top locally
         os.popen('top -d'+str(wait_time)+' -n'+str(iterations)+' -b -uroot >'+file_path)
@@ -441,7 +446,7 @@ def launch_requests (total_requests_persec, requests_per_client, total_time, mty
         client = set_lurk('client', connectivity_conf=connectivity_conf, resolver_mode='stub')
 
         #launch a certain nb of requests per client per sec as sub process
-        client_process = mp.Process(target=launch_requests_client, args=(client, requests_per_client, mtype, payload_params, total_time), name="client_%d"%i, daemon =True)  ###
+        client_process = mp.Process(target=launch_requests_client, args=(client, requests_per_client, mtype, payload_params, total_time), name="client_%d"%i)  ###
         client_process.start()
 
         #save the clients pid
@@ -452,7 +457,8 @@ def launch_requests (total_requests_persec, requests_per_client, total_time, mty
 def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_requests_persec, requests_per_client,  iterations, wait_time, thread = False,remote_connection = False):
     '''
         This method performs the cpu overhead test on the client and server side.
-        It prints the results into the specified payload_params[column_name]+"_client" for client side cpu and payload_params[column_name]+"_server" for server side cpu overhead
+        It prints the results into the specified payload_params[column_name]+"_client" for client side cpu and payload_params[column_name]+"_server" for server side cpu overhead and place them
+        in a client and server folder in the directory specified in file_path
         total_time =(iterations+2)*wait_time: total time of each test in payload_params. After this time the client and server processes are killed
     :param payload_params: dictionary with payload parameters containing the list of tests setups to perform.
         each key in payload param should correspond to a key in connectivity conf.
@@ -488,7 +494,7 @@ def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_reque
             }
 
     }
-    :param file_path: path to place te file with the top results
+    :param file_path: path to place te file with the top results (directory)
     :param total_requests_persec:total requests to be sent per sec by all the clients
     :param requests_per_client: number of requests that a client should send per second. This includes the resolve time+waiting time to reach 1 sec
     :param iterations: number of iterations that the top command should performs
@@ -508,14 +514,21 @@ def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_reque
         else:
             remote = False
 
+        #create a client and server folder to hold the cpu overhead results for the client and server side respectively
+        client_path = file_path + "client"
+        server_path = file_path + "server"
+
+        if (os.path.exists(client_path) == False):
+            print('here')
+            os.makedirs(client_path)
+
+        if (os.path.exists(server_path) == False):
+            os.makedirs(server_path)
 
         for params_value in test_params:
 
             # start server corresponding to the key for each params value to make sure of having accurate results
             server_process_id = start_server(connectivity_conf=connectivity_conf[connectivity_key], thread=thread, remote_connection=remote)
-
-            client_file_path = file_path+""+params_value['column_name']+"_client.txt"
-            server_file_path = file_path+""+params_value['column_name']+"_server.txt"
 
             # generate payload params
             generated_payload_params = get_payload_params(params_value['type'], args=params_value)
@@ -525,13 +538,18 @@ def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_reque
             #have the results averaged over iterations number
             total_time = (iterations+2)*wait_time
 
+            client_file_path = client_path + "/"+params_value['column_name']+"_client.txt"
+            server_file_path = server_path + "/"+params_value['column_name']+"_server.txt"
+
             #save the list of client process ids launching the requests
             client_processes = []
 
             # launch a certain nb of requests per client per sec as sub process
             #number of launched clients = total_requests_persec/requests_per_client
-            launch_clients_proc  = mp.Process(target=launch_requests, args = (total_requests_persec, requests_per_client, total_time, params_value['type'], generated_payload_params, connectivity_conf[connectivity_key], client_processes))
-            launch_clients_proc.start()
+
+
+           # launch_clients_proc  = mp.Process(target=launch_requests, args = (total_requests_persec, requests_per_client, total_time, params_value['type'], generated_payload_params, connectivity_conf[connectivity_key], client_processes))
+            #launch_clients_proc.start()
 
             # run the top command locally
             client_top_process = mp.Process(target=get_cpu_overhead, args = (client_file_path, iterations, wait_time), daemon = True)
@@ -544,14 +562,17 @@ def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_reque
                                                   connectivity_conf[connectivity_key]['password']), daemon = True)
                server_top_process.start()
 
+            launch_requests(total_requests_persec, requests_per_client, total_time,
+                                                  params_value['type'], generated_payload_params,
+                                                  connectivity_conf[connectivity_key], client_processes)
             #kill client processes (even before recieving response) once all top results has been collected
             if (not client_top_process.is_alive() and server_top_process is not None and not server_top_process.is_alive() ):
                 #kill client processes
                 for process in client_processes:
-                    os.kill(process)
+                    os.kill(process, signal.SIGKILL)
 
 
-            # stop the server
+            #stop the server
             if (remote == True):
                 stop_server(server_process_id, remote_host=connectivity_conf[connectivity_key]['ip_address'],
                             remote_user=connectivity_conf[connectivity_key]['remote_user'],
