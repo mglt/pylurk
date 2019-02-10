@@ -460,6 +460,7 @@ def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_reque
         It prints the results into the specified payload_params[column_name]+"_client" for client side cpu and payload_params[column_name]+"_server" for server side cpu overhead and place them
         in a client and server folder in the directory specified in file_path
         total_time =(iterations+2)*wait_time: total time of each test in payload_params. After this time the client and server processes are killed
+        It prints the parameters in an excel file
     :param payload_params: dictionary with payload parameters containing the list of tests setups to perform.
         each key in payload param should correspond to a key in connectivity conf.
         the other key, values in the dictionary of each item in payload params correspond to those desired for the test and should be similar to those defined in core/conf.py
@@ -503,6 +504,21 @@ def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_reque
     :param remote_connection: true if remote connection to server should be performed
     :return:
     '''
+
+    test_params = {
+        'connectivity_conf': connectivity_conf,
+        'payload_params': payload_params,
+        'total_requests_persec': total_requests_persec,
+        'requests_per_client':requests_per_client,
+        'top_iterations':iterations+2,
+        'top_wait_time_btw_ietrations':wait_time,
+        'thread': thread,
+
+    }
+
+     # print the parameters to the excel_file
+    write_to_excel(file_path+"cpu_overhead.xlsx", "test_params", 1, 1, test_params=test_params)
+
     for connectivity_key, test_params in payload_params.items():
 
         #enable remote connection only if remote_user is set
@@ -519,7 +535,6 @@ def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_reque
         server_path = file_path + "server"
 
         if (os.path.exists(client_path) == False):
-            print('here')
             os.makedirs(client_path)
 
         if (os.path.exists(server_path) == False):
