@@ -446,7 +446,7 @@ def launch_requests (total_requests_persec, requests_per_client, total_time, mty
         client = set_lurk('client', connectivity_conf=connectivity_conf, resolver_mode='stub')
 
         #launch a certain nb of requests per client per sec as sub process
-        client_process = mp.Process(target=launch_requests_client, args=(client, requests_per_client, mtype, payload_params, total_time), name="client_%d"%i)  ###
+        client_process = mp.Process(target=launch_requests_client, args=(client, requests_per_client, mtype, payload_params, total_time), name="client_%d"%i, daemon=True)  ###
         client_process.start()
 
         #save the clients pid
@@ -522,9 +522,9 @@ def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_reque
     for connectivity_key, test_params in payload_params.items():
 
         #enable remote connection only if remote_user is set
-        if (remote_connection and 'remote_user' in connectivity_conf[connectivity_key].keys()):
+        if remote_connection and 'remote_user' in connectivity_conf[connectivity_key].keys():
             remote = True
-        elif (remote_connection):
+        elif remote_connection:
             print("Remote user not provided to enable remote connection --- running locally")
             remote = False
         else:
@@ -534,10 +534,10 @@ def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_reque
         client_path = file_path + "client"
         server_path = file_path + "server"
 
-        if (os.path.exists(client_path) == False):
+        if os.path.exists(client_path) == False:
             os.makedirs(client_path)
 
-        if (os.path.exists(server_path) == False):
+        if os.path.exists(server_path) == False:
             os.makedirs(server_path)
 
         for params_value in test_params:
@@ -545,8 +545,10 @@ def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_reque
             # start server corresponding to the key for each params value to make sure of having accurate results
             server_process_id = start_server(connectivity_conf=connectivity_conf[connectivity_key], thread=thread, remote_connection=remote)
 
+
             # generate payload params
             generated_payload_params = get_payload_params(params_value['type'], args=params_value)
+
 
             #calculate the total time of the test during which each client will keep launching requests.
             # Total Time can be calculated based on the number of iterations and the wait time between 2 iterations. we add 2 iterations to disregard the first 2 values and
@@ -559,12 +561,8 @@ def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_reque
             #save the list of client process ids launching the requests
             client_processes = []
 
-            # launch a certain nb of requests per client per sec as sub process
-            #number of launched clients = total_requests_persec/requests_per_client
-
-
-           # launch_clients_proc  = mp.Process(target=launch_requests, args = (total_requests_persec, requests_per_client, total_time, params_value['type'], generated_payload_params, connectivity_conf[connectivity_key], client_processes))
-            #launch_clients_proc.start()
+            launch_clients_proc  = mp.Process(target=launch_requests, args = (total_requests_persec, requests_per_client, total_time, params_value['type'], generated_payload_params, connectivity_conf[connectivity_key], client_processes))
+            launch_clients_proc.start()
 
             # run the top command locally
             client_top_process = mp.Process(target=get_cpu_overhead, args = (client_file_path, iterations, wait_time), daemon = True)
@@ -577,11 +575,15 @@ def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_reque
                                                   connectivity_conf[connectivity_key]['password']), daemon = True)
                server_top_process.start()
 
-            launch_requests(total_requests_persec, requests_per_client, total_time,
-                                                  params_value['type'], generated_payload_params,
-                                                  connectivity_conf[connectivity_key], client_processes)
-            #kill client processes (even before recieving response) once all top results has been collected
+               # wait until cient top finish execution before killing the processes and the  server
+               server_top_process.join()
+
+            #wait until cient top finish execution before killing the processes and the  server
+            client_top_process.join()
+
+             # #kill client processes (even before recieving response) once all top results has been collected
             if (not client_top_process.is_alive() and server_top_process is not None and not server_top_process.is_alive() ):
+
                 #kill client processes
                 for process in client_processes:
                     os.kill(process, signal.SIGKILL)
