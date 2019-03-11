@@ -357,14 +357,14 @@ def get_cpu_overhead (file_path, iterations, wait_time, remote_host=None, remote
         remote_session = set_ssh(remote_host, remote_user, password)
 
         # launch the top command on the remote server
-        top_result = remote_session.run('top -d'+str(wait_time)+' -n'+str(iterations)+' -b -uroot')
+        top_result = remote_session.run('top -d'+str(wait_time)+' -n'+str(iterations)+' -b -w512')
 
         #for remote connection dump the top results of the server on the client machine
         file = open(file_path,"w+")
         file.write(str(top_result.stdout))
     else:
         #launch top locally
-        os.popen('top -d'+str(wait_time)+' -n'+str(iterations)+' -b -uroot >'+file_path)
+        os.popen('top -d'+str(wait_time)+' -n'+str(iterations)+' -b  -w512>'+file_path)
 
 
 def get_RTT (host_address, request_nb):
@@ -418,9 +418,9 @@ def launch_requests_client (client, request_nb, mtype, payload_params, total_tim
 
         if (remaining_sec_time<0):
             print("Launching %s requests exceeded 1 sec"%request_nb)
-
-        #waiting to have the once sec passed
-        sleep(remaining_sec_time)
+        else:
+            #waiting to have the once sec passed
+            sleep(remaining_sec_time)
 
         ellapsed_time = time() - start_time
 
@@ -454,7 +454,7 @@ def launch_requests (total_requests_persec, requests_per_client, total_time, mty
 
     return clients_pid
 
-def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_requests_persec, requests_per_client,  iterations, wait_time, thread = False,remote_connection = False):
+def cpu_overhead_test (payload_params, connectivity_conf, graph_params, file_path, total_requests_persec, requests_per_client,  iterations, wait_time, thread = False,remote_connection = False):
     '''
         This method performs the cpu overhead test on the client and server side.
         It prints the results into the specified payload_params[column_name]+"_client" for client side cpu and payload_params[column_name]+"_server" for server side cpu overhead and place them
@@ -495,6 +495,7 @@ def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_reque
             }
 
     }
+    :param graph_params a dictionary with all the information of the graph and data to plot (see utils/boxplot() for more info).
     :param file_path: path to place te file with the top results (directory)
     :param total_requests_persec:total requests to be sent per sec by all the clients
     :param requests_per_client: number of requests that a client should send per second. This includes the resolve time+waiting time to reach 1 sec
@@ -515,9 +516,10 @@ def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_reque
         'thread': thread,
 
     }
+    excel_file = 'cpu_overhead.xlsx'
 
      # print the parameters to the excel_file
-    write_to_excel(file_path+"cpu_overhead.xlsx", "test_params", 1, 1, test_params=test_params)
+    write_to_excel(file_path+excel_file, "test_params", 1, 1, test_params=test_params)
 
     for connectivity_key, test_params in payload_params.items():
 
@@ -575,24 +577,31 @@ def cpu_overhead_test (payload_params, connectivity_conf, file_path, total_reque
                                                   connectivity_conf[connectivity_key]['password']), daemon = True)
                server_top_process.start()
 
-               # wait until cient top finish execution before killing the processes and the  server
-               server_top_process.join()
+            #wait until all the clients are launched and top process ends before killing the server
+            launch_clients_proc.join()
 
-            #wait until cient top finish execution before killing the processes and the  server
+            #wait until cient top finish execution before killing the processes and the server
             client_top_process.join()
-
-             # #kill client processes (even before recieving response) once all top results has been collected
-            if (not client_top_process.is_alive() and server_top_process is not None and not server_top_process.is_alive() ):
-
-                #kill client processes
-                for process in client_processes:
-                    os.kill(process, signal.SIGKILL)
-
 
             #stop the server
             if (remote == True):
+                # wait until server top finish execution before killing the processes and the  server
+                server_top_process.join()
                 stop_server(server_process_id, remote_host=connectivity_conf[connectivity_key]['ip_address'],
                             remote_user=connectivity_conf[connectivity_key]['remote_user'],
                             password=connectivity_conf[connectivity_key]['password'])
             else:
                 stop_server(server_process_id)
+
+        #read top files and save cpu overhead in excel sheet
+        # server_sheet_name = 'server_cpu_overhead'
+        # client_sheet_name = 'client_cpu_overhead'
+
+        # process_cpu_overhead_to_excel(params_value, file_path+excel_file, )
+        # create and save graph
+        # boxplot(server_sheet_name, excel_file, graph_params, file_path+"/" + server_sheet_name + ".png")
+        # boxplot(client_sheet_name, excel_file, graph_params, file_path+"/" + client_sheet_name + ".png")
+
+
+def process_cpu_overhead_to_excel(params_value, excel_file):
+    pass
