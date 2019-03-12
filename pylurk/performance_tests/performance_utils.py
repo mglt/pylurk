@@ -454,7 +454,7 @@ def launch_requests (total_requests_persec, requests_per_client, total_time, mty
 
     return clients_pid
 
-def cpu_overhead_test (payload_params, connectivity_conf, graph_params, file_path, total_requests_persec, requests_per_client,  iterations, wait_time, thread = False,remote_connection = False):
+def cpu_overhead_test (payload_params, connectivity_conf, graph_params, file_path, total_requests_persec, requests_per_client,  iterations, wait_time, cpuNb, thread = False,remote_connection = False):
     '''
         This method performs the cpu overhead test on the client and server side.
         It prints the results into the specified payload_params[column_name]+"_client" for client side cpu and payload_params[column_name]+"_server" for server side cpu overhead and place them
@@ -501,6 +501,7 @@ def cpu_overhead_test (payload_params, connectivity_conf, graph_params, file_pat
     :param requests_per_client: number of requests that a client should send per second. This includes the resolve time+waiting time to reach 1 sec
     :param iterations: number of iterations that the top command should performs
     :param wait_time: time to wait between top command iterations
+    :param cpuNb: number of cpu to average over in each top iteration output
     :param thread: true if multi threading should be used
     :param remote_connection: true if remote connection to server should be performed
     :return:
@@ -572,10 +573,10 @@ def cpu_overhead_test (payload_params, connectivity_conf, graph_params, file_pat
 
             server_top_process = None
             if (remote == True):
-               server_top_process =  mp.Process(target=get_cpu_overhead, args = (server_file_path, iterations, wait_time, connectivity_conf[connectivity_key]['ip_address'],
-                                                  connectivity_conf[connectivity_key]['remote_user'],
-                                                  connectivity_conf[connectivity_key]['password']), daemon = True)
-               server_top_process.start()
+                server_top_process =  mp.Process(target=get_cpu_overhead, args = (server_file_path, iterations, wait_time, connectivity_conf[connectivity_key]['ip_address'],
+                                                   connectivity_conf[connectivity_key]['remote_user'],
+                                                   connectivity_conf[connectivity_key]['password']), daemon = True)
+                server_top_process.start()
 
             #wait until all the clients are launched and top process ends before killing the server
             launch_clients_proc.join()
@@ -585,23 +586,135 @@ def cpu_overhead_test (payload_params, connectivity_conf, graph_params, file_pat
 
             #stop the server
             if (remote == True):
-                # wait until server top finish execution before killing the processes and the  server
-                server_top_process.join()
-                stop_server(server_process_id, remote_host=connectivity_conf[connectivity_key]['ip_address'],
-                            remote_user=connectivity_conf[connectivity_key]['remote_user'],
-                            password=connectivity_conf[connectivity_key]['password'])
+                 # wait until server top finish execution before killing the processes and the  server
+                 server_top_process.join()
+                 stop_server(server_process_id, remote_host=connectivity_conf[connectivity_key]['ip_address'],
+                             remote_user=connectivity_conf[connectivity_key]['remote_user'], password=connectivity_conf[connectivity_key]['password'])
             else:
-                stop_server(server_process_id)
+                 stop_server(server_process_id)
 
-        #read top files and save cpu overhead in excel sheet
-        # server_sheet_name = 'server_cpu_overhead'
-        # client_sheet_name = 'client_cpu_overhead'
+    #read top files and save cpu overhead in excel sheet
+    server_sheet_name = 'server_cpu_overhead'
+    client_sheet_name = 'client_cpu_overhead'
 
-        # process_cpu_overhead_to_excel(params_value, file_path+excel_file, )
-        # create and save graph
-        # boxplot(server_sheet_name, excel_file, graph_params, file_path+"/" + server_sheet_name + ".png")
-        # boxplot(client_sheet_name, excel_file, graph_params, file_path+"/" + client_sheet_name + ".png")
+    #setup the cpu result in excel file
+    process_cpu_overhead_to_excel(payload_params, file_path+excel_file, server_sheet_name, server_path+"/", cpuNb, 'server' )
+    process_cpu_overhead_to_excel(payload_params, file_path + excel_file, client_sheet_name, client_path + "/", cpuNb, 'client')
+    # create and save graph
+    boxplot(server_sheet_name,  file_path+excel_file, graph_params, file_path+"/" + server_sheet_name + ".png")
+    boxplot(client_sheet_name,  file_path+excel_file, graph_params, file_path+"/" + client_sheet_name + ".png")
 
 
-def process_cpu_overhead_to_excel(params_value, excel_file):
-    pass
+def process_cpu_overhead_to_excel(payload_params, excel_file, sheet_name, path_to_cpu_files, cpuNb, type):
+    '''
+    This method will read txt file containing the top output and put the cpu overhead of each iteration of the top in the excel file
+    :param payload_params: dictionary with payload parameters containing the list of tests setups to perform.
+        each key in payload param should correspond to a key in connectivity conf.
+        the other key, values in the dictionary of each item in payload params correspond to those desired for the test and should be similar to those defined in core/conf.py
+        2 other keys, values are necessary:
+            - column_name: name of the test as we want it to appear in the excel sheet
+            - ref: corresponds to a column_name in the payload_params that we want to use to in the ration calculation (latency value of column_name/ latency value of ref)
+    For example:
+          payload_params = {
+            'udp':{
+             'type': 'rsa_master',
+             'column_name': 'rsa_master_ref_prf_sha256_pfs_sha256', # name of column as it appears in excel file, if it contains 'ref', this means that it will be used as ref values
+             'ref': 'rsa_master_ref_prf_sha256_pfs_sha256',  # ref column name when calculating ref values
+             'prf_hash': 'sha256',
+             'freshness_funct': 'sha256',}
+
+        }
+    :param excel_file: path+file name to the excel file in which we want to write the cpu overhead
+    :param sheet_name: sheet name to create in the excel file and which will contain th cpu overhead
+    :param path_to_cpu_files: path to the txt file that contain the top result
+    :param cpuNb: number of cpus  in the pc to average over in each top iteration
+    :param type: this can take the value of 'client' or 'server'. this is basically used to build the name of cpu txt files as done in get_cpu_overhead(). Their names are column_name+"_client" or column_name+"_server"
+
+    '''
+    try:
+
+        book = openpyxl.load_workbook(excel_file)
+
+        # create the results sheet if it does not exist in the mentioned excel_file
+        if (sheet_name not in book.sheetnames):
+            book.create_sheet(sheet_name)
+            book.save(excel_file)
+
+        # get the sheet where we want to store the cpu values
+        sheet = book[sheet_name]
+
+        row_id = 1
+        column_id = 1
+        test_count = 1
+
+        sheet.cell(row=row_id, column=column_id).value = 'Iteration'
+
+        for connectivity_key, test_params in payload_params.items():
+            # loop over the different tests (columns)
+            for params_value in test_params:
+
+                # write the column name reflecting the test
+                sheet.cell(row=row_id, column=column_id + test_count).value = params_value['column_name']
+
+                #file of cpu overhead to read from
+                file_path = path_to_cpu_files + params_value['column_name'] + "_"+type+".txt"
+
+                #get a list of cpu overhead from txt file
+                cpu_overhead = get_cpu_overhead_from_file(file_path, cpuNb)
+                # loop over the latency values of each column
+                for i in range(0, len(cpu_overhead)):
+
+                    # write the iteration number
+                    sheet.cell(row=row_id + i + 1, column=column_id).value = i
+
+                    # write the cpu overhead of the iteration
+                    sheet.cell(row=row_id + i + 1, column=column_id + test_count).value = cpu_overhead[i]
+
+                    # save the file at each set test to keep track of the test
+                    book.save(excel_file)
+
+                test_count += 1
+                book.close()
+
+    except openpyxl.utils.exceptions.InvalidFileException:
+        print("Error loading the excel file " + excel_file)
+
+def get_cpu_overhead_from_file (file_path, cpuNb):
+    '''
+    This method will read txt file containing the top output and extract the cpu overhead for user
+    :param file_path: path to the file ('results/client/ecdhe_http_sig_sha256rsa_pfs_sha256_client.txt')
+    :param cpuNb: nb of cpus in the top output for one iteration. The average of user cpu overhead for all the cpu will be calculated
+    :return: a list of all the average cpu overhead for user processes (us)
+    '''
+    count=0
+    average = 0
+    cpu_overhead = []
+
+    try:
+
+        for line in open(file_path):
+
+            rec = line.strip()
+            if rec.startswith('%Cpu') is False:
+                continue
+            count+=1
+
+            #calculate the avearge user cpu overhead for all vcpu (cpuNb)
+            if (count <= cpuNb):
+                splitLine = line.split()
+                #if the %cpu is 100, no space will exist between ':'  and the number. In this case we need to go to else statement
+                if (splitLine[1]==":"):
+                    average= average +float(splitLine[2])
+                else:
+                    average = average + float(splitLine[1][1:])
+            if (count == cpuNb):
+                 average = average/cpuNb
+                 cpu_overhead.append(average)
+                 count=0
+                 average =0
+    except FileNotFoundError:
+        pass
+
+    return cpu_overhead
+
+
