@@ -1,34 +1,12 @@
-import sys
-import os
-#sys.path.append(os.path.abspath("../../"))
+from time import sleep
+from pylurk.utils.utils import lurk_serve_payloads, bytes_error_testing,\
+                               lurk_client_server_exchange, set_title
+from pylurk.core.lurk import LurkServer, LurkMessage\
 
-from pylurk.utils.utils import *
-from pylurk.core.lurk import LurkServer, ImplementationError,\
-                 HEADER_LEN, LurkClient
-import threading
-##from ..utils import message_exchange, bytes_error_testing, \
-##                  resolve_exchange 
+print(set_title("TESTING LURK PAYLOAD"))
+lurk_serve_payloads(silent=False)
 
-
-print( "+---------------------------------------+" )
-print( "|             MESSAGE TESTS              |" )
-print( "+---------------------------------------+" )
-
-
-print("--- Payload Testing: testing build/parse/serve functions" + \
-      "--- for queries and response.")
-designation = 'lurk'
-version = 'v1'
-
-for mtype in [ "capabilities", "ping" ]:
-    message_exchange( designation, version, mtype, payload={} )
-
-
-print( "+---------------------------------------+" )
-print( "|             SERVER ERROR TESTS              |" )
-print( "+---------------------------------------+" )
-
-
+print(set_title("TESTING ERROR PAYLOADS"))
 server = LurkServer()
 query_ref_bytes = LurkMessage().build( designation='lurk', version='v1',\
                    status="request")
@@ -43,60 +21,12 @@ lurk_header_error = [\
 bytes_error_testing( server, query_ref_bytes, lurk_header_error)
 
 
+## TESTING CLIENT/SERVER LURK "
 
-print( "+---------------------------------------+" )
-print( "|       LURK CLIENT / SERVER TESTS      |" )
-print( "+---------------------------------------+" )
-
-srv_conf = LurkConf()
-srv_conf.set_role( 'server' )
-srv_conf.set_connectivity( type='local' ) 
-server = LurkServer( conf=srv_conf.conf )
-
-
-clt_conf = LurkConf()
-clt_conf.set_role( 'client' )
-clt_conf.set_connectivity( type='local' ) 
-client = LurkClient( conf=clt_conf.conf )
-
-designation = 'lurk' 
-version = 'v1'
-
-for mtype in [ "capabilities", "ping" ]:
-    resolve_exchange( client, server, designation, version, mtype, \
-                      payload={} )
-
-print( "+---------------------------------------+" )
-print( "|    UDP  LURK CLIENT / SERVER TESTS    |" )
-print( "+---------------------------------------+" )
-
-
-print("-- Starting LURK UDP Client")
-clt_conf = LurkConf()
-clt_conf.set_role( 'server' )
-clt_conf.set_connectivity( type='udp', ip_address="127.0.0.1", port=6789 ) 
-client = LurkUDPClient( conf=clt_conf.conf )
-
-print("-- Starting LURK UDP Server")
-srv_conf = LurkConf()
-srv_conf.set_role( 'server' )
-srv_conf.set_connectivity( type='udp', ip_address="127.0.0.1", port=6789 ) 
-
-updServer = LurkUDPServer (srv_conf.conf)
-#t = threading.Thread( target=LurkUDPServer, kwargs={ 'conf' : srv_conf.conf } )
-t = threading.Thread( target=updServer.serve_client)#single thread (no parallelism)
-
-t.daemon = True
-t.start()
-
-
-designation = 'lurk' 
-version = 'v1'
-
-for mtype in [ "capabilities", "ping" ]:
-    resolve_exchange( client, server, designation, version, mtype, \
-                      payload={} )
-
-
-
+for connection_type in ['udp', 'tcp', 'tcp+tls', 'http', 'https']:
+    for thread_mode in [True, False]:
+        lurk_client_server_exchange(connection_type, \
+            background=True, \
+            thread=thread_mode)
+        sleep(1)
 

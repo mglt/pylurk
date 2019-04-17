@@ -25,7 +25,7 @@ import pkg_resources
 from pylurk.core.conf import default_conf
 from pylurk.core.lurk_struct import LURKHeader, LURKErrorPayload
 
-##from Cryptodome.Hash import HMAC, SHA256
+from Cryptodome.Hash import SHA256
 #from os.path import join
 
 HEADER_LEN = 16
@@ -87,26 +87,63 @@ class ImplementationError(Error):
 
 ## LURK Error
 class UndefinedError(Error):
+    """ LURK Undefined Error
+       
+    This Error is returned by the LURK server to the LURK Client. 
+    The Error is not specified.  
+    """
     def __init__(self, expression, message):
         super().__init__(expression, message)
         self.status = "undefined_error"
 class InvalidFormat(Error):
+    """ LURK Invalid Format Error
+
+    This Error is returned by the LURK server to the LURK Client.
+    This Error indicates an unexpected packet that cannot be parsed.
+    """
     def __init__(self, expression, message):
         super().__init__(expression, message)
         self.status = "invalid_format"
 class InvalidExtension(Error):
+    """ LURK Invalid Format Error
+
+    This Error is returned by the LURK server to the LURK Client.
+    This Error indicates the mentionned Extension is not recognized by
+    the LURK Server. Recognized LURK extensions are indicated in the 
+    conf file..
+    """
     def __init__(self, expression, message):
         super().__init__(expression, message)
         self.status = "invalid_extension"
 class InvalidType(Error):
+    """ LURK Invalid Type
+
+    This Error is returned by the LURK server to the LURK Client.
+    This Error indicates the type has not been recognized, by the LURK
+    Server. The recognized Extension and types are indicated in the 
+    conf file.  
+    """
     def __init__(self, expression, message):
         super().__init__(expression, message)
         self.status = "invalid_type"
 class InvalidStatus(Error):
+    """ LURK Invalid Status
+
+    This Error is returned by the LURK server to the LURK Client.
+    The LURK Server is expected to receive request, and reject any other
+    status. An unrecognized or unexpected status returns this error. 
+    """
     def __init__(self, expression, message):
         super().__init__(expression, message)
         self.status = "invalid_status"
 class TemporaryFailure(Error):
+    """ LURK Tenporary Failure
+
+    This Error is returned by the LURK server to the LURK Client.
+    This error is returned when the LURK serve ris not able to serve a
+    request due to a temporary lake of resource.Upon receipt of such error,
+    a LURK Client is expect to wait some time and retry the request  
+    """
     def __init__(self, expression, message):
         super().__init__(expression, message)
         self.status = "temporary_failure"
@@ -319,7 +356,7 @@ class LurkConf():
                 try:
                     self.conf['connectivity'][k]
                 except KeyError:
-                    self.conf['connectivity'][k] = default_conf['connectivity'][k]
+                    self.conf['connectivity'][k] = deepcopy(default_conf['connectivity'][k])
         try:
             self.conf['role'] = kwargs['role']
         except KeyError:
@@ -329,7 +366,7 @@ class LurkConf():
                 try:
                     self.conf['role']
                 except KeyError:
-                    self.conf['role'] = default_conf['role']
+                    self.conf['role'] = deepcopy(default_conf['role'])
 
         self.set_role(self.conf['role'])
 
@@ -462,7 +499,7 @@ class LurkConf():
                               self.get_mtypes()[(designation, version)])
 
     def get_state(self, ext):
-        state = "state" +  str(self.supported_ext())
+        state = "state" +  str(self.get_supported_ext())
         return SHA256.new(str.encode(state)).digest()[:4]
 
     def check_error(self, error_payload):
@@ -540,7 +577,7 @@ class Payload:
     def show(self, payload, prefix="", line_len=LINE_LEN):
         """ shows the pkt_bytes. Similar to parse but without any
             control of the configuration and uses the structure
-            visualization facilities. 
+            visualization facilities.
 
         Args:
             payload (bytes or dict) represents the payload. The payload
@@ -862,9 +899,10 @@ class LurkBaseClient:
         self.server_address = self.conf.get_server_address()
         self.connection_type = self.conf.get_connection_type()
         self.message = LurkMessage(conf=self.conf.get_conf())
-        self.set_up_server_session()
-        self.selector = selectors.DefaultSelector()
-        self.selector.register(fileobj=self.sock, \
+        if self.connection_type is not 'local': 
+            self.set_up_server_session()
+            self.selector = selectors.DefaultSelector()
+            self.selector.register(fileobj=self.sock, \
                                events=selectors.EVENT_READ, \
                                data="accept")
 
@@ -986,13 +1024,13 @@ class LurkBaseClient:
         """ Resolve with a list of payloads
 
         The code is based on non blocking sockets and is intended to
-        read and write simultaneously on the same socket. 
+        read and write simultaneously on the same socket.
 
         Todo:
             The resolver function is not finished and the code is only
-            there as a starting point for a resolver. Invoking select 
+            there as a starting point for a resolver. Invoking select
             resulted in poor performances for a single
-            resolution.  
+            resolution.
 
         Args:
             request_list (list): contains a list of requests. Each
@@ -1032,13 +1070,13 @@ class LurkBaseClient:
 
 
         The code is based on non blocking sockets and is intended to
-        read and write simultaneously on the same socket. 
+        read and write simultaneously on the same socket.
 
         Todo:
             The resolver function is not finished and the code is only
-            there as a starting point for a resolver. Invoking select 
+            there as a starting point for a resolver. Invoking select
             resulted in poor performances for a single
-            resolution.  
+            resolution.
 
         Args:
             bytes_request (bytes): the request in byte format. This can
@@ -1099,8 +1137,8 @@ class LurkBaseClient:
         return resolutions_list, errors_list
 
     def bytes_stub_resolve(self, bytes_request):
-        """ Simple resolution in blocking mode 
-       
+        """ Simple resolution in blocking mode
+
             Implements a stub resolver
         """
         sent_status = self.sock.sendall(bytes_request)
@@ -1454,7 +1492,7 @@ class TCPHandle(BaseRequestHandler):
         except:
             del self.server.fd_busy[self.request.fileno()]
             return
-        if ( bytes_recv == b''):
+        if (bytes_recv == b''):
             return
         header = LURKHeader.parse(bytes_recv)
         bytes_nbr = header['length']
@@ -1630,8 +1668,8 @@ class LurkHTTPClient(LurkTCPClient):
 
 
     def bytes_stub_resolve(self, bytes_request):
-        """ Simple resolution in blocking mode 
-       
+        """ Simple resolution in blocking mode
+
             Implements a stub resolver
         """
         url = self.connection_type + '://' + str(self.server_address[0]) + \

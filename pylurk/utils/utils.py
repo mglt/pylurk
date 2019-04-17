@@ -192,16 +192,42 @@ def set_title(title):
     return h_line + '|' + title + '|\n' + h_line + '\n\n'
 
 def default_param(role, **kwargs):
-    conn_conf ={ }
+    """ Returns necessary parameters to tests client server
+
+    Enables default settings for testing various testing configuration.
+    When the parameters are not provided, it takes various default
+    values. This parameters are usually used to start a LURK Client and a
+    LURK Server.  
+   
+    Arg:
+        connectivity (dict): a connectivity object, that is a
+            dictionary with all connectivity parameters. {'type': , 
+            'ip_address': , 'port', 'key': , 'cert': , 'key_peer': , 
+            'cert_peer': }. Deafult values are those provided by
+            default_conf 
+        background (bool): indicates the server is started in background 
+            thread. Default value is set to True
+        thread (bool): indicates whether the server is multithreaded or
+            not. The default value is True.
+
+    Returns:
+        conf (obj): a LurkConf object, that contains the appropriated
+            configuration file
+        background (bool): indication whether is put in a background
+            process or not
+        thread (bool): indication whether the serve ris mutlithreaded or
+            not 
+    """
+    conn = {}
     for k in ['type', 'ip_address', 'port', 'key', 'cert', \
               'key_peer', 'cert_peer']:
         try:
-            conn_conf[k]=kwargs['connectivity_conf'][k]
+            conn[k]=kwargs['connectivity'][k]
         except KeyError:
-            try:
-               conn_conf[k]
-            except KeyError:
-              conn_conf[k] = default_conf['connectivity'][k]
+            conn[k] = deepcopy(default_conf['connectivity'][k])
+    conf = LurkConf(conf=deepcopy(default_conf))
+    conf.set_role(role)
+    conf.set_connectivity(**conn)
     try:
         background = kwargs['background']
     except KeyError:
@@ -211,14 +237,6 @@ def default_param(role, **kwargs):
     except KeyError:
         thread = True
 
-
-    conf = LurkConf(deepcopy(default_conf))
-    conf.set_role(role)
-
-    conf.set_connectivity(type=conn_conf['type'], ip_address=conn_conf['ip_address'], \
-                          port=conn_conf['port'], key=conn_conf['key'], \
-                          cert = conn_conf['cert'], key_peer=conn_conf['key_peer'], \
-                          cert_peer=conn_conf['cert_peer'])
     return conf, background, thread 
 
 
@@ -229,8 +247,8 @@ def set_lurk(role, **kwargs):
     parameters.
 
     Args:
-        connectivity_conf: dictionary containing the connectivity information as follows:
-         connectivity_conf = {
+        connectivity: dictionary containing the connectivity information as follows:
+         connectivity = {
               'type' : "udp",  # "local", "tcp", "tcp+tls", http, https
               'ip_address' : "127.0.0.1", #can be the remote_host if remote connection is desired
               'port' : 6789,
@@ -246,15 +264,6 @@ def set_lurk(role, **kwargs):
             set to True.
 
     """
-#    connection_type = conn_conf['type']
-#
-#    role_list = ['client', 'server']
-#    connection_type_list = ['udp', 'udp+dtls', 'tcp', 'tcp+tls', 'http', 'https']
-#    if role not in role_list:
-#        ConfError(role, "UNKNOWN. Expecting value in %s"%role_list)
-#    if connection_type not in connection_type_list:
-#        ConfError(connection_type, "UNKNOWN connection_type. Expecting value " +\
-#                  "in %s"%connection_type_list)
     try:
         resolver_mode = kwargs['resolver_mode']
     except KeyError:
@@ -302,7 +311,93 @@ def set_lurk(role, **kwargs):
         if background is True:
             server.start()
             return server 
-            
+
+
+
+def lurk_serve_payloads(silent=True):
+    """ Tests lurk classes build and serve methods 
+
+    While all classes are tested individually, the classes are called
+    via the LURK Extension module. This mimique the way classes of an
+    extension are called by the server.
+    
+    """
+    from pylurk.extensions.lurk import LurkExt
+    lurk_ext = LurkExt()
+    designation = 'lurk'
+    version = 'v1'
+    for mtype in ['ping', 'capabilities']:
+        req = lurk_ext.ext_class[('request', mtype)]
+        resp = lurk_ext.ext_class[('success', mtype)]
+        try:
+            payload={}
+            req_payload = req.build_payload(**payload)
+            if silent is False:
+                 req.show(req_payload)
+            time_start = time()
+            res_payload = resp.serve(req_payload)
+            time_stop = time()
+            print("    -- type: %s -> %s sec"%(mtype, time_stop - time_start))
+            if silent is False:
+                resp.show(res_payload)
+        except Exception as err:
+            raise ImplementationError((mtype, payload), err)
+
+
+
+
+
+def lurk_client_server_exchange(connection_type, background=True, thread=True):
+    """ Testings basic exchanges between LURK CLient and LURK Server
+  
+    The function instantiates a client and a server, connects them with
+    the defined connectivity, and tests teh various payloads. 
+  
+    LURK client / LURK server takes the default values for ip_address 
+    and port
+  
+    Args:
+     connection_type (str): the connection_type of connectivity.
+         Acceptable values are 'udp','tcp', 'tcp+tls', 'http', 
+         'https'. The default value is 'udp.
+     background (bool): starts the LURK server in a daemon process
+         when set to True.
+     thread (bool): enables multithreading of the LURK server when
+         set to True.
+    """
+  
+    print(set_title(connection_type.upper() + \
+                 " LURK CLIENT / SERVER - MULTI-Threads TESTS" +\
+                 " - background: %s, thread: %s"%(background, thread)))
+    connectivity = {'type': connection_type}
+    if background is True:
+        server = set_lurk('server', connectivity=connectivity,
+                          background=background, thread=thread)
+        sleep(3)
+    resolution_mode = 'stub'
+    client = set_lurk('client', connectivity=connectivity, \
+                      resolution_mode=resolution_mode)
+  
+    designation = 'lurk'
+    version = 'v1'
+  
+    try:
+        for mtype in ['ping', 'capabilities']:
+            print("-- %s, %s, %s "%(designation, version, mtype))
+            resolve_exchange(client, designation, version, mtype,\
+                                 payload={}, silent=True)
+        if background is True:
+            server.terminate()
+        client.closing()
+    except Exception as err:
+        header = {'designation':designation, 'version': version, \
+                  'type':mtype, 'status':"request" }
+        raise ImplementationError(header, err)
+
+
+
+
+
 def tls12_conf_ecdhe_payloads():
     """ returns payloads associated to various configuration parameters
 
@@ -394,8 +489,10 @@ def tls12_serve_payloads(silent=False):
 def tls12_client_server_exchanges(connection_type, background=True, thread=True):
     """ Testing basic exchanges between LURK client / Server
 
-    Tests basic exchanges with a basic LURK client / LURK server
-    configuration. It takes the default values for ip_address and port
+    The function instantiates a client and a server, connects them with
+    the defined connectivity, and tests the various payloads. 
+
+    LURK client / LURK server takes the default values for ip_address and port
 
     Note that with ecdhe, the ecdhe_private key is generated outside th3
     payload generation as the private key is needed to generates the
@@ -417,13 +514,13 @@ def tls12_client_server_exchanges(connection_type, background=True, thread=True)
 
     print(set_title(connection_type.upper() + " LURK CLIENT / SERVER - MULTI-Threads TESTS" +\
                  " - background: %s, thread: %s"%(background, thread)))
-    connectivity_conf = {'type': connection_type}
+    connectivity = {'type': connection_type}
     if background is True:
-        server = set_lurk('server', connectivity_conf=connectivity_conf,
+        server = set_lurk('server', connectivity=connectivity,\
                           background=background, thread=thread)
         sleep(3)
     resolution_mode = 'stub'
-    client = set_lurk('client', connectivity_conf=connectivity_conf, \
+    client = set_lurk('client', connectivity=connectivity, \
                       resolution_mode=resolution_mode)
 
     designation = 'tls12'
@@ -481,16 +578,16 @@ def set_ssh(remote_host, remote_user, password):
         "password": password, })
 
 
-def start_server(connectivity_conf, background=True, thread=True, \
+def start_server(connectivity, background=True, thread=True, \
                  remote_connection=False):
 
     """ This method start a local or remote server using ssh of any type
         (udp, udp+dtls, tcp, tcp+tls, hhtp, https)
 
     Args:
-        - connectivity_conf (dict) containing the connectivity information 
+        - connectivity (dict) containing the connectivity information 
               as follows:
-              connectivity_conf = {
+              connectivity = {
                  'type' : 'udp', # lurk server connectivity. Default value is
                       'udp'. Possible other values can be 'local, 'tcp', 
                       'tcp+tls', 'http', 'https'
@@ -529,8 +626,8 @@ def start_server(connectivity_conf, background=True, thread=True, \
             to do a server.join() to avoid killing the server.   
     """
     if remote_connection is False:
-        server = set_lurk('server', connectivity_conf=connectivity_conf, background=background, \
-                          thread=thread)
+        server = set_lurk('server', connectivity=connectivity, \
+                             background=background, thread=thread)
         sleep(5)
         return server.pid
 
@@ -539,7 +636,7 @@ def start_server(connectivity_conf, background=True, thread=True, \
     for k in ['type', 'ip_address', 'port', 'key', 'cert', 'key_peer', 'cert_peer', 'remote_user', 'password',
               'path_to_erilurk']:
         try:
-            updated_conf[k] = connectivity_conf[k]
+            updated_conf[k] = connectivity[k]
         except KeyError:
             try:
                 if k in ['remote_user', 'password', 'ip_address', 'path_to_erilurk']:
@@ -548,7 +645,7 @@ def start_server(connectivity_conf, background=True, thread=True, \
                 else:
                     updated_conf[k]
             except KeyError:
-                updated_conf[k] = default_conf['connectivity'][k]
+                updated_conf[k] = deepcopy(default_conf['connectivity'][k])
 
     # connect to remote server
     remote_session = set_ssh(updated_conf['ip_address'], updated_conf['remote_user'], updated_conf['password'])

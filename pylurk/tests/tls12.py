@@ -4,8 +4,10 @@ import pkg_resources
 data_dir = pkg_resources.resource_filename( __name__, '../data/')
 
 from pylurk.core.lurk import LurkServer, ImplementationError, LurkMessage, \
-                 HEADER_LEN, LurkClient, LurkServer, LurkUDPClient, \
-                 LurkUDPServer, LurkConf, UDPServerConf, LurkTCPClient, LurkTCPServer, LurkHTTPserver, LurkHTTPClient, HTTPRequestHandler
+                 HEADER_LEN, LurkBaseClient, LurkServer, LurkUDPClient, \
+                 LurkUDPServer, LurkConf, \
+                 LurkTCPClient, LurkTCPServer, LurkHTTPserver, LurkHTTPClient, HTTPRequestHandler
+#                UDPServerConf, 
 from pylurk.extensions.tls12 import Tls12RsaMasterConf,  Tls12EcdheConf, \
                       Tls12RsaMasterRequestPayload,\
                       Tls12RsaMasterWithPoHRequestPayload,\
@@ -53,7 +55,7 @@ server = LurkServer( conf=srv_conf.conf )
 clt_conf = LurkConf()
 clt_conf.set_role( 'client' )
 clt_conf.set_connectivity( type='local' )
-client = LurkClient( conf=clt_conf.conf )
+client = LurkBaseClient( conf=clt_conf.conf )
 
 designation = 'tls12'
 version = 'v1'

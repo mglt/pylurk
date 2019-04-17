@@ -5,11 +5,11 @@ from pylurk.core.lurk import InvalidFormat, ImplementationError,\
                       ConfError, LurkConf, Payload, LINE_LEN
 from pylurk.core.conf import default_conf
 from textwrap import indent
-
+from copy import deepcopy
 
 class LurkCapabilitiesResponsePayload( Payload ):
 
-    def __init__( self, conf=default_conf):
+    def __init__( self, conf=deepcopy(default_conf)):
         self.conf = LurkConf( conf )
         self.struct = LURKCapabilitiesResponsePayload
         self.struct_name = 'LURKCapabilitiesResponsePayload'
@@ -19,7 +19,7 @@ class LurkCapabilitiesResponsePayload( Payload ):
             supported_extensions = kwargs[ 'supported_extensions' ]
         else :
             supported_extensions = []
-            for ext in self.conf.supported_extensions:
+            for ext in self.conf.get_supported_ext():
                 supported_extensions.append( { 'designation' : ext[0], 'version' : ext[ 1 ] } ) 
         if 'lurk_state' in kwargs.keys():
             lurk_state = kwargs[ 'lurk_state' ]
@@ -31,7 +31,7 @@ class LurkCapabilitiesResponsePayload( Payload ):
     def check( self, payload ):
         for ext in payload[ 'supported_extensions' ]:
             ext = ( ext[ 'designation' ], ext[ 'version' ] ) 
-            if ext not in self.conf.supported_extensions :
+            if ext not in self.conf.get_supported_ext() :
                 raise InvalidExtension( ext, "Expected:%s"% \
                           self.conf.supported_extensions )
 
@@ -70,7 +70,7 @@ class LurkVoidPayload:
 
 class LurkExt:
 
-    def __init__(self, conf=default_conf ) :
+    def __init__(self, conf=deepcopy(default_conf)) :
         self.conf = LurkConf( conf )
         self.ext_class = self.get_ext_class() 
 
