@@ -31,7 +31,7 @@ from Cryptodome.Hash import SHA256
 HEADER_LEN = 16
 LINE_LEN = 60
 
-data_dir = pkg_resources.resource_filename(__name__, '../data/')
+DATA_DIR = pkg_resources.resource_filename(__name__, '../data/')
 
 def wrap(text, line_len=LINE_LEN):
     """ Wrap text so it does not exceeds line_len
@@ -68,6 +68,8 @@ def wrap(text, line_len=LINE_LEN):
 
 
 class Error(Exception):
+    """ Generic Error class
+    """
     def __init__(self, expression, message):
         self.expression = expression
         self.message = message
@@ -151,7 +153,20 @@ class TemporaryFailure(Error):
 
 class LurkConf():
 
+    """ Lurk Configuration class
+
+    This class provides tools to check and to validates a given
+    configuration. Checks are relatively high level, and do not go in to
+    the detail of each extension. However, a lot of functions are shared
+    with configurations specific to each extension, methods.  
+    """
     def __init__(self, conf=deepcopy(default_conf)):
+        """ Initlizes the LurkConf class
+        
+        Args:
+            conf (dict): a representation of the configuration. Default
+                values are default_conf.
+        """
         self.conf = self.check_conf(conf)
 
     def check_conf(self, conf=None):
@@ -175,7 +190,8 @@ class LurkConf():
         if conf is None:
             conf = self.conf
 
-        if type(conf) is not dict:
+        if not isinstance(conf, dict):
+#        if type(conf) is not dict:
             raise ConfError(conf, "Expecting dict")
         self.check_key(conf, ['role', 'connectivity', 'extensions'])
         if conf['role'] not in ['client', 'server']:
@@ -186,7 +202,8 @@ class LurkConf():
                                         "tcp", "tcp+tls", "http", "https"]:
             raise ConfError(connectivity, "Expected type as 'local' "+\
                                             "or 'udp' or 'tcp' or 'http'")
-        if type(conf['extensions']) is not list:
+#        if type(conf['extensions']) is not list:
+        if not isinstance(conf['extensions'], list):
             raise ConfError(conf['connectivity'], "Expected 'list'")
         id_bytes = randbits(8)
         for ext in conf['extensions']:
@@ -456,10 +473,14 @@ class LurkConf():
         return type_conf
 
     def get_server_address(self):
+        """ Returns the IP address of the LURK Server
+        """
         return self.conf['connectivity']['ip_address'], \
                self.conf['connectivity']['port']
 
     def get_connection_type(self):
+        """ Returns the type of connectivity
+        """
         return self.conf['connectivity']['type']
 
     def get_tls_context(self):
@@ -498,7 +519,7 @@ class LurkConf():
             raise InvalidType(self.get_mtypes(), "Expected: %s"%
                               self.get_mtypes()[(designation, version)])
 
-    def get_state(self, ext):
+    def get_state(self):
         state = "state" +  str(self.get_supported_ext())
         return SHA256.new(str.encode(state)).digest()[:4]
 
@@ -510,7 +531,7 @@ class LurkConf():
 
     def check_error_bytes(self, error_payload_bytes):
         error = error_payload_bytes
-        if type(error) != bytes:
+        if isinstance(error, bytes):
             raise InvalidFormat(type(error), "Expected bytes")
         if len(error) != 4:
             raise InvalidFormat(len(error), "Expected 4 byte len")
@@ -558,7 +579,15 @@ class Payload:
             self.treat_exception(e)
 
     def treat_exception(self, e):
-        if type(e) == MappingError:
+        """ Translate internal error into Lurk Errors
+ 
+        Args:
+            e MappingError returns by construct
+
+        Raises:
+            corresponding LURK Error
+        """
+        if isinstance(e, MappingError):
             value = e.args[0].split()[4]
             if "designation" in e.args[0]:
                 raise InvalidExtension(value, "unvalid extension")
@@ -825,7 +854,8 @@ class LurkMessage(Payload):
 
     def show(self, pkt_bytes, prefix="", line_len=LINE_LEN):
         print(indent("%s"%self.struct_name, prefix))
-        if type(pkt_bytes) == dict:
+#        if type(pkt_bytes) == dict:
+        if isinstance(pkt_bytes, dict):
             self.check(pkt_bytes)
             pkt_bytes = self.build(**pkt_bytes)
         if len(pkt_bytes) < HEADER_LEN:
@@ -850,8 +880,19 @@ class LurkMessage(Payload):
 
 
 class LurkServer():
+    """ Basic Lurk Server
 
+    This server takes bytes as input and returns bytes. It does not
+    provides any transport such as UDP, TCP. These transport layers are
+    left to dedicated servers.
+    """
     def __init__(self, conf=deepcopy(default_conf)):
+        """ Initiates the Lurk Server
+        
+        Args:
+            conf (dict): the configuration of teh server. Default value
+                is default_conf.
+        """
         self.init_conf(conf)
         self.conf = LurkConf(conf)
         self.conf.set_role('server')
@@ -892,8 +933,26 @@ class LurkServer():
 MAX_ATTEMPTS = 10
 
 class LurkBaseClient:
+    """ Basis Lurk Client
 
+    This class provides the interface for all specific clients. Client
+    usually interacts with a server so the basic client sets some
+    communications with the server using sockets. The reason for
+    integrating some communication is that UDP/TCP communications shares
+    quite a lot of functionalities. 
+
+    Clients are more complex than servers, as they are stateful and need
+    to coordinate the response and the request. Different kind of client
+    are invisionned (stub resolver, resolver, ...)
+    """
     def __init__(self, conf, resolver_mode='stub'):
+        """ Initiates the Lurk CLient
+        
+        Args:
+            conf (dict): the dictionary representing the configuration
+                arguments
+            resolver_mode (str): the type of resolver 
+        """
         self.conf = LurkConf(conf)
         self.resolver_mode = resolver_mode
         self.server_address = self.conf.get_server_address()
@@ -949,6 +1008,8 @@ class LurkBaseClient:
 
 
     def set_up_server_session(self):
+        """ Sets a session with the server 
+        """
         if self.connection_type in ['tcp', 'tcp+tls', 'http', 'https']:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         elif self.connection_type in ['udp', 'udp+dtls']:
@@ -1011,6 +1072,24 @@ class LurkBaseClient:
         self.sock.close()
 
     def resolve(self, request_list):
+        """ Resolve a list of requests
+
+        Selects the appropriated resolver according to the expected
+        resolver type and proceeds accordingly to teh resolution of 
+        a list of request. In fact, a byte stream may be composed of 
+        the concatenation of multiple requests.
+
+        Args:
+            request_list (list): contains a list of requests. Each
+                request is represented by a dictionary. The dictionary 
+                contains the element necessary to build the LURK request. 
+                Missing are derived from default values. Each dictionary
+                is taken as a **kwargs to build the associated request
+        Returns:
+            resolutions_list (list): the list of (request, repsonse).
+                request and response are represented as dictionaries.
+            error_list (list): the list of non resolved requested.
+        """
         if self.resolver_mode == 'stub':
             return self.stub_resolve(request_list)
         elif self.resolver_mode == 'resolver':
@@ -1154,6 +1233,20 @@ class LurkBaseClient:
         return bytes_resolutions, bytes_errors
 
     def is_response(self, bytes_response, bytes_requests_dict):
+        """ Match bytes against expected responses
+      
+        Match bytes_response to bytes_request_dict and returns True is
+        the bytes_response corresponds to an expected response, 
+        False otherwise.
+
+        Args:
+            bytes_response (bytes): bytes corresponding to a response
+            bytes_request_dict (dict): dictionary of bytes_requests
+                indexed by their id. 
+
+        Returns:
+            True is the response matches a request, False otherwise.
+        """
         if bytes_requests_dict == None:
             return True
         ## server does not respond
@@ -1492,7 +1585,7 @@ class TCPHandle(BaseRequestHandler):
         except:
             del self.server.fd_busy[self.request.fileno()]
             return
-        if (bytes_recv == b''):
+        if bytes_recv == b'':
             return
         header = LURKHeader.parse(bytes_recv)
         bytes_nbr = header['length']
@@ -1651,7 +1744,7 @@ class LurkHTTPClient(LurkTCPClient):
 
     def __init__(self, conf, resolver_mode='stub'):
         self.conf = LurkConf(conf)
-        self.resolver_mode=resolver_mode
+        self.resolver_mode = resolver_mode
         self.server_address = self.conf.get_server_address()
         self.connection_type = self.conf.get_connection_type()
         self.message = LurkMessage(conf=self.conf.get_conf())
