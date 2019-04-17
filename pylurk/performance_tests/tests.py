@@ -969,7 +969,7 @@ def  multithreading_test( sheet_name, excel_file, graph_path, request_nb_list, s
     latency_test(payload_params, connectivity_conf, graph_params, sheet_name, graph_path, excel_file=excel_file,
                   thread=thread, request_nb_list=request_nb_list, set_nb=set_nb, remote_connection=True)
 
-def  cpu_overhead_protocols_test( file_path, total_requests_persec, requests_per_client, iterations, wait_time, server_ip,remote_user, server_password, thread=False):
+def  cpu_overhead_protocols_test( file_path, total_requests_persec, requests_per_client, iterations, wait_time, server_ip,remote_user, server_password, cpuNb, thread=False):
     '''
     This method will check the cpu overhead on the client and server side with TOp command for all transport protocols and authentication methods.
     The top results are put in a file based on the pauload_params[column_name] _server or _client based on the client or server test results
@@ -983,6 +983,7 @@ def  cpu_overhead_protocols_test( file_path, total_requests_persec, requests_per
     :param server_ip: Ip of the server to which we want to connect remotley
     :param remote_user: username of remote server
     :param server_password: password of remote server
+    :param cpuNb: nb of cpu to average over for one iteration of the top
     :param thread: true if multi threading should be used
     :return:
     '''
@@ -1012,9 +1013,12 @@ def  cpu_overhead_protocols_test( file_path, total_requests_persec, requests_per
                 'cert_peer': join(data_dir, 'cert_tls12_rsa_client.crt'),
         }
     }
-    for type in [ 'udp','tcp', 'http', 'https', 'tcp+tls']:
+    for type in [ 'udplocal','udp_freshnull','udp_fresh256','tcp', 'http', 'https', 'tcp+tls']:
         connectivity_conf[type] = deepcopy(conf)
-        connectivity_conf[type]['type'] = type
+        if type in ['udp_freshnull','udp_fresh256','udpLocal']:
+            connectivity_conf[type]['type'] = 'udp'
+        else:
+            connectivity_conf[type]['type'] = type
 
 
     payload_params = {
@@ -1042,7 +1046,7 @@ def  cpu_overhead_protocols_test( file_path, total_requests_persec, requests_per
             },
 
         ],
-        'udp': [
+        'udp_fresh256': [
             {
                 'type': 'rsa_master',
                 'column_name': 'rsa_master_udp_prf_sha256_pfs_sha256',
@@ -1063,6 +1067,30 @@ def  cpu_overhead_protocols_test( file_path, total_requests_persec, requests_per
                 'ref': 'ecdhe_udpLocal_ref_sig_sha256rsa_pfs_sha256',
                 'sig_and_hash': ('sha256', 'rsa'),
                 'freshness_funct': 'sha256'
+            },
+
+        ],
+        'udp_freshnull': [
+            {
+                'type': 'rsa_master',
+                'column_name': 'rsa_master_udp_prf_sha256_pfs_null',
+                'ref': 'rsa_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'prf_hash': 'sha256',
+                'freshness_funct': 'null',
+            },
+            {
+                'type': 'rsa_extended_master',
+                'column_name': 'rsa_extended_master_udp_prf_sha256_pfs_null',
+                'ref': 'rsa_extended_master_udpLocal_ref_prf_sha256_pfs_sha256',
+                'prf_hash': 'sha256',
+                'freshness_funct': 'null',
+            },
+            {
+                'type': 'ecdhe',
+                'column_name': 'ecdhe_udp_sig_sha256rsa_pfs_null',
+                'ref': 'ecdhe_udpLocal_ref_sig_sha256rsa_pfs_sha256',
+                'sig_and_hash': ('sha256', 'rsa'),
+                'freshness_funct': 'null'
             },
 
         ],
@@ -1165,9 +1193,64 @@ def  cpu_overhead_protocols_test( file_path, total_requests_persec, requests_per
 
     }
 
+    graph_params = {'title': '',
+                    'xlabel': 'Athentication Methods',
+                    'ylabel': 'Cpu Overhead (%)',
+                    'box_width': 0.5,  # width of each box in the graph
+                    'start_position': 1,  # the position of the first box to draw
+                    'show_grid': True,  # show grid in the graph
+                    'legend': {
+                        'location': 'upper right',
+                        # location of the legend. Can take one of the following values:'best','upper right','upper left','lower left','lower right','right','center left','center right','lower center','upper center','center'
+                        'font_properties': {
+                            # 'fontname':'Calibri',
+                            'size': '12',
+                            # 'weight': 'bold',
+                        }
+                    },
+                    'font_properties': {  # font properties of title, ylabel and xlabel
+                        # 'fontname':'Calibri',
+                        'size': '14',
+                        'weight': 'bold',
+                    },
+                    'ticks_font_properties': {
+                        # 'fontname':'Calibri',
+                        'size': '12',
+                        # 'weight': 'bold',
+                    },
+                    # data to plot grouped into multiple group. if no group is desired, a dictionary for each data to plot should be added
+                    'groups': [
+                        {'tick_label': 'RSA',  # label on xaxis depicting all the data in data
+                         'color': ['white', 'white', 'white','white', 'white', 'white'],  # ['blue', 'green', 'orange'],
+                         # color of the box of each data in data, set 'White if no color is desired
+                         'hatch': ['*', '/', 'o', '-','x','/'],
+                         # pattern of each box in data. Set '' if no hatch is desired. It can take one of the following patterns = ('-', '+', 'x', '\\', '*', 'o', 'O', '.', '/')
+                         'data': ['rsa_master_udpLocal_ref_prf_sha256_pfs_sha256','rsa_master_udp_prf_sha256_pfs_sha256','rsa_master_tcp_prf_sha256_pfs_sha256','rsa_master_tcptls_prf_sha256_pfs_sha256',
+                                  'rsa_master_http_prf_sha256_pfs_sha256', 'rsa_master_https_prf_sha256_pfs_sha256'],
+                         # colummn name of the data to plot as defined in excel sheet
+                         'legends': ['UDP_Local','UDP', 'TCP','TCP+TLS', 'HTTP', 'HTTPS']
+                         # legend corresponding to each data, set None if no legend to be added to a specified data or provide an empty list
+                         },
+                        {'tick_label': 'RSA_Extended',
+                         'color': ['white', 'white', 'white','white', 'white', 'white'],
+                         # ['blue', 'green', 'orange'],  # same color and hatch as previous group to have same legend
+                         'hatch': ['*', '/', 'o', '-','x','/'],
+                         'data': ['rsa_extended_master_udpLocal_ref_prf_sha256_pfs_sha256','rsa_extended_master_udp_prf_sha256_pfs_sha256','rsa_extended_master_tcp_prf_sha256_pfs_sha256','rsa_extended_master_tcptls_prf_sha256_pfs_sha256',
+                                  'rsa_extended_master_http_prf_sha256_pfs_sha256', 'rsa_extended_master_https_prf_sha256_pfs_sha256'],
+                         'legends': [],  # empty list to have one legend per color as specified in previous group
+                         },
+                        {'tick_label': 'ECDHE',
+                         'color': ['white', 'white', 'white','white', 'white', 'white'],  # ['blue', 'green', 'orange'],
+                         'hatch': ['*', '/', 'o', '-','x','/'],
+                         'data': ['ecdhe_udpLocal_ref_sig_sha256rsa_pfs_sha256','ecdhe_udp_sig_sha256rsa_pfs_sha256','ecdhe_tcp_sig_sha256rsa_pfs_sha256','ecdhe_tcptls_sig_sha256rsa_pfs_sha256','ecdhe_http_sig_sha256rsa_pfs_sha256','ecdhe_https_sig_sha256rsa_pfs_sha256'],
+                         'legends': [],
+                         },
 
-    cpu_overhead_test(payload_params, connectivity_conf, file_path, total_requests_persec, requests_per_client,
-             iterations, wait_time, thread=thread, remote_connection=True)
+                    ]}
+
+
+    cpu_overhead_test(payload_params, connectivity_conf, graph_params, file_path, total_requests_persec, requests_per_client,
+             iterations, wait_time, cpuNb, thread=thread, remote_connection=True)
 
 if __name__=="__main__":
 
@@ -1206,11 +1289,11 @@ if __name__=="__main__":
      print("--------------------Starting Mechanism Overhead poo Test----------------------------")
      mechanism_overhead_poo_test('poo', results_dir + 'mechanism_overhead_poo.xlsx', graph_dir, thread, request_nb, set_nb)
 
-     total_requests_persec = 10
-     requests_per_client = 2
-     iterations = 2
+     total_requests_persec = 100
+     requests_per_client = 1
+     iterations = 50
      wait_time = 5#wait 5 sec after each iteration
-
-
+     cpuNb=8
+     thread = True
      cpu_overhead_protocols_test(results_dir, total_requests_persec, requests_per_client, iterations, wait_time,
-                             server_ip, remote_user, password, thread=thread)
+                             server_ip, remote_user, password, cpuNb, thread=thread)
