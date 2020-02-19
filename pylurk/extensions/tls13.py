@@ -55,3 +55,43 @@ class KeyReq:
                     "key_req does not match the rules %s"%rule,\
                     'invalid_key_request') 
 
+
+class LURKExt:
+  def __init__(self, role, conf=LurkConf().get_ext_conf('tls13', 'v1' ) ):
+    self.conf = conf
+    
+  def get_ctx_struct(self, status, mtype):
+    ctx_struct = { '_type': mtype, '_status' : status}
+    try:
+      ctx_struct['_session_id_agreed'] = self.conf[mtype]['session_id_enable']
+    except(KeyError):
+      pass
+    return ctx_struct
+
+
+  def parse( self, status, mtype, pkt_bytes ):
+      """ parse payload """
+        ctx_struct = self.get_ctx_struct(status, mtype)
+        return LURKTLS13Payload.parse(pkt_bytes, **ctx_struct )
+
+  def build( self, status, mtype, **kwargs):
+        ctx_struct = self.get_ctx_struct(status, mtype)
+      return self.ext_class[ ( status, mtype ) ].build( **kwargs )
+
+  def serve( self, mtype, request  ):
+      return self.ext_class[ ( 'success' , mtype ) ].serve( request )
+
+  def check( self, status, mtype, payload ):
+      return self.ext_class[ ( status, mtype ) ].check( payload )
+
+  def show( self, status, mtype, pkt_bytes, prefix="",
+le_len=LINE_LEN ):
+      return self.ext_class[ ( status, mtype ) ].show( pkt_bytes, \
+                 prefix=prefix, line_len=line_len )
+
+  def build_payload( self, status, mtype, payload ):
+      return self.ext_class[ ( status, mtype ) ].build_payload(
+**kwargs )
+
+
+
