@@ -90,21 +90,63 @@ NamedGroupList = Struct(
 
 
 ## Key Share
+
 KeyShareEntry = Struct(
+ '_name' / Computed('KeyShareEntry'),
   'group' / NamedGroup, 
-  'key_exchange' / Prefixed(BytesInteger(2), GreedyBytes)
+  'key_exchange' / Prefixed(BytesInteger(2), Switch(this.group,
+  { 'secp256r1' : Struct(
+      'legacy_form' / Const(4, BytesInteger(1)), 
+      'x' / BytesInteger(32),
+      'y' / BytesInteger(32)
+      ), 
+    'secp384r1' : Struct(
+      'legacy_form' / Const(4, BytesInteger(1)), 
+      'x' / BytesInteger(48),
+      'y' / BytesInteger(48)
+      ), 
+    'secp521r1' : Struct(
+      'legacy_form' / Const(4, BytesInteger(1)), 
+      'x' / BytesInteger(66),
+      'y' / BytesInteger(66)
+      ), 
+    'x25519' : Bytes(32),
+    'x448' : Bytes(56),
+  }))
 )
 
 KeyShareClientHello = Struct(
-   'client_shares' / Prefixed(BytesInteger(2), GreedyRange(KeyShareEntry)) 
+ '_name' / Computed('KeyShareClientHello'),
+ 'client_shares' / Prefixed(BytesInteger(2), GreedyRange(KeyShareEntry)) 
 )
 
 KeyShareHelloRetryRequest = Struct(
+ '_name' / Computed('KeyShareHelloRetryRequest'),
   'selected_group' / NamedGroup
 )
 
 KeyShareServerHello = Struct(
+ '_name' / Computed('KeyShareServerHello'),
   'server_share' / KeyShareEntry
+)
+
+## defining the EmptyKeyShareEntry as a potential structure
+## for KeyShareEntry.
+
+EmptyKeyShareEntry = Struct(
+ '_name' / Computed('EmptyKeyShareEntry'),
+  'group' / NamedGroup,
+  'key_exchange' / Prefixed( BytesInteger(2), Const(b'') )
+)
+
+KeyShareServerHelloEmpty = Struct(
+ '_name' / Computed('KeyShareServerHelloEmpty'),
+  'server_share' / EmptyKeyShareEntry
+)
+
+KeyShareServer = Select(
+  KeyShareServerHello, KeyShareServerHelloEmpty,
+  KeyShareHelloRetryRequest
 )
 
 ## pre_shared_key
@@ -121,6 +163,33 @@ OfferedPsks = Struct(
   'identities' / Prefixed(BytesInteger(2), GreedyRange(PskIdentity)), 
   'binders' / Prefixed(BytesInteger(2), GreedyRange(PskBinderEntry))
 )
+
+## server_certificate
+
+## https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#tls-extensiontype-values-3
+CertificateType = Enum( BytesInteger(1), 
+  X509 = 0, 
+  RawPublicKey = 2
+)
+
+##   struct {
+##           select(ClientOrServerExtension) {
+##               case client:
+##                 CertificateType client_certificate_types<1..2^8-1>;
+##               case server:
+##                 CertificateType client_certificate_type;
+##           }
+##   } ClientCertTypeExtension;
+##
+##   struct {
+##           select(ClientOrServerExtension) {
+##               case client:
+##                 CertificateType server_certificate_types<1..2^8-1>;
+##               case server:
+##                 CertificateType server_certificate_type;
+##           }
+##   } ServerCertTypeExtension;
+
 
 
 ## Extension structure
@@ -156,12 +225,8 @@ ExtensionType = Enum( BytesInteger(2),
 ## Instead the rwa data may be provided - to be tested. 
 
 Extension = Struct(
+  '_name' / Computed('Extension'),
   'extension_type' / ExtensionType,
-  ## checking the different levels for msg_type
-  ## Probe(this._._._._.msg_type), 
-  ## Probe(this._._._.msg_type), 
-  ## Probe(this._._.msg_type), 
-  ## Probe(this._.msg_type), 
   'extension_data' /  Prefixed(BytesInteger(2),
                       Switch(this.extension_type,
     {
@@ -170,43 +235,15 @@ Extension = Struct(
       'pre_shared_key' : PskIdentity, 
       'post_handshake_auth' : PostHandshakeAuth,
       'psk_key_exchange_modes' : PskKeyExchangeModes, 
-       ## To build manually the extension with msg_type included during
-       ## the call of Extension 
-       ## 'key_share': Switch(this._.msg_type,
-       ## Interestingly, we may also define the msg_type at several ctx
-       ## above by iteratively write
-       ##   "msg_type" / Computed(this._.msg_type),
-       ## ClientHello (woudl get it from constructor of Handshake) 
-      'key_share': Switch(this._._.msg_type, 
+      'key_share': Switch(this._._msg_type, 
          {
-          'client_hello' : Select(KeyShareClientHello, 
-                           KeyShareHelloRetryRequest),
-          'server_hello' : KeyShareServerHello
+          'client_hello' : KeyShareClientHello, 
+          'server_hello' : KeyShareServer, 
          }
         )
     }, default=Bytes)
   ) 
 )
-
-## For testing purposes enable to build the key_share Extension
-## providing the necessary msg_type parameter. The only difference with
-## Extension is the level where msg_type information is read.
-KeyShareExt = Struct( 
-  'extension_type' / ExtensionType,
-  'extension_data' /  Prefixed(BytesInteger(2),
-                      Switch(this.extension_type, 
-    {
-      'key_share': Switch(this._.msg_type, 
-         {
-          'client_hello' : Select(KeyShareClientHello, 
-                           KeyShareHelloRetryRequest),
-          'server_hello' : KeyShareServerHello
-         }
-        )
-    }, default=Bytes)
-  )
-)
-
 
 ## ClientHello
 
@@ -219,6 +256,8 @@ CipherSuite = Enum( Bytes(2),
 )
 
 ClientHello = Struct( 
+  '_name' / Computed('ClientHello'),
+  '_msg_type' / Computed('client_hello'),
   'legacy_version' / Const(b'\x03\x03'),
   'random' / Bytes(32), 
   'cipher_suites' / Prefixed(BytesInteger(2), GreedyRange(CipherSuite)),
@@ -229,6 +268,8 @@ ClientHello = Struct(
 ## ServerHEllo
 
 ServerHello = Struct(
+  '_name' / Computed('ServerHello'),
+  '_msg_type' / Computed('server_hello'),
   'legacy_version' / Const(b'\x03\x03'),
   'random' / Bytes(32), 
   'cipher_suite' / CipherSuite,
@@ -239,6 +280,8 @@ ServerHello = Struct(
 
 ## NewsessionTicket
 NewSessionTicket = Struct(
+  '_name' / Computed('NewTicketSession'),
+  '_msg_type' / Computed('new_ticket_session'),
   'ticket_lifetime' / BytesInteger(4), 
   'ticket_age_add' / BytesInteger(4), 
   'ticket_nonce' / Prefixed(BytesInteger(1), GreedyBytes), 
@@ -252,6 +295,7 @@ EndOfEarlyData = Struct ()
 
 ## encrypted extensions
 EncryptedExtensions = Struct(
+  '_name' / Computed('EncryptedExtensions'),
   'extensions' / Prefixed(BytesInteger(2), GreedyRange(Extension))
 )
 
@@ -259,7 +303,7 @@ EncryptedExtensions = Struct(
 ## Certificate 
 CertificateType = Enum( BytesInteger(1),
   X509 = 0,
-  RawPublicKey = 1
+  RawPublicKey = 2
 )
 
 CertificateEntry = Struct(
@@ -277,6 +321,7 @@ CertificateEntry = Struct(
 )
 
 Certificate = Struct(
+  '_name' / Computed('Certificate'),
   '_certificate_type' / Computed(this._._certificate_type),
   'certificate_request_context' / Prefixed( BytesInteger(1), GreedyBytes),
   'certificate_list' / Prefixed(BytesInteger(3), GreedyRange(CertificateEntry))
@@ -284,12 +329,14 @@ Certificate = Struct(
 
 ## CertificateRequest
 CertificateRequest = Struct(
+  '_name' / Computed('CertificateRequest'),
   'certificate_request_context' / Prefixed( BytesInteger(1), GreedyBytes),
   'extensions' / Prefixed(BytesInteger(2), GreedyRange(Extension))
 )
 
 ## CErtificateVErify
 CertificateVerify = Struct(
+  '_name' / Computed('CertificateVerify'),
   'algorithm' / SignatureScheme,
   'signature' / Prefixed( BytesInteger(2), GreedyBytes)
 )
@@ -297,6 +344,7 @@ CertificateVerify = Struct(
 ## Finished
 
 Finished = Struct(
+  '_name' / Computed('Finished'),
   '_cipher' / Computed(this._._cipher),
   'verify_data' / Switch(this._cipher,  
     { 'TLS_AES_128_GCM_SHA256' : Bytes(32),
@@ -315,6 +363,7 @@ KeyUpdateRequest = Enum( BytesInteger(1),
 )
 
 KeyUpdate = Struct(
+  '_name' / Computed('KeyUpdate'),
   'request_update' / KeyUpdateRequest
 )
 
@@ -337,6 +386,7 @@ HandshakeType = Enum( BytesInteger(1),
 ## Handshake structure. These arguments are then passed down to the 
 ## downstreamed containers until the final structure. 
 Handshake = Struct(
+  '_name' / Computed('Handshake'),
   'msg_type' / HandshakeType,
   '_certificate_type' / If( this.msg_type == 'certificate', Computed(this._._certificate_type)),   
   '_cipher' / If( this.msg_type == 'finished', Computed(this._._cipher)),   
@@ -355,3 +405,44 @@ Handshake = Struct(
   )
 )
 
+## Designation of specific handshake messages
+
+HSClientHello = Struct( 
+  'msg_type' / Const('client_hello', HandshakeType),
+  'data' / ClientHello
+)
+
+HSServerHello = Struct(
+  'msg_type' / Const('server_hello', HandshakeType),
+  'data' / ServerHello
+)
+
+HSEncryptedExtensions = Struct( 
+  'msg_type' / Const('encrypted_extensions', HandshakeType), 
+  'data' / EncryptedExtensions 
+)
+
+HSCertificateRequest = Struct(
+  'msg_type' / Const('certificate_request', HandshakeType), 
+  'data' / CertificateRequest
+)
+
+HSCertificate = Struct( 
+  'msg_type' / Const('certificate', HandshakeType), 
+  'data' / Certificate
+)
+
+HSCertificateVerify = Struct( 
+  'msg_type' / Const('certificate_verify', HandshakeType), 
+  'data' / CertificateVerify
+)
+
+HSFinished = Struct( 
+  'msg_type' / Const('finished', HandshakeType), 
+  'data' / Finished 
+)
+
+HSEndOfEarlyData = Struct( 
+  'msg_type' / Const('end_of_early_data', HandshakeType),
+  'data' / EndOfEarlyData
+)

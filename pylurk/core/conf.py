@@ -144,20 +144,52 @@ default_conf = {
         {'designation' : 'tls13',
          'version' : 'v1',
          'type' : 's_init_early_secret',
+         'session_id' : True, ## session_is are not expected. 
+         'client_early_secret_authorized' : True,
+         'early_exporter_secret_authorized' : True,
+         'session_id_ignored' : False,  
         }, 
         {'designation' : 'tls13',
          'version' : 'v1',
          'type' : 's_init_cert_verify',
-          
+         'session_id_ignored' : False,  
+         'app_secret_authorized' : True, 
+         'exporter_secret_authorized' : True, 
+         'ephemeral_methods' : ['secret_generated', 'shared_secret'],
+         'authorized_ecdhe_group' : ['secp256r1', 'secp384r1', 
+                                     'secp521r1', 'x25519', 'x448'], 
+         'public_key' : [join(data_dir, 'cert-rsa-enc.der')],
+         'private_key' : join(data_dir, 'key-rsa-enc.pkcs8'), ## der, pkcs8
+         'sig_algo' : ['rsa_pkcs1_sha256', \
+                       'rsa_pkcs1_sha384', \
+                       'rsa_pkcs1_sha512',\
+                       'ecdsa_secp256r1_sha256', \
+                       'ecdsa_secp384r1_sha384',\
+                       'ecdsa_secp521r1_sha512', \
+                       'rsa_pss_rsae_sha256', \
+                       'rsa_pss_rsae_sha384', \
+                       'rsa_pss_rsae_sha512', \
+                       'ed25519', \
+                       'ed448', \
+                       'rsa_pss_pss_sha256', \
+                       'rsa_pss_pss_sha384', \
+                       'rsa_pss_pss_sha512' ]
         }, 
         {'designation' : 'tls13',
          'version' : 'v1',
          'type' : 's_hand_and_app_secret',
-         'session_id' : True, 
+         'ephemeral' : True,
+         'ephemeral_methods' : ['secret_generated', 'secret_provided' ], 
+         'app_secret' : True, 
+         'exporter_secret' : True
         }, 
         {'designation' : 'tls13',
          'version' : 'v1',
          'type' : 's_new_ticket',
+         'resumption_secret_authorized' : True,
+         'max_new_ticket_exchange' : 1, 
+         'ticket_life_time' : 172800, # 2d = 2*24*3600 < 2**32-1
+         'ticket_nonce_len' : 20,  ## bytes < 255
         }, 
         {'designation' : 'tls13',
          'version' : 'v1',
