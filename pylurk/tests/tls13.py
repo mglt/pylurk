@@ -1,19 +1,41 @@
 import sys
 import traceback
 from copy import deepcopy
+#import binascii
+#from binascii import hexlify
+import json
+import bytes
 
 from  pylurk.extensions.tls13_lurk_struct import *
 from  pylurk.extensions.tls13_tls13_struct import *
 from secrets import token_bytes
+from cryptography.hazmat.primitives.hashes import Hash, SHA256
 
-from pylurk.extensions.tls13 import Conf, ConfBuilder, Session
-
+from pylurk.extensions.tls13 import Conf, ConfBuilder, SSession,CSession, get_struct_index
+from pylurk.core.lurk import LurkServer
+from pylurk.core.lurk_struct import LURKMessage
 
 ## from pylurk.utils.utils import set_title
 ## cannot import because construct 2.10 does not support Embedded 
 
 ## TODO:
 # import from utils.py instead of copying the fucntion
+
+## TLS 1.3 structures
+TLS13_STRUCTURE = True
+## payload exchange on TLS server
+LURK_SERVER_PAYLOAD_EXCHANGE = True
+## payload exchange on TLS server (most possibilities)
+LURK_SERVER_PAYLOAD_SESSION_RESUMPTION_LOOP = True
+## lurk exchange on TLS server
+LURK_SERVER_SESSION_RESUMPTION = True
+## lurk exchange on TLS server (most possibilities)
+LURK_SERVER_SESSION_RESUMPTION_LOOP = True
+
+
+DEBUG_MODE = False
+
+
 
 def title(title):
     """ print title in a square box
@@ -81,15 +103,45 @@ def compare( data_struct1, data_struct2):
         "\n    - data_struct2 [%s] : %s"%(type(data_struct2), data_struct2) )
   else:
     if data_struct1 != data_struct2:
-      print("%s +++ %s"%(type(data_struct1), type(data_struct2)))
-      raise Exception( \
-        "\n    - data_struct1 [%s] : %s"%(type(data_struct1), data_struct1) +\
-        "\n    - data_struct2 [%s] : %s"%(type(data_struct2), data_struct2) )
-        
+      if data_struct1 in  [ None, b'' ] and data_struct2 in [ None, b'' ]:
+        pass
+      else:
+         raise Exception( \
+           "\n    - data_struct1 [%s] : %s"%(type(data_struct1), data_struct1) +\
+           "\n    - data_struct2 [%s] : %s"%(type(data_struct2), data_struct2) )
+   
+from _io import BytesIO
+
+def obj2json( data:dict ) -> dict:
+  """ converts a bytes or bytearray value to string """ 
+  json_data = deepcopy( data ) 
+  if isinstance( json_data, BytesIO ) :
+    json_data = json_data.read()
+  if isinstance( json_data, bytes ) or\
+     isinstance( json_data, bytearray ) : #or\
+#     isinstance( json_data, BytesIO) :
+    json_data = json_data.hex( '-' )
+  elif isinstance( json_data, dict ):
+    for k in json_data.keys():
+##      if isinstance( json_data[ k ], BytesIO ):
+##        del json_data[ k ]
+##      else:
+        json_data[ k ] = obj2json( json_data[ k ] )
+  elif isinstance( json_data, list ):
+    for i in range( len( json_data ) ):
+      json_data[ i ] = obj2json( json_data[ i ] )
+  else:
+    c = json_data.__class__.__name__
+##    if c == 'BytesIO':
+##      print( "class: %s, object: %s, type: %s"%(c, json_data.read(), type( json_data ) ) )
+       
+  return json_data
+
 
 def test_struct( struct, data_struct, ctx_struct={}, \
                  ext_title='', no_title=False, \
-                 io_check=True ):
+                 io_check=True, print_data_struct=DEBUG_MODE, \
+                 print_binary=False, print_data=False ):
   """ test structures """
 
   binary = struct.build(data_struct, **ctx_struct)
@@ -100,11 +152,14 @@ def test_struct( struct, data_struct, ctx_struct={}, \
       name = data._name
     except(AttributeError):
       name = ''
-    title("Testing %s [%s]  structure"%(name, ext_title))
+    title("%s [%s]  structure"%(name, ext_title))
 
-  print("struct: %s"%data_struct)
-  print("bytes: %s"%binary)
-  print("struct: %s"%data)
+  if print_data_struct == True:
+    print("struct: %s"%json.dumps( obj2json( data_struct ), indent=2) )
+  if print_binary == True:
+    print("bytes: %s"%binary.hex( '-' ) )
+  if print_data == True:
+    print("struct: %s"%data)
   if io_check:
     try:
       compare(data_struct, data)
@@ -135,35 +190,73 @@ sig_list = [
   'ecdsa_secp384r1_sha384',
   'ed25519', 'ed448'
   ]
+
 sig_scheme_list = { 'supported_signature_algorithms' : sig_list}
-test_struct(SignatureSchemeList, sig_scheme_list)
+
+if TLS13_STRUCTURE == True:
+  test_struct(SignatureSchemeList, sig_scheme_list)
 
 ext13 = {'extension_type': 'signature_algorithms', \
          'extension_data' : sig_scheme_list }
-test_struct(Extension, ext13)
+
+if TLS13_STRUCTURE == True:
+  test_struct(Extension, ext13)
 
 ## psk_key_exchange_modes
 psk_modes = {'ke_modes' : ['psk_ke', 'psk_dhe_ke']}
 
-test_struct( PskKeyExchangeModes, psk_modes)
+if TLS13_STRUCTURE == True:
+  test_struct( PskKeyExchangeModes, psk_modes)
 
 ext45 = {'extension_type': 'psk_key_exchange_modes', \
          'extension_data' : psk_modes }
-test_struct(Extension, ext45)
+
+if TLS13_STRUCTURE == True:
+  test_struct(Extension, ext45)
+
+## pre_shared_key
+psk_id = {'identity' : b'\x00\x00', \
+          'obfuscated_ticket_age' : b'\x00\x01\x02\x03' }
+psk_binder = {'binder' : b'\xff\xff\xff\xff'}
+
+offered_psks= { 'identities' : [psk_id, psk_id], \
+                'binders' : [psk_binder, psk_binder]}
+
+if TLS13_STRUCTURE == True:
+  test_struct(OfferedPsks, offered_psks)
+
+ext41_ch = { 'extension_type': 'pre_shared_key', \
+             'extension_data' : offered_psks }
+
+if TLS13_STRUCTURE == True:
+  test_struct(Extension, ext41_ch, ctx_struct={'_msg_type' : 'client_hello' } )
+
+ext41_sh =  { 'extension_type': 'pre_shared_key', \
+              'extension_data' : 0 }
+
+if TLS13_STRUCTURE == True:
+  test_struct(Extension, ext41_sh, ctx_struct={'_msg_type' : 'server_hello' } )
+
+
 
 ## post-handshake authentication
 ext49 = {'extension_type': 'post_handshake_auth', \
          'extension_data' : {} }
-test_struct(Extension, ext49)
+
+if TLS13_STRUCTURE == True:
+  test_struct(Extension, ext49)
 
 ## supported_group
 
 grp = {'named_group_list' : ['secp256r1', 'secp384r1', 'x25519', 'x448' ]}
-test_struct(NamedGroupList, grp)
+
+if TLS13_STRUCTURE == True:
+  test_struct(NamedGroupList, grp)
 
 ext10 = {'extension_type': 'supported_groups', \
          'extension_data' : grp }
-test_struct(Extension, ext10)
+if TLS13_STRUCTURE == True:
+  test_struct(Extension, ext10)
 
 ## key_share
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -173,13 +266,16 @@ private_key = ec.generate_private_key( ec.SECP256R1(), default_backend())
 public_key = private_key.public_key()
 public_numbers = public_key.public_numbers()
 
-print("Public Numbers: %s"%public_numbers)
 x = public_numbers.x
 y = public_numbers.y
-print("  - x: %s"%x)
-print("  - x: %s"%(x).to_bytes(32, byteorder='big'))
-print("  - y: %s"%y)
-print("  - y: %s"%(y).to_bytes(32, byteorder='big'))
+
+if TLS13_STRUCTURE == True:
+  print("Public Numbers: %s"%public_numbers)
+  print("  - x: %s"%x)
+  print("  - x: %s"%(x).to_bytes(32, byteorder='big'))
+  print("  - y: %s"%y)
+  print("  - y: %s"%(y).to_bytes(32, byteorder='big'))
+
 secp256r1_key = { 'legacy_form' : 4, 'x' : x, 'y' : y }
 ke_entry_secp256r1 = {'group': 'secp256r1', 'key_exchange' : secp256r1_key}
 
@@ -187,13 +283,16 @@ private_key = ec.generate_private_key( ec.SECP384R1(), default_backend())
 public_key = private_key.public_key()
 public_numbers = public_key.public_numbers()
 
-print("Public Numbers: %s"%public_numbers)
 x = public_numbers.x
 y = public_numbers.y
-print("  - x: %s"%x)
-print("  - x: %s"%(x).to_bytes(48, byteorder='big'))
-print("  - y: %s"%y)
-print("  - y: %s"%(y).to_bytes(48, byteorder='big'))
+
+if TLS13_STRUCTURE == True:
+  print("Public Numbers: %s"%public_numbers)
+  print("  - x: %s"%x)
+  print("  - x: %s"%(x).to_bytes(48, byteorder='big'))
+  print("  - y: %s"%y)
+  print("  - y: %s"%(y).to_bytes(48, byteorder='big'))
+
 secp384r1_key = { 'legacy_form' : 4, 'x' : x, 'y' : y }
 ke_entry_secp384r1 = {'group': 'secp384r1', 'key_exchange' : secp384r1_key}
 
@@ -201,13 +300,15 @@ private_key = ec.generate_private_key( ec.SECP521R1(), default_backend())
 public_key = private_key.public_key()
 public_numbers = public_key.public_numbers()
 
-print("Public Numbers: %s"%public_numbers)
 x = public_numbers.x
 y = public_numbers.y
-print("  - x: %s"%x)
-print("  - x: %s"%(x).to_bytes(66, byteorder='big'))
-print("  - y: %s"%y)
-print("  - y: %s"%(y).to_bytes(66, byteorder='big'))
+
+if TLS13_STRUCTURE == True:
+  print("Public Numbers: %s"%public_numbers)
+  print("  - x: %s"%x)
+  print("  - x: %s"%(x).to_bytes(66, byteorder='big'))
+  print("  - y: %s"%y)
+  print("  - y: %s"%(y).to_bytes(66, byteorder='big'))
 secp521r1_key = { 'legacy_form' : 4, 'x' : x, 'y' : y }
 ke_entry_secp512r1 = {'group': 'secp521r1', 'key_exchange' : secp521r1_key}
 
@@ -238,52 +339,58 @@ ke_entries = [ke_entry_secp256r1,
               ke_entry_x448 ]
 
 ks_ch = {'client_shares' : ke_entries}
-test_struct(KeyShareClientHello, ks_ch)
+
+if TLS13_STRUCTURE == True:
+  test_struct(KeyShareClientHello, ks_ch)
 
 ks_hr = {'selected_group' : 'x448' }
-test_struct(KeyShareHelloRetryRequest, ks_hr)
+if TLS13_STRUCTURE == True:
+  test_struct(KeyShareHelloRetryRequest, ks_hr)
 
 for ke_entry in ke_entries:
   ks_sh = {'server_share' : ke_entry }
-  test_struct(KeyShareServerHello, ks_sh)
+  if TLS13_STRUCTURE == True:
+    test_struct(KeyShareServerHello, ks_sh)
 
 empty_ke_entry = {'group': 'x448', 'key_exchange': b'' }
-test_struct( EmptyKeyShareEntry, empty_ke_entry )  
+if TLS13_STRUCTURE == True:
+  test_struct( EmptyKeyShareEntry, empty_ke_entry )  
 
 ks_sh_empty = { 'server_share': empty_ke_entry }
-test_struct( KeyShareServerHelloEmpty, ks_sh_empty )
+if TLS13_STRUCTURE == True:
+  test_struct( KeyShareServerHelloEmpty, ks_sh_empty )
 
 
 ext51_ch = {'extension_type': 'key_share', \
             'extension_data' : ks_ch }
 ctx_struct = {'_msg_type' : 'client_hello'}
-test_struct(Extension, ext51_ch, ctx_struct=ctx_struct)
+
+if TLS13_STRUCTURE == True:
+  test_struct(Extension, ext51_ch, ctx_struct=ctx_struct)
 
 ext51_hr = {'extension_type': 'key_share', \
             'extension_data' : ks_hr }
 ctx_struct = {'_msg_type' : 'server_hello'}
-test_struct(Extension, ext51_hr, ctx_struct=ctx_struct)
+
+if TLS13_STRUCTURE == True:
+  test_struct(Extension, ext51_hr, ctx_struct=ctx_struct)
 
 ext51_sh = {'extension_type': 'key_share', \
             'extension_data' : ks_sh }
 
 ctx_struct = {'_msg_type' : 'server_hello'}
-test_struct(Extension, ext51_sh, ctx_struct=ctx_struct)
+
+if TLS13_STRUCTURE == True:
+  test_struct(Extension, ext51_sh, ctx_struct=ctx_struct)
 
 ext51_sh_empty = {'extension_type': 'key_share', \
                   'extension_data' : ks_sh_empty }
 
 ctx_struct = {'_msg_type' : 'server_hello'}
-test_struct(Extension, ext51_sh_empty, ctx_struct=ctx_struct)
 
-## pre_shared_key
-psk_id = {'identity' : b'\x00\x00', \
-          'obfuscated_ticket_age' : b'\x00\x01\x02\x03' }
-psk_binder = {'binder' : b'\xff\xff\xff\xff'}
-offered_psk = { 'identities' : [psk_id, psk_id], \
-        'binders' : [psk_binder, psk_binder]}
+if TLS13_STRUCTURE == True:
+  test_struct(Extension, ext51_sh_empty, ctx_struct=ctx_struct)
 
-test_struct(OfferedPsks, offered_psk)
 
 ## III TLS messages
 ## Some Extensions have different structures depending on the msg_type
@@ -399,310 +506,93 @@ hs_key_update = {
 }
 test_struct(Handshake, hs_key_update)
   
-############################################
-## LURK extensions for TLS 1.3 structures ##
-############################################
+print( "############################################" )
+print( "## LURK extensions for TLS 1.3 structures ##" )
+print( "############################################" )
 
-## KeyRequest
-data_struct = {"b":True, "e_s":False, "e_x":True, "h_c":False,\
+## SecretRequest
+secret_request = {"b":True, "e_s":False, "e_x":True, "h_c":False,\
                "h_s":True, "a_c":False, "a_s":True, "x":False, \
                "r":True}
-binary, struct = test_struct(KeyRequest, data_struct)
+binary, struct = test_struct(SecretRequest, secret_request)
+
+# tag
+for i in [ True, False ]:
+  tag = { 'last_exchange' : True }
+  binary, struct = test_struct( Tag, tag)
+
 
 ## Secret
 secret_data = b'secret'
 for secret_type in ['b', 'e_s', 'e_x', 'h_c', 'h_s', 'a_c', 'a_s', 'x', 'r']:
-  data_struct = {'secret_type': secret_type, 'secret_data': secret_data}
-  test_struct(Secret, data_struct, ext_title=secret_type)
+  secret = {'secret_type': secret_type, 'secret_data': secret_data}
+  test_struct(Secret, secret, ext_title=secret_type)
 
-## Extensions
+## Freshness
+freshness = 'sha256'
+test_struct( Freshness, freshness, ext_title='Freshness')
 
+## Ephemeral (no_secret)
+eph_no = { 'ephemeral_method': 'no_secret', 'key': b'' }
+for status in [ 'request', 'success' ]: 
+  ctx_struct = { '_status' : status }
+  test_struct( Ephemeral, eph_no, ext_title='no secret', ctx_struct=ctx_struct )
+
+## Ephemeral (secret_provided)
 shared_secret = { 'group' : 'secp256r1', 'shared_secret' : token_bytes(32) }
-
-eph_req_ss = { 'extension_type': 'ephemeral',\
-               'extension_data': { 'ephemeral_method': 'shared_secret',\
-                                'key': shared_secret } }
+eph_provided = { 'ephemeral_method': 'secret_provided', 'key': shared_secret }
 ctx_struct = {'_status' : 'request'}
-ext_title = eph_req_ss['extension_type'] + eph_req_ss['extension_data']['ephemeral_method']
-test_struct(LURK13Extension, eph_req_ss, ext_title=ext_title, ctx_struct=ctx_struct)
+test_struct( Ephemeral, eph_provided, ext_title='secret_provided', ctx_struct=ctx_struct )
 
-eph_req_sg = { 'extension_type': 'ephemeral',\
-               'extension_data': { 'ephemeral_method': 'secret_generated',
-                                   'key': b'' } }
-ctx_struct = {'_status' : 'request'}
-ext_title = eph_req_sg['extension_type'] + eph_req_sg['extension_data']['ephemeral_method']
-test_struct(LURK13Extension, eph_req_sg, ext_title=ext_title, ctx_struct=ctx_struct)
-
-
+## Ephemeral (secret_generated)
+  ## CS generates private/ public part of teh ECDHE
 private_key = ec.generate_private_key( ec.SECP256R1(), default_backend())
 public_key = private_key.public_key()
 public_numbers = public_key.public_numbers()
 x = public_numbers.x
 y = public_numbers.y
+  ## CS returns the public part of teh ECDHE using the KeyShare Entry format
 key_exchange = {'legacy_form' : 4, 'x' : x, 'y' : y }
 keyshare_entry = { 'group' : 'secp256r1', 'key_exchange' : key_exchange }
-
-eph_resp = { 'extension_type': 'ephemeral',\
-               'extension_data': { 'ephemeral_method': 'secret_generated',\
-                                'key': keyshare_entry } }
+  ## CS response
+eph_gen = { 'ephemeral_method': 'secret_generated', 'key': keyshare_entry } 
 ctx_struct = {'_status' : 'success'}
-ext_title = eph_req_ss['extension_type'] + eph_req_ss['extension_data']['ephemeral_method']
-test_struct(LURK13Extension, eph_resp, ext_title=ext_title, ctx_struct=ctx_struct)
+test_struct( Ephemeral, eph_gen, ext_title="secret_generated", ctx_struct=ctx_struct ) 
+
+## certificate ( empty )
+cert_empty = { 'certificate_type': 'empty', 'certificate_data' : b'' }
+test_struct( LURKTLS13Certificate, cert_empty, ext_title = "empty" ) 
+
+## certificate ( finger_print )
+cert_entry = {'cert' : b'certificate_entry', 'extensions':[] }
+  ## TLS certificate structure 
+hs_cert = { 'msg_type' : 'certificate', 
+            'data' :  { 'certificate_request_context': b'',
+                        'certificate_list' : [cert_entry, cert_entry] } }
+digest = Hash( SHA256(), backend=default_backend())
+digest.update( Handshake.build( hs_cert, _certificate_type='X509' ))
+cert_finger = {'certificate_type': 'finger_print', 'certificate_data': digest.finalize()[:4]}
+test_struct( LURKTLS13Certificate, cert_finger, ext_title = "finger_print" ) 
+
+## certificate ( uncompressed) 
+cert_uncompressed = {'certificate_type': 'uncompressed', 
+                     'certificate_data': hs_cert[ 'data' ] }
+ctx_struct = { '_certificate_type' : 'X509' }
+test_struct( Certificate, hs_cert[ 'data' ],\
+             ext_title = "certificate", ctx_struct=ctx_struct ) 
+test_struct( LURKTLS13Certificate, cert_uncompressed,\
+             ext_title = "uncompressed", ctx_struct=ctx_struct ) 
+
+## psk_id
+psk_id = { 'identity': b'key_id', 'obfuscated_ticket_age': b'\x00\x01\x02\x03'}
+test_struct( PskIdentity, psk_id ) 
 
 
 
-psk = { 'extension_type': 'psk_id', \
-        'extension_data': { 'identity': b'key_identity',\
-                            'obfuscated_ticket_age': b'\x00\x01\x02\x03'} }
+## SInitCertVerifyRequest
 
-
-secret = {'secret_type': 'x', 'secret_data': b'secret'}
-
-
-
-
-frsh = { 'extension_type': 'freshness', 'extension_data': 'sha256'}
-sess = { 'extension_type': 'session_id',\
-         'extension_data': b'\x00\x01\x02\x03' }
-
-
-all_ext = [ psk, frsh, sess ]
-
-for ext in all_ext:
-  test_struct(LURK13Extension, ext, ext_title=ext['extension_type'])
-
-## SessionID
-session_id = {'session_id': b'\x00\x01\x02\x03' }
-test_struct(SessionID, session_id)
-
-## SecretRequest
-key_req = {"b":True, "e_s":False, "e_x":True, "h_c":False,\
-            "h_s":True, "a_c":False, "a_s":True, "x":False, \
-            "r":True}
-
-##handshake_ctx = {'msg' : hs_client_hello }
-handshake_ctx = [ hs_client_hello ]
-##handshake_ctx = [ hs_server_hello ]
-ctx_struct = {'_type':'s_init_early_secret'}
-sec_req = {'key_request': key_req, \
-           'handshake_context': handshake_ctx, \
-           'extension_list': all_ext }
-binary, struct = test_struct(SecretRequest, sec_req, ctx_struct=ctx_struct)
-
-## SecretResponse
-a_c = {'secret_type': 'a_c', 'secret_data': b'secret_ac'}
-a_s = {'secret_type': 'a_s', 'secret_data': b'secret_as'}
-sec_resp = {'secret_list' : [a_c, a_s], 'extension_list': all_ext}
-test_struct(SecretResponse, sec_resp)
-
-## SignatureRequest
-key = { 'key_id_type' : 'sha256_32', 'key_id' : b'\x00\x01\x02\x03' }
-cert_32 = { 'certificate_type' : 'sha256_32',\
-            'certificate_data' : b'\x00\x01\x02\x03' }
-
-cert_entry = {'cert' : b'\x00\x01\x02\x03',\
-              'extensions':[] }
-cert_tls = {'certificate_request_context' : b'\x00\x01', \
-        'certificate_list' : [cert_entry, cert_entry]}
-cert_x509 = { 'certificate_type' : 'X509', \
-              'certificate_data' : cert_tls}
-
-for cert in [cert_32, cert_x509]:
-##  sig_req = {'key_id': key, \
-##             'sig_algo' : 'rsa_pkcs1_sha256' ,\
-##             'certificate' : cert }
-  sig_req = { 'sig_algo' : 'rsa_pkcs1_sha256' }
-  ## cannot validate ( I suspect the pointer to certificate_type that
-  ## generate the error
-  test_struct(SigningRequest, sig_req)
-
-## SignatureResponse
-sig_resp = { 'signature' :  b'\x00\x01\x02\x03' }
-test_struct(SigningResponse, sig_resp)
-
-exts = [ psk, frsh, sess, eph_req_ss, eph_req_sg ]
-
-##  TLS Server: EarlySecret
-sec_req = {'key_request': key_req, \
-           'handshake_context': [ hs_client_hello ], \
-           'extension_list': exts }
-ctx_struct = {'_type': 's_init_early_secret'}
-s_init_early_sec_req = {'secret_request' : sec_req }
-test_struct(InitEarlySecretRequest, s_init_early_sec_req, ctx_struct=ctx_struct)
-
-s_init_early_sec_resp = {'secret_response' : sec_resp}
-test_struct(InitEarlySecretResponse, s_init_early_sec_resp)
-
-## 
-ctx_struct = {'_type': 's_init_early_secret', '_status' : 'request'}
-test_struct(LURKTLS13Payload, s_init_early_sec_req, ctx_struct=ctx_struct)
-
-ctx_struct = {'_type': 's_init_early_secret', '_status' : 'success'}
-test_struct(LURKTLS13Payload, s_init_early_sec_resp, ctx_struct=ctx_struct)
-
-## TLS server: InitCertVerify
-
-hs_all = [ hs_client_hello, \
-           hs_server_hello, \
-           hs_encrypted_extensions, 
-           hs_certificate_request]
-hs_opt = [ hs_client_hello, \
-           hs_server_hello, \
-           hs_encrypted_extensions] 
-
-for hs_ctx in [hs_all, hs_opt]: 
-  sec_req = {'key_request': key_req, \
-             'handshake_context': hs_ctx, \
-             'extension_list': all_ext }
-  ctx_struct = {'_type': 's_init_cert_verify'}
-  s_init_cert_verify_req = {'secret_request':sec_req, \
-                            'signing_request':sig_req }
-  test_struct(InitCertVerifyRequest, s_init_cert_verify_req, \
-              ctx_struct=ctx_struct)
-
-s_init_cert_verify_resp = {'secret_response' : sec_resp, \
-                        'signing_response' : sig_resp }
-test_struct(InitCertVerifyResponse, s_init_cert_verify_resp)
-
-##
-for hs_ctx in [hs_all, hs_opt]: 
-  sec_req = {'key_request': key_req, \
-             'handshake_context': hs_ctx, \
-             'extension_list': all_ext }
-  ctx_struct = {'_type': 's_init_cert_verify'}
-  s_init_cert_verify_req = {'secret_request':sec_req, \
-                            'signing_request':sig_req }
-  ctx_struct = {'_type': 's_init_cert_verify', '_status' : 'request'}
-  test_struct(LURKTLS13Payload, s_init_cert_verify_req, ctx_struct=ctx_struct)
-
-ctx_struct = {'_type': 's_init_cert_verify', '_status' : 'success'}
-test_struct(LURKTLS13Payload, s_init_cert_verify_resp, ctx_struct=ctx_struct)
-
-## TLS Server: HandshakeRequest
-
-hs_all = [ hs_server_hello, \
-           hs_encrypted_extensions, 
-           hs_certificate_request]
-hs_opt = [ hs_server_hello, \
-           hs_encrypted_extensions] 
-
-for hs_ctx in [hs_all, hs_opt]:
-  sec_req = {'key_request': key_req, \
-             'handshake_context': hs_ctx, \
-             'extension_list': all_ext }
-  for s_id in [ True, False]:
-    ctx_struct = {'_session_id_agreed' : s_id, '_type': 's_hand_and_app_secret'}
-    s_hand_req = { 'secret_request':sec_req }
-    if s_id is True:
-      s_hand_req['session_id'] = b'\x00\x01\x02\x03'
-    else:
-      s_hand_req['session_id'] = None
-    test_struct(HandAndAppRequest, s_hand_req, ctx_struct=ctx_struct)
-
-for s_id in [ True, False]:
-  ctx_struct = {'_session_id_agreed' : s_id}
-  s_hand_resp = {'secret_response' : sec_resp }
-  if s_id is True:
-    s_hand_resp['session_id'] = b'\x00\x01\x02\x03'
-  else:
-    s_hand_resp['session_id'] = None
-  test_struct(HandAndAppResponse, s_hand_resp, ctx_struct=ctx_struct)
-
-for hs_ctx in [hs_all, hs_opt]:
-  sec_req = {'key_request': key_req, \
-             'handshake_context': hs_ctx, \
-             'extension_list': all_ext }
-  for s_id in [ True, False]:
-    ctx_struct = {'_type': 's_hand_and_app_secret', 
-                  '_status' : 'request', 
-                  '_session_id_agreed' : s_id }
-    s_hand_req = { 'secret_request':sec_req }
-    if s_id is True:
-      s_hand_req['session_id'] = b'\x00\x01\x02\x03'
-    else:
-      s_hand_req['session_id'] = None
-    test_struct(LURKTLS13Payload, s_hand_req, ctx_struct=ctx_struct)
-
-for s_id in [ True, False]:
-  ctx_struct = {'_type': 's_hand_and_app_secret', 
-                '_status' : 'success',
-                '_session_id_agreed' : s_id, }
-  s_hand_resp = {'secret_response' : sec_resp }
-  if s_id is True:
-    s_hand_resp['session_id'] = b'\x00\x01\x02\x03'
-  else:
-    s_hand_resp['session_id'] = None
-  test_struct(LURKTLS13Payload, s_hand_resp, ctx_struct=ctx_struct)
-
-
-## TLS Server: NewTicket
-
-new_ticket = { \
-  'ticket_lifetime':5,\
-  'ticket_age_add':6,\
-  'ticket_nonce':b'\x07', \
-  'ticket':b'\x00\x01\x02\x03',\
-  'extensions':[]\
-}
-
-s_new_ticket_req = {\
-  'session_id':b'\x00\x01\x02\x03', \
-  'ticket_nbr':6,\
-  'key_request':key_req, 
-  'handshake_context':b'\xff\xff\xff\xff'\
-}
-test_struct(NewTicketRequest, s_new_ticket_req)
-
-s_new_ticket_resp = {\
-  'session_id':b'\x00\x01\x02\x03', \
-  'ticket_list': [ new_ticket,  new_ticket]
-}
-
-test_struct(NewTicketResponse, s_new_ticket_resp)
-
-ctx_struct = {'_type': 's_new_ticket', '_status' : 'request'}
-test_struct(LURKTLS13Payload, s_new_ticket_req, ctx_struct=ctx_struct)
-
-ctx_struct = {'_type': 's_new_ticket', '_status' : 'success'}
-test_struct(LURKTLS13Payload, s_new_ticket_resp, ctx_struct=ctx_struct)
-
-
-
-
-## Testing s_init_cert_verify 
-
-sig_algos = [ 'rsa_pkcs1_sha256', 
-              'rsa_pkcs1_sha384', 
-              'rsa_pkcs1_sha512', 
-              'ecdsa_secp256r1_sha256', 
-              'ecdsa_secp384r1_sha384', 
-              'ecdsa_secp521r1_sha512', 
-              'rsa_pss_rsae_sha256', 
-              'rsa_pss_rsae_sha384', 
-              'rsa_pss_rsae_sha512', 
-              'ed25519', 
-              'ed448', 
-              'rsa_pss_pss_sha256', 
-              'rsa_pss_pss_sha384', 
-              'rsa_pss_pss_sha512' ]
-
-
-
-def configure(sig_algo):
-  conf_builder = ConfBuilder()
-  conf_builder.generate_keys( sig_algo, key_format='X509' )
-  conf = Conf( conf=conf_builder.export() )
-  if sig_algo not in conf.msg( 's_init_cert_verify' )[ 'sig_algo' ]:
-    raise Exception( " conf :%s"%\
-      conf.msg( 's_init_cert_verify' )[ 'sig_algo' ] + \
-      " does not contain %s"%sig_algo) 
-  return conf
-
-
-
-
-
-def hs_list( mtype, ephemeral_mode='secret_generated' ):
+def init_cert_verify_handshake_list( ephemeral_mode:str, role='server') -> list:
+  """ returns a list of possible handshake messages """
   ## supported_signature_algorithms
   ext13 ## all signatures are supported
   ## psk_key_exchange_mode
@@ -716,74 +606,721 @@ def hs_list( mtype, ephemeral_mode='secret_generated' ):
   ext51_sh # selects x448 for ECDHE
   ext51_sh_empty ## empty key_share
 
-  ch_ext_list = [ ext13, ext45, ext49, ext10, ext51_ch ]
-  hs_client_hello[ 'data' ][ 'extensions' ] = ch_ext_list
+  hs_client_hello[ 'data' ][ 'extensions' ] = \
+    [ ext13, ext45, ext49, ext10, ext51_ch ]
   
-  sh_ext_list = [ ext49, ext10 ]
+  hs_server_hello[ 'data' ][ 'extensions' ] = [ ext49, ext10 ]
   if ephemeral_mode == 'secret_generated':
-    sh_ext_list.append( ext51_sh_empty )
+    hs_server_hello[ 'data' ][ 'extensions' ].append( ext51_sh_empty )
   else: 
-    sh_ext_list.append( ext51_sh )
+    hs_server_hello[ 'data' ][ 'extensions' ].append( ext51_sh )
 
-  hs_server_hello[ 'data' ][ 'extensions' ] = sh_ext_list
-  if mtype == 's_init_cert_verify':
-    hs = [ hs_client_hello, \
-           hs_server_hello, \
-           hs_encrypted_extensions,\
+  if role == 'server':
+    hs = [ hs_client_hello, hs_server_hello, hs_encrypted_extensions,\
            hs_certificate_request ]
-
     hs_list = [ hs, deepcopy( hs )[:-1] ]
+
+  elif role == 'server':
+    hs_list = [ hs_client_hello, hs_server_hello, hs_encrypted_extensions,\
+                hs_certificate_request, hs_certificate, hs_certificate_verify,\
+                hs_finished ]
 
   return hs_list 
 
-def req_list( mtype, sig_algo ):
-  if mtype == 's_init_cert_verify':
-    key_req = {"b":False, "e_s":False, "e_x":False, "h_c":True,\
-             "h_s":True, "a_c":True, "a_s":True, "x":False, \
-             "r":False}
-    eph = { 'shared_secret': \
-              { 'extension_type': 'ephemeral',\
-                'extension_data': \
-                  { 'ephemeral_method': 'shared_secret',\
-                    'key': shared_secret } }, 
-            'secret_generated':\
-              {  'extension_type': 'ephemeral',\
-                 'extension_data': \
-                   { 'ephemeral_method': 'secret_generated',
-                     'key': b'' } } }
-    frsh = { 'extension_type': 'freshness', 'extension_data': 'sha256'}
-    s_id = { 'extension_type': 'session_id', 'extension_data': b'\x00\x01\x02\x03' }
+def init_cert_verify_request_list( sig_algo: str ='ed25519', conf=None, last_exchange=None ):
+ 
+  if conf == None:
+    role = 'server'
+    fp = token_bytes( 4 )
+    cert_data = hs_cert[ 'data' ] 
+  else: 
+    role = conf.role()
+    fp = conf.cert_finger_print
+    cert_data = conf.hs_cert_msg[ 'data' ]
+
+  eph_gen = { 'ephemeral_method': 'secret_generated', 'key': None } # empty in request
+  eph_provided = {\
+    'ephemeral_method': 'secret_provided', 
+    'key':  { 'group' : 'secp256r1', 
+              'shared_secret' : token_bytes(32) } }
+  if role == 'server':
+    eph_list = [ eph_gen, eph_provided ]
+  elif role == 'client':
+    eph_list = [ eph_provided ]
+
+  cert_finger = { 'certificate_type' : 'finger_print', 'certificate_data' : fp }
+  cert_uncompressed = { 'certificate_type' : 'uncompressed',
+                        'certificate_data' : cert_data }
+
+  if last_exchange == None:
+    last_exchange_list = [ True, False ]
+  else:
+    last_exchange_list = [ last_exchange ]
+
+  list_req = []
+  for last_exchange in last_exchange_list:
+    if last_exchange == False:
+      session_id = token_bytes( 4 )
+    else:
+      session_id = None
+    for ephemeral in [ eph_gen, eph_provided ]:
+      for handshake in init_cert_verify_handshake_list(ephemeral[ 'ephemeral_method' ], role=role ):
+        for cert in [ cert_finger, cert_uncompressed ]:
+          init_cert_verify_req = {\
+            'tag' : { 'last_exchange' : last_exchange }, 
+            'session_id' : session_id, 
+            'freshness' : 'sha256',
+            'ephemeral' : ephemeral, 
+            'handshake' : handshake, 
+            'certificate' : cert,
+            'secret_request' : { "b":False, "e_s":False, "e_x":False, "h_c":True,\
+                                 "h_s":True, "a_c":True, "a_s":True, "x":True, "r":False },
+            'sig_algo' : sig_algo }
+          list_req.append( init_cert_verify_req )
+  return list_req
+
+def init_cert_verify_request_title( req:dict ) -> str:
+  """ returns the title associated to the request """
+  tag = req[ 'tag' ][ 'last_exchange' ]
+  eph = req[ 'ephemeral' ][ 'ephemeral_method' ]
+  cert = req[ 'certificate' ]['certificate_type'] 
+  return "last_exchange [%s] - %s - cert_type [%s]"%( tag, eph, cert )
+
+def init_cert_verify_print( payload, status, role='server' ):
+  if role == 'server':
+    _type = 's_init_cert_verify'
+  elif role == 'client':
+    _type = 'c_init_cert_verify'
+
+  if status == 'request':
+    ext_title = init_cert_verify_request_title( payload )
+  elif status == 'success':
+    ext_title = init_cert_verify_response_title( payload )
+  ctx_struct = { '_type' : _type, '_certificate_type' : 'X509',\
+                 '_status' : status }
+  test_struct( LURKTLS13Payload, payload, ctx_struct=ctx_struct, \
+               ext_title=ext_title, print_data_struct=False, print_binary=False) 
+
+
+for req in init_cert_verify_request_list():
+  ext_title = init_cert_verify_request_title( req )
+  ctx_struct = { '_type' : 's_init_cert_verify', '_certificate_type' : 'X509' }
+##  test_struct( SInitCertVerifyRequest, req, ctx_struct=ctx_struct, ext_title=ext_title )
+  init_cert_verify_print( req, 'request' )
+
+## SInitCertVerifyResponse
+
+def init_cert_verify_response_list( sig_algo: str ='ed25519', role='server'):
+
+
+  eph_gen = { 
+    'ephemeral_method': 'secret_generated', 
+    'key': { 'group' : 'secp256r1', 
+             'key_exchange' : key_exchange } }
+  eph_provided = { 'ephemeral_method': 'secret_provided', 'key': None } # empty in response
+
+  if role == 'server':
+    eph_list = [ eph_gen, eph_provided ]
+  elif role == 'client':
+    eph_list = [ eph_provided ]
+
+  list_resp = []
+  for last_exchange in [ True, False ]:
+    if last_exchange is False:
+      session_id = token_bytes( 4 )
+    else:
+      session_id = None
+    for ephemeral in eph_list :
+      list_resp.append( {\
+        'tag' : { 'last_exchange' : last_exchange }, 
+        'session_id' : session_id, 
+        'ephemeral' : ephemeral, 
+        'secret_list' : [ {'secret_type': 'h_c', 'secret_data': b'hand_client_secret' }, 
+                          {'secret_type': 'h_s', 'secret_data': b'hand_server_secret' },
+                          {'secret_type': 'a_c', 'secret_data': b'app_client_secret' },
+                          {'secret_type': 'a_s', 'secret_data': b'app_server_secret' } ],
+       'signature' : b'signature' } )
+  return list_resp
+
+def init_cert_verify_response_title( resp:dict ) -> str:
+  tag = resp[ 'tag' ][ 'last_exchange' ]
+  eph = resp[ 'ephemeral' ][ 'ephemeral_method' ]
+  return "last_exchange [%s] - %s"%( tag, eph)
+
+for resp in init_cert_verify_response_list( role='server'):
+##  ext_title = init_cert_verify_response_title( resp )
+##  print("::: resp: %s"%resp )
+##  ctx_struct = { '_type' : 's_init_cert_verify' } 
+##  test_struct( SInitCertVerifyResponse, resp,\
+##               ctx_struct=ctx_struct )
+  init_cert_verify_print( resp, 'success' )
+
+## SInitEarlySecretRequest
+
+def s_init_early_secret_handshake_list( psk_id=None ) -> list:
+  """ returns a list of possible handshake messages """
+  ## pre_shared_key
+  if psk_id == None:
+    psk_id = {'identity' : b'\x00\x00', \
+              'obfuscated_ticket_age' : b'\x00\x01\x02\x03' }
+  psk_binder = {'binder' : b'\xff\xff\xff\xff'}
+  offered_psks= { 'identities' : [psk_id, psk_id], \
+                'binders' : [psk_binder, psk_binder]}
+  ext41_ch = { 'extension_type': 'pre_shared_key', \
+               'extension_data' : offered_psks }
+  ## supported_signature_algorithms
+  ext13 ## all signatures are supported
+  ## psk_key_exchange_mode
+  ext45 ## all modes are supported
+  ##post-handshake authentication
+  ext49
+  ## supported groups
+  ext10 ## all groups are supported
+  ## key_share
+  ext51_ch # all entries are proposed
+
+  hs_client_hello[ 'data' ][ 'extensions' ] = \
+    [ ext13, ext45, ext49, ext10, ext51_ch, ext41_ch ]
   
-    req_list = []
-    for eph_mode in [ 'secret_generated', 'shared_secret' ]:
-      hs_ctx_list  = hs_list(mtype, ephemeral_mode=eph_mode )
-      lurk_ext_list = [ frsh, s_id ]
-      lurk_ext_list.append( eph[ eph_mode ] )
-      for hs_ctx in hs_ctx_list:
-        sec_req = {'key_request': key_req, \
-                   'handshake_context': hs_ctx, \
-                   'extension_list': lurk_ext_list }
-        req_list.append( {'secret_request':sec_req, \
-                          'signing_request': { 'sig_algo' : sig_algo } } )
+  return [ hs_client_hello ]
+ 
+def s_init_early_secret_request_list( psk_id=None):
+  req_list = []
+  for handshake in s_init_early_secret_handshake_list( psk_id=psk_id ):
+    req_list.append( { \
+      'session_id' : token_bytes( 4 ), 
+      'freshness' : 'sha256', 
+      'selected_identity' : 0,
+      'handshake' : [ handshake ], 
+      'secret_request' : { "b":True, "e_s":False, "e_x":True, "h_c":False,\
+                           "h_s":False, "a_c":False, "a_s":False, "x":False, \
+                           "r":False} } )
   return req_list
 
-def test_session( mtype ):
-  ctx_req = {'_type': mtype, '_status' : 'request'}
-  ctx_resp = {'_type': mtype, '_status' : 'success'}
-  for sig_algo in sig_algos: 
-    conf = configure( sig_algo ) 
-    session = Session( conf ) 
-    for req in req_list( mtype, sig_algo ):
-      test_struct(LURKTLS13Payload, req, ctx_struct=ctx_req )
-      resp = session.serve( req, mtype, 'request')
-      print("::: resp: %s"%resp )
-      test_struct(SigningResponse, resp[ 'signing_response' ] )
-      for s in resp[ 'secret_response' ][ 'secret_list' ]:
-        test_struct(Secret, s)
-#      ctx_struct = {'_status' : 'success'}
-      for e in resp[ 'secret_response' ][ 'extension_list' ]:
-        test_struct(LURK13Extension, e, ctx_struct=ctx_resp)
-      test_struct(LURKTLS13Payload, resp, ctx_struct=ctx_resp )
+def s_init_early_secret_print( payload, status ):
+  ctx_struct = { '_type' : 's_init_early_secret', '_status' : status } 
+  test_struct( LURKTLS13Payload, payload, ctx_struct=ctx_struct,\
+               print_data_struct=False, print_binary=False) 
+  
+
+for req in s_init_early_secret_request_list( ):
+  ctx_struct = { '_type' : 's_init_early_secret' } 
+  test_struct( SInitEarlySecretRequest, req, ctx_struct=ctx_struct ) 
+  s_init_early_secret_print( req, 'request' )
+
+
+
+## SInitEarlySecretResponse
+
+s_init_early_secret_resp = { \
+  'session_id' : token_bytes( 4 ), 
+  'secret_list' : [ {'secret_type': 'b', 'secret_data': b'binder_key' }, 
+                    {'secret_type': 'e_s', 'secret_data': b'early_secret' },
+                    {'secret_type': 'e_x', 'secret_data': b'early_exporter' } ] }
+ctx_struct = { '_type' : 's_init_early_secret' } 
+test_struct( SInitEarlySecretResponse, s_init_early_secret_resp,\
+             ctx_struct=ctx_struct )
+
+s_init_early_secret_print( s_init_early_secret_resp, 'success' )
+
+#### SHandAndAppRequest
+
+def s_hand_and_app_handshake_list( ephemeral_mode ) -> list:
+##      'handshake' : [ hs_server_hello, hs_encrypted_extensions, hs_certificate_request ], 
+  """ returns a list of possible handshake messages """
+  ## pre_shared_key
+  ext41_sh =  { 'extension_type': 'pre_shared_key', \
+                'extension_data' : 0 }
+  ## psk_key_exchange_mode
+  ext45 ## all modes are supported
+  ##post-handshake authentication
+  ext49
+  ## supported groups
+  ext10 ## all groups are supported
+  ## key_share
+  ext51_sh # selects x448 for ECDHE
+  ext51_sh_empty ## empty key_share
+
+  hs_server_hello[ 'data' ][ 'extensions' ] = [ ext45, ext49, ext10, ext41_sh ]
+  if ephemeral_mode == 'secret_generated':
+    hs_server_hello[ 'data' ][ 'extensions' ].append( ext51_sh_empty )
+  else: 
+    hs_server_hello[ 'data' ][ 'extensions' ].append( ext51_sh )
+
+  hs = [ hs_server_hello, hs_encrypted_extensions,\
+         hs_certificate_request ]
+  return [ hs, deepcopy( hs )[:-1] ]
+
+
+def s_hand_and_app_secret_request_list( ):
+  eph_gen = { 'ephemeral_method': 'secret_generated', 'key': None } # empty in request
+  eph_provided = {\
+    'ephemeral_method': 'secret_provided', 
+    'key':  { 'group' : 'secp256r1', 
+              'shared_secret' : token_bytes(32) } }
+  eph_no = { 'ephemeral_method': 'no_secret', 'key': None } # empty in request
+
+  req_list = []
+  for last_exchange in [ True, False ]:
+    for ephemeral in [ eph_no, eph_provided, eph_gen ]:
+      for handshake in s_hand_and_app_handshake_list( ephemeral[ 'ephemeral_method' ] ):
+        req_list.append( {\
+          'tag' : { 'last_exchange' : last_exchange }, 
+          'session_id' : token_bytes( 4 ), 
+          'ephemeral' : ephemeral, 
+          'handshake' : handshake, 
+          'secret_request' : { "b":False, "e_s":False, "e_x":False, "h_c":True,\
+                               "h_s":True, "a_c":True, "a_s":True, "x":True, \
+                               "r":False } } )
+  return req_list
+
+def s_hand_and_app_secret_title( req ):
+  tag = resp[ 'tag' ][ 'last_exchange' ]
+  eph = resp[ 'ephemeral' ][ 'ephemeral_method' ]
+  return "last_exchange [%s] - %s"%( tag, eph )
+
+
+def s_hand_and_app_secret_print( payload, status ):
+  ctx_struct = { '_type' : 's_hand_and_app_secret', '_status' : status } 
+  ext_title = s_hand_and_app_secret_title( payload ) 
+  test_struct( LURKTLS13Payload, payload, ctx_struct=ctx_struct, \
+               ext_title=ext_title, print_data_struct=False, print_binary=False) 
+
+for req in s_hand_and_app_secret_request_list():
+  ext_title = s_hand_and_app_secret_title( req )
+  ctx_struct = { '_type' : 's_hand_and_app_secret', '_status' : 'request' }
+  test_struct( SHandAndAppRequest, req, ctx_struct=ctx_struct, ext_title=ext_title )
+  s_hand_and_app_secret_print( req, 'request' )
       
-test_session( 's_init_cert_verify' )
+
+## SHandAndAppResponse
+
+for last_exchange in [ True, False ]:
+  for ephemeral in [ eph_no, eph_gen ]:
+    s_hand_and_app_resp = {\
+      'tag' : { 'last_exchange' : last_exchange }, 
+      'session_id' : token_bytes (4 ), 
+      'ephemeral' : ephemeral, 
+      'secret_list' : [ {'secret_type': 'h_c', 'secret_data': b'hand_client_secret' }, 
+                        {'secret_type': 'h_s', 'secret_data': b'hand_server_secret' },
+                        {'secret_type': 'a_c', 'secret_data': b'app_client_secret' },
+                        {'secret_type': 'a_s', 'secret_data': b'app_server_secret' } ] }
+    ctx_struct = { '_type' : 's_hand_and_app_secret', '_status' : 'request' } 
+    test_struct( SHandAndAppResponse, s_hand_and_app_resp,\
+                 ctx_struct=ctx_struct )
+    s_hand_and_app_secret_print( s_hand_and_app_resp, 'success' )
+
+## SNewTicketRequest
+
+def s_new_ticket_handshake_list() -> list:
+  """ returns a list of possible handshake messages """
+  return [ [ hs_finished ],\
+           [ hs_certificate_verify, hs_finished ] ]
+
+
+def s_new_ticket_request_list( ):
+  list_req = []
+  for last_exchange in [ True, False ]:
+    for cert in [ cert_empty, cert_finger, cert_uncompressed ]:
+      for handshake in s_new_ticket_handshake_list():
+        list_req.append( {\
+          'tag' : { 'last_exchange' : last_exchange }, 
+          'session_id'   : token_bytes( 4 ), 
+          'handshake' :  handshake,
+          'certificate'   : cert,
+          'ticket_nbr'   : 2,
+          'secret_request' : { "b":False, "e_s":False, "e_x":False, "h_c":False,\
+                                 "h_s":False, "a_c":False, "a_s":False, "x":False, \
+                                 "r":True } } )
+  return list_req
+
+def s_new_ticket_request_title( req:dict ) -> str:
+  """ returns the title associated to the request """
+  tag = req[ 'tag' ][ 'last_exchange' ]
+  cert = req[ 'certificate' ]['certificate_type'] 
+  return "last_exchange [%s] - cert_type [%s]"%( tag, cert )
+
+def s_new_ticket_print( payload, status ):
+  if status == 'request':
+    ctx_struct = { '_type' : 's_new_ticket', '_status' : 'request', \
+                   '_certificate_type' : 'X509', '_cipher' : 'TLS_AES_128_GCM_SHA256' } 
+    ext_title = s_new_ticket_request_title( payload )
+    test_struct( LURKTLS13Payload, payload, ctx_struct=ctx_struct,\
+                 ext_title=ext_title, print_data_struct=False, print_binary=False) 
+
+  elif status == 'success' :
+    ctx_struct = { '_type' : 's_new_ticket', '_status' : 'success' } 
+    ext_title = s_new_ticket_response_title( payload )
+    test_struct( LURKTLS13Payload, payload, ctx_struct=ctx_struct, \
+                 ext_title=ext_title, print_data_struct=False, print_binary=False) 
+
+for req in s_new_ticket_request_list( ):
+  ext_title = s_new_ticket_request_title( req )
+  ctx_struct = { '_type' : 's_new_ticket', '_certificate_type' : 'X509', \
+                 '_cipher' : 'TLS_AES_128_GCM_SHA256' }
+  test_struct( SNewTicketRequest, req, ctx_struct=ctx_struct )
+  s_new_ticket_print( req, 'request' )
+  
+
+## SNewTicketResponse
+new_ticket = { \
+  'ticket_lifetime':5,\
+  'ticket_age_add':6,\
+  'ticket_nonce':b'\x07', \
+  'ticket':b'\x00\x01\x02\x03',\
+  'extensions':[]\
+}
+
+def s_new_ticket_response_title( req:dict ) -> str:
+  """ returns the title associated to the request """
+  tag = req[ 'tag' ][ 'last_exchange' ]
+  return "last_exchange [%s]"%tag
+
+for last_exchange in [ True, False ]:
+  s_new_ticket_resp = {
+    'tag' : { 'last_exchange' : last_exchange }, 
+    'session_id' : token_bytes( 4 ), 
+    'secret_list' : [ {'secret_type': 'h_c', 'secret_data': b'hand_client_secret' }, 
+                      {'secret_type': 'h_s', 'secret_data': b'hand_server_secret' },
+                      {'secret_type': 'a_c', 'secret_data': b'app_client_secret' },
+                      {'secret_type': 'a_s', 'secret_data': b'app_server_secret' } ],
+    'ticket_list' : [ new_ticket, new_ticket ]}
+  ctx_struct = { '_type' : 's_new_ticket' } 
+  test_struct( SNewTicketResponse, s_new_ticket_resp,\
+               ctx_struct=ctx_struct )
+  s_new_ticket_print( s_new_ticket_resp, 'success' )
+
+
+print( "#######" )
+print(" #######" )
+print( "### LURK Extension: Testing TLS server exchanges" )
+print( "#######" )
+print( "#######" )
+
+
+## Testing s_init_cert_verify 
+
+sig_algo_list = [\
+  'rsa_pkcs1_sha256', 
+  'rsa_pkcs1_sha384', 
+  'rsa_pkcs1_sha512', 
+  'ecdsa_secp256r1_sha256', 
+  'ecdsa_secp384r1_sha384', 
+  'ecdsa_secp521r1_sha512', 
+  'rsa_pss_rsae_sha256', 
+  'rsa_pss_rsae_sha384', 
+  'rsa_pss_rsae_sha512', 
+  'ed25519', 
+  'ed448', 
+  'rsa_pss_pss_sha256', 
+  'rsa_pss_pss_sha384', 
+  'rsa_pss_pss_sha512' ]
+
+
+
+def configure(sig_algo:str, role:str ='server') -> dict:
+  """ return the configuration associated to sig_algo """
+  conf_builder = ConfBuilder()
+  conf_builder.generate_keys( sig_algo, key_format='X509' )
+  conf = Conf( conf=conf_builder.export() )
+  conf.conf[ 'role' ] = role
+  if sig_algo not in conf.msg( 'keys' )[ 'sig_algo' ]:
+    raise Exception( " conf :%s"%\
+      conf.msg( 'keys' )[ 'sig_algo' ] + \
+      " does not contain %s"%sig_algo) 
+  return conf
+
+
+def s_init_cert_verify_session():
+  """tests init_cert_verify_session exchange """
+  for sig_algo in sig_algo_list: 
+    conf = configure( sig_algo ) 
+    for req in init_cert_verify_request_list( sig_algo, conf=conf ):
+      session = SSession( conf ) 
+      init_cert_verify_print( req, 'request', role='server' )
+      resp = session.serve( req, 's_init_cert_verify', 'request')
+      init_cert_verify_print( resp, 'success', role='server' )
+      
+if LURK_SERVER_PAYLOAD_EXCHANGE == True:
+  s_init_cert_verify_session()
+
+def s_new_ticket_session():
+  """ test ticket_session generation and exchange 
+
+    tickets are built after the init_cert_verify exchange
+  """
+  ctx_req = { '_type' : 's_new_ticket', '_status' : 'request', \
+              '_certificate_type' : 'X509', '_cipher' : 'TLS_AES_128_GCM_SHA256' } 
+  ctx_resp = { '_type' : 's_new_ticket', '_status' : 'success' } 
+  sig_algo = 'ed25519'
+  conf = configure( sig_algo ) 
+  for req in s_new_ticket_request_list():
+    ## initializing the session with a init_cert_verify
+    s_init_cert_verify_req = init_cert_verify_request_list( sig_algo, conf=conf )[0]
+    s_init_cert_verify_req[ 'tag' ]['last_exchange' ] = False
+    session = SSession( conf )
+    s_init_cert_verify_req_resp = session.serve( s_init_cert_verify_req, 's_init_cert_verify', 'request')
+    req[ 'session_id' ] = s_init_cert_verify_req_resp[ 'session_id' ]
+    ext_title = s_new_ticket_request_title( req )
+    ctx_req = { '_type' : 's_new_ticket', '_status' : 'request', \
+                '_certificate_type' : 'X509', '_cipher' : 'TLS_AES_128_GCM_SHA256' } 
+    test_struct( LURKTLS13Payload, req, ctx_struct=ctx_req, ext_title=ext_title ) 
+    resp = session.serve( req, 's_new_ticket', 'request')
+    test_struct( LURKTLS13Payload, req, ctx_struct=ctx_req, ext_title=ext_title ) 
+      
+    
+if LURK_SERVER_PAYLOAD_EXCHANGE == True:
+  s_new_ticket_session()
+
+def session_resumption( conf, s_init_cert_verify_req, \
+                        s_new_ticket_session_req, \
+                        s_init_early_secret_req, \
+                        s_hand_and_app_secret_req, \
+                        s_new_ticket_session_req2   ):
+  """ test session resumption 
+
+    a first session is performed to create the new session tickets.
+    session resumption is then performed using these new session tickets.
+   
+    necessary requests are provided as templates.
+  """
+
+  ## s_init_cert_verify_req 
+  s_init_cert_verify_req[ 'tag' ]['last_exchange' ] = False
+  init_cert_verify_print( s_init_cert_verify_req, 'request', role='server' )
+  session = SSession( conf )
+  s_init_cert_verify_resp = session.serve( s_init_cert_verify_req, 's_init_cert_verify', 'request')
+  init_cert_verify_print( s_init_cert_verify_resp, 'success', role='server' )
+
+  ## s_new_ticket_session
+  s_new_ticket_session_req[ 'session_id' ] = s_init_cert_verify_resp[ 'session_id' ]
+##  s_new_ticket_print( s_new_ticket_session_req, 'request' )
+
+  s_new_ticket_session_resp = session.serve( s_new_ticket_session_req, 's_new_ticket', 'request')
+  s_new_ticket_print( s_new_ticket_session_resp, 'success' )
+
+  ## s_init_early_secret_req 
+  session = SSession( conf )
+  psk_id = { 'identity' : s_new_ticket_session_resp[ 'ticket_list' ][ 0 ]['ticket' ], \
+             'obfuscated_ticket_age' : token_bytes( 4) } 
+  psk_binder = {'binder' : b'\xff\xff\xff\xff'}
+  offered_psks= { 'identities' : [psk_id, psk_id], \
+                  'binders' : [psk_binder, psk_binder]}
+  client_hello_exts = s_init_early_secret_req[ 'handshake' ][ 0 ][ 'data' ][ 'extensions' ] 
+  i = get_struct_index( client_hello_exts, 'extension_type', 'pre_shared_key' )
+  s_init_early_secret_req[ 'handshake' ][ 0 ][ 'data' ][ 'extensions' ][ i ][ 'extension_data' ] = offered_psks 
+  s_init_early_secret_print( s_init_early_secret_req, 'request' )
+  s_init_early_secret_resp = session.serve( s_init_early_secret_req,\
+                                            's_init_early_secret', 'request')
+  s_init_early_secret_print( s_init_early_secret_resp, 'success' )
+
+  ## s_hand_and_app_secret
+  s_hand_and_app_secret_req[ 'session_id' ] = s_init_early_secret_resp[ 'session_id' ]
+  s_hand_and_app_secret_print( s_hand_and_app_secret_req, 'request' )
+  s_hand_and_app_secret_resp =  session.serve( s_hand_and_app_secret_req,\
+                                               's_hand_and_app_secret', 'request')
+  s_hand_and_app_secret_print( s_hand_and_app_secret_resp, 'success' )
+
+##if LURK_SERVER_PAYLOAD_EXCHANGE == True:
+## testing a single session resumption
+## sig_algo = 'ed25519'
+## conf = configure( sig_algo )
+## s_init_cert_verify_req = init_cert_verify_request_list( sig_algo, conf=conf, last_exchange=False )[0]
+## s_new_ticket_session_req = s_new_ticket_request_list( )[ 0 ] 
+## s_init_early_secret_req = s_init_early_secret_request_list()[ 0 ]
+## s_hand_and_app_secret_req = s_hand_and_app_secret_request_list( )[0]
+## s_new_ticket_session_req2 = s_new_ticket_request_list( )[ 0 ] 
+## session_resumption( conf,  s_init_cert_verify_req, \
+##                    s_new_ticket_session_req, \
+##                    s_init_early_secret_req, \
+##                    s_hand_and_app_secret_req, \
+##                    s_new_ticket_session_req2   )
+##
+
+## sig_algo_list = [ 'rsa_pkcs1_sha256' ]
+
+if LURK_SERVER_PAYLOAD_SESSION_RESUMPTION_LOOP == True:
+  for sig_algo in sig_algo_list:
+    conf = configure( sig_algo=sig_algo, role='server' )
+    for s_init_cert_verify_req in \
+      init_cert_verify_request_list( sig_algo, conf=conf, last_exchange=False ):
+      for s_new_ticket_session_req in  s_new_ticket_request_list():
+        for s_init_early_secret_req in s_init_early_secret_request_list():
+          for s_hand_and_app_secret_req in s_hand_and_app_secret_request_list():
+            for s_new_ticket_session_req2 in s_new_ticket_request_list():
+              session_resumption( conf, s_init_cert_verify_req, \
+                                  s_new_ticket_session_req, \
+                                  s_init_early_secret_req, \
+                                  s_hand_and_app_secret_req, \
+                                  s_new_ticket_session_req2   )
+
+
+
+### Testing LURK messages including the header
+
+print( "#######" )
+print(" #######" )
+print( "### LURK Server: Testing TLS server exchanges" )
+print( "#######" )
+print( "#######" )
+
+
+def lurk_client_new_session_ticket( server, s_new_ticket_session_req ):
+  """ LURK new_session_ticket exchange with server """
+
+  lurk_s_new_ticket_session_req = \
+  { 'header' : { 'designation' : 'tls13',
+                 'version' : 'v1',
+                 'type' : 's_new_ticket', 
+                 'status' : 'request', 
+                 'id' : token_bytes( 8 ) },
+    'payload' : s_new_ticket_session_req }
+  test_struct( LURKMessage, lurk_s_new_ticket_session_req )
+  resp = server.serve( LURKMessage.build( lurk_s_new_ticket_session_req )) 
+  lurk_s_new_ticket_session_resp = LURKMessage.parse( resp )
+  test_struct ( LURKMessage, lurk_s_new_ticket_session_resp)
+  try:
+    return lurk_s_new_ticket_session_resp[ 'payload' ][ 'ticket_list' ]
+  except KeyError:
+    return None
+
+def lurk_client_ecdhe( server, s_init_cert_verify_req:dict, 
+                       s_new_ticket_session_req:dict=None ):
+
+  ## s_init_cert_verify_req 
+  s_init_cert_verify_req[ 'tag' ]['last_exchange' ] = False
+  lurk_s_init_cert_verify_req = \
+  { 'header' : { 'designation' : 'tls13',
+                 'version' : 'v1',
+                 'type' : 's_init_cert_verify', 
+                 'status' : 'request', 
+                 'id' : token_bytes( 8 ) },
+    'payload' : s_init_cert_verify_req }
+  test_struct ( LURKMessage, lurk_s_init_cert_verify_req )
+  
+  resp = server.serve( LURKMessage.build( lurk_s_init_cert_verify_req ))
+  lurk_s_init_cert_verify_resp = LURKMessage.parse( resp )
+  test_struct ( LURKMessage, lurk_s_init_cert_verify_resp )
+
+  if s_new_ticket_session_req != None:
+    s_new_ticket_session_req[ 'session_id' ] = lurk_s_init_cert_verify_resp[ 'payload' ][ 'session_id' ]
+    return lurk_client_new_session_ticket( server, s_new_ticket_session_req )
+
+def lurk_client_session_resumption( server, identity, \
+      s_init_early_secret_req:dict, s_hand_and_app_secret_req:dict,\
+      s_new_ticket_session_req:dict=None ):
+  ## updating the client_hello with psk identity structure 
+  psk_identity = { 'identity' : identity, \
+                   'obfuscated_ticket_age' : token_bytes( 4) } 
+  psk_binder = {'binder' : b'\xff\xff\xff\xff'}
+  offered_psks= { 'identities' : [psk_identity, psk_identity], \
+                  'binders' : [psk_binder, psk_binder]}
+  client_hello_exts = s_init_early_secret_req[ 'handshake' ][ 0 ][ 'data' ][ 'extensions' ] 
+  i = get_struct_index( client_hello_exts, 'extension_type', 'pre_shared_key' )
+  s_init_early_secret_req[ 'handshake' ][ 0 ][ 'data' ][ 'extensions' ][ i ][ 'extension_data' ] = offered_psks 
+ 
+  lurk_s_init_early_secret_req = \
+  { 'header' : { 'designation' : 'tls13',
+                 'version' : 'v1',
+                 'type' : 's_init_early_secret', 
+                 'status' : 'request', 
+                 'id' : token_bytes( 8 ) },
+    'payload' : s_init_early_secret_req }
+  test_struct ( LURKMessage, lurk_s_init_early_secret_req )
+  resp = server.serve( LURKMessage.build( lurk_s_init_early_secret_req ))
+  lurk_s_init_early_secret_resp = LURKMessage.parse( resp )
+  test_struct ( LURKMessage, lurk_s_init_early_secret_resp )
+
+  session_id = lurk_s_init_early_secret_resp[ 'payload' ][ 'session_id' ]
+
+  s_hand_and_app_secret_req[ 'session_id' ] = session_id
+ 
+  lurk_s_hand_and_app_secret_req = \
+  { 'header' : { 'designation' : 'tls13',
+                 'version' : 'v1',
+                 'type' : 's_hand_and_app_secret', 
+                 'status' : 'request', 
+                 'id' : token_bytes( 8 ) },
+    'payload' : s_hand_and_app_secret_req }
+  test_struct ( LURKMessage, lurk_s_hand_and_app_secret_req )
+  resp = server.serve( LURKMessage.build( lurk_s_hand_and_app_secret_req ))
+  lurk_s_hand_and_app_secret_resp = LURKMessage.parse( resp )
+  test_struct ( LURKMessage, lurk_s_hand_and_app_secret_resp )
+
+  if s_new_ticket_session_req != None:
+    s_new_ticket_session_req[ 'session_id' ] = session_id
+    return lurk_client_new_session_ticket( server, s_new_ticket_session_req )
+
+if LURK_SERVER_SESSION_RESUMPTION == True:
+  sig_algo = 'ed25519'
+  conf = configure(sig_algo=sig_algo, role='server')
+  server = LurkServer( conf=conf )
+  s_init_cert_verify_req = init_cert_verify_request_list( sig_algo, conf=conf, last_exchange=False )[0]
+  s_new_ticket_session_req = s_new_ticket_request_list( )[ 0 ] 
+  s_init_early_secret_req = s_init_early_secret_request_list()[ 0 ]
+  s_hand_and_app_secret_req = s_hand_and_app_secret_request_list( )[0]
+  s_new_ticket_session_req2 = s_new_ticket_request_list( )[ 0 ] 
+  
+  ticket_list = lurk_client_ecdhe( server, s_init_cert_verify_req, s_new_ticket_session_req)
+  identity = ticket_list[ 0 ][ 'ticket' ]
+  lurk_client_session_resumption( server, identity, s_init_early_secret_req, s_hand_and_app_secret_req, s_new_ticket_session_req2 )
+
+if LURK_SERVER_SESSION_RESUMPTION_LOOP == True:
+
+  for sig_algo in sig_algo_list:
+    conf = configure( sig_algo=sig_algo, role='server' )
+    server = LurkServer( conf=conf )
+    for s_init_cert_verify_req in \
+      init_cert_verify_request_list( sig_algo, conf=conf, last_exchange=False ):
+      for s_new_ticket_session_req in  s_new_ticket_request_list():
+        for s_init_early_secret_req in s_init_early_secret_request_list():
+          for s_hand_and_app_secret_req in s_hand_and_app_secret_request_list():
+            for s_new_ticket_session_req2 in s_new_ticket_request_list():
+              ticket_list = lurk_client_ecdhe( server, s_init_cert_verify_req, s_new_ticket_session_req)
+              identity = ticket_list[ 0 ][ 'ticket' ]
+              lurk_client_session_resumption( server, identity, s_init_early_secret_req, s_hand_and_app_secret_req, s_new_ticket_session_req2 )
+              
+
+print( "EOF" )
+
+
+## Testing messages on the TLS Client
+
+## CInitCertVerifyRequest
+conf = configure('ed25519', role='client')
+for req in c_init_cert_verify_request_list( conf=conf):
+  ext_title = init_cert_verify_request_title( req )
+  ctx_struct = { '_type' : 'c_init_cert_verify', '_certificate_type' : 'X509' }
+
+## CInitCertVerifyResponse
+for resp in init_cert_verify_response_list( role='server'):
+##  ext_title = init_cert_verify_response_title( resp )
+##  print("::: resp: %s"%resp )
+##  ctx_struct = { '_type' : 's_init_cert_verify' } 
+##  test_struct( SInitCertVerifyResponse, resp,\
+##               ctx_struct=ctx_struct )
+  init_cert_verify_print( resp, 'success', role='server' )
+
+
+
+
+
+
+print( "#######" )
+print(" #######" )
+print( "### Testing TLS Client exchanges" )
+print( "#######" )
+print( "#######" )
+
+
+def c_init_cert_verify_session():
+  for sig_algo in sig_algo_list: 
+    conf = configure( sig_algo ) 
+    for req in s_init_cert_verify_request_list( sig_algo, conf=conf ):
+      session = CSession( conf ) 
+      init_cert_verify_print( req, 'request', role='client' )
+      resp = session.serve( req, 'c_init_cert_verify', 'request')
+      init_cert_verify_print( resp, 'success', role='client' )
+      
+
 

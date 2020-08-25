@@ -23,9 +23,12 @@ import binascii
 import pkg_resources
 
 from pylurk.core.conf import default_conf
-from pylurk.core.lurk_struct import LURKHeader, LURKErrorPayload
+from pylurk.core.lurk_struct import LURKHeader, LURKMessage #, LURKErrorPayload
+from pylurk.extensions.lurk_lurk_struct import ErrorResponse
+from pylurk.extensions.tls13 import TLS13SServer
 
-from Cryptodome.Hash import SHA256
+#from Cryptodome.Hash import SHA256
+from cryptography.hazmat.primitives.hashes import SHA256
 #from os.path import join
 
 HEADER_LEN = 16
@@ -880,53 +883,59 @@ class LurkMessage(Payload):
 
 
 class LurkServer():
-    """ Basic Lurk Server
+  """ Basic Lurk Server
 
-    This server takes bytes as input and returns bytes. It does not
-    provides any transport such as UDP, TCP. These transport layers are
-    left to dedicated servers.
+  This server takes bytes as input and returns bytes. It does not
+  provides any transport such as UDP, TCP. These transport layers are
+  left to dedicated servers.
+  """
+  def __init__(self, conf=deepcopy(default_conf)):
+    """ Initiates the Lurk Server
+    
+    Args:
+        conf (dict): the configuration of the server. Default value
+            is default_conf.
     """
-    def __init__(self, conf=deepcopy(default_conf)):
-        """ Initiates the Lurk Server
-        
-        Args:
-            conf (dict): the configuration of teh server. Default value
-                is default_conf.
-        """
-        self.init_conf(conf)
-        self.conf = LurkConf(conf)
-        self.conf.set_role('server')
-        self.message = LurkMessage(conf=self.conf.conf)
+    self.conf = conf
+    supported_ext = self.conf.supported_ext()
+    if 'tls13' in supported_ext:
+      if conf.role() == 'server':
+        self.tls13 = TLS13SServer( self.conf )
+      else:
+        self.tls13 = TLS13CServer( self.conf )
+#    if 'tls12' in supported_ext:
+#        tls12 = TLS12SServer( self.conf )
 
-    def init_conf(self, conf):
-        """ Provides minor changes to conf so the default conf can be used
-
-        Args:
-            conf (dict): the dictionary representing the configuration
-                arguments
-
-        Returns:
-            conf (dict): the updated conf dictionary
-        """
-        conf['role'] = 'server'
-        return conf
-
-
-    def byte_serve(self, pkt_bytes):
-        """ read the HEADER_LEN bytes of pkt_bytes. If an error occurs, it
-        associated to the errors encountered by reading the payload part.
-        """
-        response_bytes = b''
-        while len(pkt_bytes) >= HEADER_LEN:
-            try:
-                request = self.message.parse(pkt_bytes)
-                response = self.message.serve(request)
-                response_bytes += self.message.build(**response)
-                pkt_bytes = pkt_bytes[request['length'] :]
-            except:
-                ## stop when an error is encountered
-                return response_bytes
-        return response_bytes
+  def serve(self, pkt_bytes) -> bytes:
+    """ read the HEADER_LEN bytes of pkt_bytes. If an error occurs, it
+    associated to the errors encountered by reading the payload part.
+    """
+    resp = b''
+    print( "::: serve input_bytes (%s) %s"%( len( pkt_bytes ), pkt_bytes ) )
+    while len( pkt_bytes ) >= HEADER_LEN:
+      try:
+        msg_len = HEADER_LEN + \
+                  int.from_bytes( pkt_bytes[: HEADER_LEN ][-4:], byteorder='big')  
+        print( "::: serve l(pkt_bytes) : %s < %s"%( len( pkt_bytes ), msg_len ) )
+        if len( pkt_bytes ) < msg_len :
+          print( "serve : going out of the loop"  )
+          break
+        req = LURKMessage.parse( pkt_bytes[ : msg_len ] )
+        print( "::: serve req %s"%req )
+        pkt_bytes = pkt_bytes[ msg_len : ]
+        if req[ 'header' ][ 'designation' ] == 'tls12' and\
+           req[ 'header'][ 'version' ] == 'v1' and\
+           req[ 'header' ][ 'status' ] == 'request':
+           pass
+#          resp += LURKMessage.build( tls12.serve( req ) )
+        elif req[ 'header' ][ 'designation' ] == 'tls13' and\
+           req[ 'header'][ 'version' ] == 'v1' and\
+           req[ 'header' ][ 'status' ] == 'request':
+          resp += LURKMessage.build( self.tls13.serve( req ) )
+      except:
+          ## stop when an error is encountered
+          return resp
+    return resp
 
 
 

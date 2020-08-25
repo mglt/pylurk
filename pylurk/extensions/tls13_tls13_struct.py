@@ -2,7 +2,7 @@ from construct.core import *
 from construct.lib import *
 from construct.debug import *
 
-""" TLS 1.3 related strcutres """
+""" TLS 1.3 related structures """
 
 ## Extensions
 
@@ -232,7 +232,12 @@ Extension = Struct(
     {
       'supported_groups' : NamedGroupList,
       'signature_algorithms' : SignatureSchemeList, 
-      'pre_shared_key' : PskIdentity, 
+      'pre_shared_key' : Switch(this._._msg_type,
+         {
+           'client_hello' : OfferedPsks, 
+           'server_hello' : BytesInteger( 2 ) 
+         }
+        ),
       'post_handshake_auth' : PostHandshakeAuth,
       'psk_key_exchange_modes' : PskKeyExchangeModes, 
       'key_share': Switch(this._._msg_type, 
@@ -307,11 +312,8 @@ CertificateType = Enum( BytesInteger(1),
 )
 
 CertificateEntry = Struct(
+   
    '_certificate_type' / Computed(this._._certificate_type),
-   Probe(this._certificate_type),
-   Probe(this._._certificate_type),
-   Probe(this._._._certificate_type),
-##   'cert' / Switch( this._._.certificate_type, {
    'cert' / Switch( this._certificate_type, {
     'RawPublicKey': Prefixed( BytesInteger(3), GreedyBytes),
     'X509': Prefixed(BytesInteger(3), GreedyBytes)
@@ -345,16 +347,30 @@ CertificateVerify = Struct(
 
 Finished = Struct(
   '_name' / Computed('Finished'),
-  '_cipher' / Computed(this._._cipher),
-  'verify_data' / Switch(this._cipher,  
-    { 'TLS_AES_128_GCM_SHA256' : Bytes(32),
-      'TLS_AES_256_GCM_SHA384' : Bytes(48),
-      'TLS_CHACHA20_POLY1305_SHA256' : Bytes(32),
-      'TLS_AES_128_CCM_SHA256' : Bytes(32),
-      'TLS_AES_128_CCM_8_SHA256' : Bytes(32)
-    }
-  )
+##  '_cipher' / Computed(this._._cipher),
+##  '_verify_data_length' / Switch(this._cipher,  
+##    { 'TLS_AES_128_GCM_SHA256' : Const(32, Int8ul),
+##      'TLS_AES_256_GCM_SHA384' : Const(48, Int8ul),
+##      'TLS_CHACHA20_POLY1305_SHA256' : Const(32, Int8ul),
+##      'TLS_AES_128_CCM_SHA256' : Const(32, Int8ul),
+##      'TLS_AES_128_CCM_8_SHA256' : Const(32, Int8ul)
+##    }, default=Rebuild( Byte, len_( this.verify_data ) ) ),
+  'verify_data' / Select( Bytes( 32 ), Bytes( 48 ) )
+#  'verify_data' / Bytes( this._verify_data_length )  
 )
+
+##Finished = Struct(
+##  '_name' / Computed('Finished'),
+##  '_cipher' / Computed(this._._cipher),
+##  'verify_data' / Switch(this._cipher,  
+##    { 'TLS_AES_128_GCM_SHA256' : Bytes(32),
+##      'TLS_AES_256_GCM_SHA384' : Bytes(48),
+##      'TLS_CHACHA20_POLY1305_SHA256' : Bytes(32),
+##      'TLS_AES_128_CCM_SHA256' : Bytes(32),
+##      'TLS_AES_128_CCM_8_SHA256' : Bytes(32)
+##    }
+##  )
+##)
 
 ## KeyUpdate
 KeyUpdateRequest = Enum( BytesInteger(1), 
@@ -389,7 +405,8 @@ Handshake = Struct(
   '_name' / Computed('Handshake'),
   'msg_type' / HandshakeType,
   '_certificate_type' / If( this.msg_type == 'certificate', Computed(this._._certificate_type)),   
-  '_cipher' / If( this.msg_type == 'finished', Computed(this._._cipher)),   
+##  '_certificate_type' / If( this.msg_type == 'certificate', Computed('X509') ),   
+##  '_cipher' / If( this.msg_type == 'finished', Computed(this._._cipher)),   
   'data' / Prefixed( BytesInteger(3), Switch(this.msg_type,
     { 'client_hello' : ClientHello,
       'server_hello' : ServerHello,
@@ -406,10 +423,21 @@ Handshake = Struct(
 )
 
 ## Designation of specific handshake messages
+## These structures have been designed to designate Sequences. 
+## As Sequences are nesting structures and initializing the 
+## context in the Sequence has not been performed, the parameters
+## associated to the context are read one level above. 
+## Unless there is such need, it is recommended to use the Handshake 
+## and other associated message specific structures
 
 HSClientHello = Struct( 
   'msg_type' / Const('client_hello', HandshakeType),
   'data' / ClientHello
+)
+
+HSPartialClientHello = Struct( 
+  'msg_type' / Const('client_hello', HandshakeType),
+  'data' / GreedyBytes
 )
 
 HSServerHello = Struct(
@@ -428,16 +456,17 @@ HSCertificateRequest = Struct(
 )
 
 HSCertificate = Struct( 
+  '_certificate_type' / Computed(this._._._certificate_type),
   'msg_type' / Const('certificate', HandshakeType), 
   'data' / Certificate
 )
 
-HSCertificateVerify = Struct( 
+HSCertificateVerify = Struct(
   'msg_type' / Const('certificate_verify', HandshakeType), 
   'data' / CertificateVerify
 )
 
-HSFinished = Struct( 
+HSFinished = Struct(
   'msg_type' / Const('finished', HandshakeType), 
   'data' / Finished 
 )
@@ -445,4 +474,28 @@ HSFinished = Struct(
 HSEndOfEarlyData = Struct( 
   'msg_type' / Const('end_of_early_data', HandshakeType),
   'data' / EndOfEarlyData
+)
+
+
+#### Encrypted messages
+ContentType = Enum( BytesInteger(1), 
+  invalid = 0,
+  change_cipher_spec = 20, 
+  alert = 21,
+  handshake = 22, 
+  application_data = 23
+)
+
+TLSCiphertext = Struct(
+  'opaque_type' / Const( ContentType.build( 'application_data' )), 
+  'legacy_record_version' / Const( b'\x03\x03' ),
+  'length' / BytesInteger(2), 
+  'encrypted_reccord' / Bytes( this.length )
+)
+
+
+TLSInnerPlaintext = Struct(
+  'content' / GreedyBytes,
+  'type' / ContentType, 
+  'zeros' / Array( this._._length_of_padding, Const(b'\x00') ) 
 )

@@ -34,11 +34,23 @@ from construct.lib import *
 #from pylurk.extensions.tls12_struct import FreshnessFunct, KeyPairId
 from pylurk.extensions.tls13_tls13_struct import PskIdentity, Certificate,\
                                                   SignatureScheme, Handshake
-from pylurk.extensions.key_schedule import TlsHash
+from pylurk.extensions.key_schedule import TlsHash, PSKWrapper
 from pylurk.core.conf import default_conf
 
 import pkg_resources
 data_dir = pkg_resources.resource_filename(__name__, '../data/')
+
+
+from pickle import dumps, loads
+
+## installation construct, hkdf
+## TODO:
+## _cipher is not used in the construct anymore. appropriated length check needs to be performed here and parameter needs to be removed from the construction. The reason we removed it was to ease parsing. 
+## split classes into conf, tls13_tls_server, tls13_tls_client and tls13 for shared objects.
+## think to rename/reorganise directories
+## multithreading
+## implement UDP/TCP/
+
 
 LINE_LEN = 75
 
@@ -109,7 +121,6 @@ class SigAlgo:
     return self.name.split('_')[0]
 
   def get_hash( self ):
-    print("::: self.algo: %s"%self.algo )
     if self.algo not in [ 'rsa', 'ecdsa' ]:
       return None
     hash_algo = self.name.split( '_' )[-1]
@@ -127,7 +138,6 @@ class SigAlgo:
     if self.algo != 'ecdsa':
       return None
     curve_name = self.name.split( '_' )[1] 
-    print( "::: curve_name: %s"%curve_name )
     if  curve_name == 'secp256r1':
       curve = SECP256R1()
     elif curve_name == 'secp384r1':
@@ -176,35 +186,20 @@ class Conf:
   def __init__(self,  conf: dict = deepcopy(default_conf) ) -> NoReturn:
     self.conf = conf
     ## server_certificate parameters
-    try:
-      public_files = self.msg('s_init_cert_verify')[ 'public_key' ]
-      self.public_key, self.cert_type =\
-        self.load_public_key( public_files[ -1 ] ) 
-      self.hs_cert_msg, self.cert_finger_print =\
-        self.cert_msg( public_files )
-    except:
-      self.public_key = None
-      self.cert_type = None
-      self.hs_cert_msg = None
-      self.cert_finger_print = None
-    private_file = self.msg( 's_init_cert_verify' )[ 'private_key' ]
-    self.private_key = self.load_private_key( private_file ) 
-    self.key_type = self.get_type( self.public_key )  
-    try:
-      private_file = self.msg( 's_init_cert_verify' )[ 'private_key' ]
-      self.private_key = self.load_private_key( private_file ) 
+    self.hs_cert_msg = None ## certificate message (dict)
+    self.cert_finger_print = None ## finger_print of the certificate message
+    self.cert_type = None  ## type of certificate
+    self.public_key = None ## public key
+    self.private_key =None 
+    self.key_type = None
+
+    if self.role() == 'server' or\
+     ( self.role() == 'client' and  self.msg( 'keys' )[ 'private_key'] != None ): 
+      self.load_public_key( ) 
+      self.load_cert( ) ## updating self.hs_cert_msg and self.cert_finger_print 
+      self.load_private_key( ) 
       self.key_type = self.get_type( self.public_key )  
-    except:
-      print("::: %s"%self.msg( 's_init_cert_verify' ))
-      self.private_key =None
-      self.key_type = None
-    
-    print("::: self.public_key : %s"%self.public_key)
-    print("::: self.private_key : %s"%self.private_key)
-    print("::: self.hs_cert_msg : %s"%self.hs_cert_msg)
-    print("::: self.cert_finger_print : %s"%self.cert_finger_print )
-    self.check_keys(self.private_key, self.public_key)
-    self.check_key_sig_algo()
+      self.check_keys() 
 
   def is_in_classes( self, obj, class_list):
     tests = [ isinstance( obj, c ) for c in class_list ]
@@ -213,94 +208,72 @@ class Conf:
       'Expected classes %s'%class_list, 'conf_error')
     return tests.index(True)
 
-  def check_keys( self, private_key, public_key ) -> NoReturn :
-    """checks compatibility between public/private keys """
-    private_classes = [ Ed25519PrivateKey, Ed448PrivateKey,\
-                        EllipticCurvePrivateKey, RSAPrivateKey ]
-    public_classes = [ Ed25519PublicKey, Ed448PublicKey,\
-                       EllipticCurvePublicKey, RSAPublicKey ]
-    if private_key != None:
-      private_i = self.is_in_classes( private_key, private_classes )
-    if public_key != None:
-      public_i = self.is_in_classes( public_key, public_classes )
-    if private_key != None and public_key != None:
-      if private_i != public_i:
-        raise LURKError( ( type( private_key ), type( public_key ) ),\
-        'incompatible public and private key', 'conf_error' )
-    ## check public are private are associated TBD  
-
-  def check_key_sig_algo( self ) -> NoReturn :
+  def check_keys( self ) -> NoReturn :
     """checks compatibility between signature algorithms and keys """
-    if self.private_key == None:
-      raise LURKError('', 'missing private key', 'conf_error' )
-    sig_algo_list = self.msg( 's_init_cert_verify' )[ 'sig_algo' ]
+    if self.key_type != self.get_type( self.private_key ):
+      raise LURKError( ( type( private_key ), type( public_key ) ),\
+        'incompatible public and private key', 'conf_error' )
+    sig_algo_list = self.msg( 'keys' )[ 'sig_algo' ]
     for sig_algo in sig_algo_list:
       sig = SigAlgo(sig_algo)
       sig.matches( self.private_key )
 
-  def load_private_key( self, private_bytes_source:str):
-##        -> Union[ Ed25519PrivateKey, Ed448PrivateKey, RSAPrivateKey, \
-##                  EllipticCurvePrivateKey ] :
+  def load_private_key( self ):
     """ returns the private key """
-    print("::: private_bytes_source: %s"%private_bytes_source )
-    with open( private_bytes_source, 'rb' )  as f:
+    private_file = self.msg( 'keys' )[ 'private_key' ]
+    with open( private_file, 'rb' )  as f:
       private_bytes = f.read()
-      print( "::: %s"%private_bytes )
       ## ed25519
       try:
-        key  = Ed25519PrivateKey.from_private_bytes(private_bytes)
+        self.private_key = Ed25519PrivateKey.from_private_bytes(private_bytes)
       except:
       ## ed448
         try:
-          key  = Ed448PrivateKey.from_private_bytes(private_bytes)
+          self.private_key  = Ed448PrivateKey.from_private_bytes(private_bytes)
         except:
         ## RSA / ECDSA
           try:
-            key = load_der_private_key(private_bytes, password=None, backend=default_backend())
+            self.private_key = load_der_private_key(private_bytes, password=None, backend=default_backend())
           except:
             LURKError( private_key_source, 'unable to load private key',\
                       'conf_error')
-      return key 
 
-  def load_public_key( self, public_bytes_source:str):
-##         -> Union[ RSAPublicKey, EllipticCurvePublicKey,\
-##                   Ed25519PublicKey, Ed448PublicKey ] :
+  def load_public_key( self ):
     """ load the public key and define the key format""" 
-    with open(public_bytes_source, 'rb' )  as f:
+    public_file = self.msg('keys')[ 'public_key' ][ 0 ]
+    with open(public_file, 'rb' )  as f:
       public_bytes = f.read()
     ## trying to load the certificate
     try:
       cert = x509.load_der_x509_certificate(public_bytes, default_backend())
-      public_key = cert.public_key() 
-      cert_type = 'X509'
-      print("::: cert (DER) %s"%cert )
-      print("::: cert public_key %s"%public_key )
+      self.public_key = cert.public_key() 
+      self.cert_type = 'X509'
     except:
       try:
         cert = x509.load_pem_x509_certificate(public_bytes, default_backend())
-        public_key = cert.public_key() 
-        cert_type = 'X509'
+        self.public_key = cert.public_key() 
+        self.cert_type = 'X509'
       except:
         ## trying to load the raw public key
         try:
-          public_key = Ed25519PublicKey.from_public_bytes(public_bytes)
-          cert_type = 'Raw'
+          self.public_key = Ed25519PublicKey.from_public_bytes(public_bytes)
+          self.cert_type = 'Raw'
         except: 
           try:
-            public_key = Ed448PublicKey.from_public_bytes(public_bytes)
+            self.public_key = Ed448PublicKey.from_public_bytes(public_bytes)
           except:
             ## RSAPublicKey, EllipticCurvePublicKey,
             try: 
-             public_key = load_pem_public_key(public_bytes, backend=default_backend())
-             cert_type = 'Raw'
+             self.public_key = load_pem_public_key(public_bytes, backend=default_backend())
+             self.cert_type = 'Raw'
             except:
               try:
-                public_key = load_der_public_key(public_bytes, backend=default_backend())
-                cert_type = 'Raw'
+                self.public_key = load_der_public_key(public_bytes, backend=default_backend())
+                self.cert_type = 'Raw'
               except:
                 raise LURKError( public_source, \
                                  'unable to load public key', 'conf_error')
-    return public_key, cert_type
+
 
   def get_type( self, key ):
     """ returns the type of key """
@@ -324,35 +297,32 @@ class Conf:
     """ returns the conf structure associated to the lurk message """
     return get_struct( self.conf['extensions'], 'type', lurk_msg)
 
+  def supported_ext( self ):
+    supported_ext = [ e[ 'designation' ] for e in self.conf['extensions'] ]
+    return set( supported_ext )
+      
   def role(self):
     return self.conf['role']
 
-  def cert_msg(self, public_key_bytes_sources:list ) -> ( dict, bytes ):
-    cert_files = self.msg('s_init_cert_verify')['public_key']
-    key, cert_type = self.load_public_key(cert_files[0])
-    cert_list = []
-    print("::: cert_type: %s"%cert_type )
-    for cert_file in cert_files:
-      key, current_cert_type = self.load_public_key( cert_file )
-      if cert_type != current_cert_type:
-        raise LURKError( self.conf['certificate'], 'unmatched cert types',
-                         'conf_error')    
-      print(":::current_cert_type: %s"%current_cert_type )
-      print(":::cert_file: %s"%cert_file )
-      with open( cert_file, 'rb' ) as f:
-        public_bytes = f.read() 
-      print(":::public_bytes: %s"%public_bytes )
-      cert_list.append( { 'cert' : public_bytes, 'extensions': [] } ) ## certificateEntry
-    print(":::cert_list: %s"%cert_list )
-      
-    hs_cert = { 'msg_type' : 'certificate', 
-                 'data' :  { 'certificate_request_context': b'',
-                             'certificate_list' : cert_list } }
-    bytes_hs_cert = Handshake.build( hs_cert, _certificate_type=cert_type )
+  def load_cert( self, cert_req_ctx=b'' ):
+    if self.hs_cert_msg == None:
+      cert_files = self.msg('keys')['public_key']
+      cert_list = [] 
+      for cert_file in cert_files:
+        with open( cert_file, 'rb' ) as f:
+          public_bytes = f.read() 
+        cert_list.append( { 'cert' : public_bytes, 'extensions': [] } ) ## certificateEntry
+        
+      self.hs_cert_msg = { 'msg_type' : 'certificate', 
+                           'data' :  { 'certificate_request_context': cert_req_ctx,
+                                       'certificate_list' : cert_list } }
+    else:
+      self.hs_cert_msg[ 'data' ][ 'certificate_request_context' ] = cert_req_ctx
+
     digest = Hash( SHA256(), backend=default_backend())
-    digest.update( Handshake.build( hs_cert, _certificate_type=cert_type ))
-    finger_print = digest.finalize()
-    return hs_cert, finger_print
+    digest.update( Handshake.build( self.hs_cert_msg, \
+                                   _certificate_type=self.cert_type ))
+    self.cert_finger_print = digest.finalize()[:4]
 
 
 class ConfBuilder( Conf ):
@@ -402,7 +372,6 @@ class ConfBuilder( Conf ):
 
   def store_keys( self, key_format ): # type 'X509', 'Raw'
     """ stores self.public_key in files """
-    print("::: public_key: %s"%self.public_key ) 
     self.key_format = key_format
     self.private_file = join( data_dir, \
                          self.private_key.__class__.__name__ + '-' +\
@@ -457,7 +426,7 @@ class ConfBuilder( Conf ):
   def update_conf( self ):
     """ updates the conf """
     if self.role() == 'server':
-      conf_ext = self.msg('s_init_cert_verify')
+      conf_ext = self.msg('keys')
       conf_ext['public_key'] = [ self.public_file ]
       conf_ext['private_key'] = self.private_file
       conf_ext['sig_algo'] = [ self.sig_algo.name ]
@@ -470,11 +439,32 @@ class ConfBuilder( Conf ):
     return deepcopy( self.conf )
 
 
+class Tag:
+
+  def __init__( self, tag:dict, mtype, conf ):
+    self.last_exchange = tag[ 'last_exchange' ]
+    self.conf = conf
+    self.mtype = mtype
+
+  def resp( self, ctx=None ):
+    last_exchange = self.last_exchange
+    if self.mtype in [ 's_init_cert_verify', 's_hand_and_app_secret' ]:
+      if self.conf.msg( self.mtype )[ 'last_exchange' ] == True:
+        last_exchange = True
+    elif self.mtype == 's_new_ticket':
+      if ctx == self.conf.msg( 's_new_ticket' )[ 'max_tickets' ]:
+        last_exchange = True
+    elif self.mtype == [ 'c_post_hand_auth' ]:
+      if ctx == self.conf.msg( 'c_post_hand_auth' )[ 'max_post_handshake_authentication' ]:
+        last_exchange = True
+
+    return { 'last_exchange' : last_exchange }
 
 
 class Ephemeral:
 
-  def __init__(self, ephemeral:dict, conf, mtype, handshake_ctx:dict) -> None:
+  def __init__(self, ephemeral:dict, mtype, conf, handshake=None,\
+               ephemeral_method=None ) -> None:
     """ initializes the object based on the structure """
 
     self.struct = ephemeral
@@ -482,25 +472,40 @@ class Ephemeral:
     self.mtype = mtype
     self.method = self.struct['ephemeral_method']
 
+    error = False
     if self.method not in conf.msg(mtype)['ephemeral_methods']:
+      error = True
+    if ( mtype == 's_init_cert_verify' and self.method == 'no_secret' ) or\
+       ( mtype == 'c_init_ephemeral' and self.method != 'secret_generated' ) or\
+       ( mtype == 'c_init_early_secret' and self.method == 'secret_provided' ):
+      error = True
+    elif  mtype == 'c_hand_and_app_secret' :
+     if handshake.has_ext( 'psk', 'proposed' ) == False: ## c_init_ephemeral
+       if self.method != 'no_secret':
+         error = True
+     else: ## c_init_early_secret
+       if  ( self.ephemeral_method == 'secret_generated' and self.method != 'no_secret' ) or\
+           ( self.ephemeral_method == 'no_secret' and self.method != 'secret_generated'):
+         error = True 
+    if error == True:
       raise LURKError( self.method, "unsupported ephemeral mode " + \
-                 "supported modes [%s]"%\
-                 conf.msg('s_init_cert_verify')[ 'ephemeral_methods' ], \
+                 "supported modes [%s]"%conf.msg( mtype )[ 'ephemeral_methods' ], \
                  'invalid_ephemeral')
     self.server_key_exchange = None
-    self.ecdhe = None 
+    self.shared_secret = None 
       
-    if mtype == 's_init_cert_verify':
-      handshake = TlsHandshake( conf )
-      handshake.insert( handshake_ctx )
-      self.compute_server_key_exchange( handshake ) 
+
+#    if mtype == 's_init_cert_verify':
+#      handshake = TlsHandshake( conf )
+#      handshake.insert( handshake_ctx )
+#      self.compute_server_key_exchange( handshake ) 
 
 
   def compute_server_key_exchange(self, handshake ):
     """ treat ephemeral extension and initializes self.ecdhe, self.server_key_exchange """ 
     if self.method == 'shared_secret':
       ## makes more sense if only one secret is sent, not a list
-      self.ecdhe = self.struct['key'][ 'shared_secret' ]
+      self.shared_secret = self.struct['key'][ 'shared_secret' ]
     elif self.method == 'secret_generated':
       ## key_shae is taken in the serverhello to make sure the extension
       ## is in the same place. Note that inserting the extension
@@ -539,42 +544,82 @@ class Ephemeral:
           client_public_key = X25519PublicKey.from_public_bytes(client_public_key) 
         elif self.group == 'x448':
           server_private_key = X448PrivateKey.generate()
-          print("::: client_key_exchange [%s bytes ]: %s"%\
-            ( len(client_key_exchange), client_key_exchange ) )
           client_public_key = X448PublicKey.from_public_bytes(client_public_key) 
         server_public_key = server_private_key.public_key() 
         self.server_key_exchange = server_public_key.public_bytes(
           encoding=Encoding.Raw, format=PublicFormat.Raw)
-        self.ecdhe = server_private_key.exchange(client_public_key)
+        self.shared_secret = server_private_key.exchange(client_public_key)
 
-  def serve( self):
-    if self.method == 'secret_generated' and self.server_key_exchange != None :
-      return { 'extension_type' : 'ephemeral',\
-               'extension_data' : \
-                 { 'ephemeral_method' : self.method, 
-                   'key' : { 'group' : self.group, \
-                             'key_exchange' : self.server_key_exchange } } }
-    else:
-      LURKError( self.method, "unexpected ephemeral", 'implementation_error') 
+  def resp( self):
+    resp = { 'ephemeral_method' : self.method }
+    if self.method == 'secret_generated' :
+      key = { 'group' : self.group, \
+              'key_exchange' : self.server_key_exchange }
+    elif self.method in [ 'no_secret', 'secret_provided' ]: 
+      key = None
+    resp[ 'key' ] = key 
+    return resp
 
 class SessionID:
-  def __init__( self, session_id:bytes):
+  def __init__( self, session_id:bytes, mtype):
     self.outbound =  session_id
     self.inbound = token_bytes( 4  )
+    self.mtype = mtype
+
+  def resp ( self, ctx=None ):
+    if self.mtype in [ 's_init_cert_verify', 'c_init_post_hand_auth' ] :
+      if not isinstance( ctx, Tag ):
+        raise LURKError( ( self.mtype, type(ctx) ), \
+                "unexpected type for ctx. Tag is expected", \
+                'implementation_error')
+      if ctx.last_exchange == True:
+        resp = None
+      else:
+        resp =  self.inbound
+    elif self.mtype == 's_init_early_secret':
+        resp =  self.inbound
+    else:
+      resp = self.outbound
+    return resp
+
+  def update( self, mtype):
+    self.mtype = mtype
+
+  def is_in_session( self, mtype, status, session_id:bytes ):
+    """ checks the session_id 
+
+    Checks the value is aligned with the sessionID object of the session 
+    """      
+    if status == 'request':
+      if session_id != self.inbound:
+        raise LURKError( ( session_id, self.inbound ), 'invalid session id', \
+                       'invalid_session_id')
+    elif status == 'request':
+      if session_id != self.outbound:
+        raise LURKError( ( session_id, self.outbound ), 'invalid session id', \
+                       'invalid_session_id')
+    self.mtype = mtype
+    return True
+
 
 class Freshness:
-  def __init__( self, freshness:int):
+  def __init__( self, freshness:str ):
       self.freshness_funct = freshness
   
-class PskID:
-  def __init__( self, psk_id:dict ) -> NoReturn: 
-    self.identity = psk_id[ 'identity' ]
-    self.obfuscated_ticket_adge = psk_id[ 'obfuscated_ticket_age' ]
+  def update_random( self, role, random:bytes ):
+    if role == 'server':
+      ctx = "tls13 pfs srv"
+    elif role == 'client':
+     ctx = "tls13 pfs clt"
+    digest = Hash( SHA256(), backend=default_backend())
+    digest.update( random )
+    return digest.finalize()
+    
+##class PskID:
+##  def __init__( self, psk_id:dict ) -> NoReturn: 
+##    self.identity = psk_id[ 'identity' ]
+##    self.obfuscated_ticket_adge = psk_id[ 'obfuscated_ticket_age' ]
 
-
-class Cert:
-  def __init__( self, finger_print:bytes ):
-    pass
 
 class SigScheme:
   def __init__( self, finger_print:bytes ):
@@ -582,51 +627,34 @@ class SigScheme:
   
 
 
-class KeyRequest:
+class SecretRequest:
 
-  def __init__( self, key_request, mtype, conf ):
+  def __init__( self, secret_request:dict, mtype, conf, handshake=None ):
     self.authorized_secrets = []
 
-    if mtype == 's_init_early_secret':
+    if mtype in [ 's_init_early_secret', 'c_init_early_secret' ]:
       mandatory = ['b']
       forbiden = [ 'h_c', 'h_s', 'a_c', 'a_s', 'x', 'r'] 
       optional = [ 'e_c', 'e_x' ]
-    elif mtype in [ 's_init_cert_verify' or 's_hand_and_app_secret']:
+    elif mtype in [ 's_init_cert_verify', 's_hand_and_app_secret', 'c_hand_and_app_secret']:
       mandatory = [ 'h_c', 'h_s']
-      forbiden = [ 'b', 'e_c', 'e_x', 'x', 'r']
-      optional = [ 'a_c', 'a_s', 'x' ]
-    elif mtype == 's_new_ticket':
-      mandatory = []
-      forbiden = [ 'b', 'e_c', 'e_x', 'h_c', 'h_s', 'a_c', 'a_s', 'x']
-      optional = ['r'] 
-    elif mtype == 'c_binder_key':
-      mandatory = [ 'b' ]
-      forbiden = [ 'e_c', 'e_x', 'h_c', 'h_s', 'a_c', 'a_s', 'x', 'r']
-      optional = []
-    elif mtype == 'c_init_early_secret':
-      mandatory = []
-      forbiden = [ 'b', 'e_c', 'e_x', 'h_c', 'h_s', 'a_c', 'a_s', 'x', 'r']
-      optional = ['e_c', 'e_x']
-    elif mtype in [ 'c_init_hand_secret', 'c_hand_secret' ]:
-      mandatory = ['h_c', 'h_s']
-      forbiden = [ 'b', 'e_c', 'e_x', 'a_c', 'a_s', 'x', 'r']
-      optional = []
-    elif mtype in [ 'c_app_secret', 'c_cert_verify' ]:
-      mandatory = []
       forbiden = [ 'b', 'e_c', 'e_x', 'r']
-      optional = ['a_c', 'a_s',  'x' ]
-    elif mtype == 'c_register_ticket':  
+      optional = [ 'a_c', 'a_s', 'x' ]
+    elif mtype in [ 's_new_ticket', 'c_register_ticket' ]:
       mandatory = []
       forbiden = [ 'b', 'e_c', 'e_x', 'h_c', 'h_s', 'a_c', 'a_s', 'x']
       optional = ['r'] 
-    elif mtype == 'c_post_hand':
-      mandatory = []
-      forbiden = [ 'b', 'e_c', 'e_x', 'h_c', 'h_s', 'a_c', 'a_s', 'x', 'r']
-      optional = [] 
+##    elif mtype [ 'c_init_cert_verify', 'c_init_post_hand_auth', 'c_post_hand_auth', 'c_init_ephemeral' ]:
+##      mandatory = []
+##      forbiden = [ 'b', 'e_c', 'e_x', 'h_c', 'h_s', 'a_c', 'a_s', 'x', 'r']
+##      optional = []
+    else:
+      raise LURKError( mtype, "unknown", 'implementation_error' )
+      
     ## building the list of requested secrets, that is
     ## those set to True in key_request 
-    for key in key_request.keys():
-      if key_request[ key ] == True:
+    for key in secret_request.keys():
+      if secret_request[ key ] == True:
         self.authorized_secrets.append( key )
     try:
       match_list( self.authorized_secrets, mandatory=mandatory,\
@@ -634,145 +662,44 @@ class KeyRequest:
     except LURKError as e :
       raise LURKError( e.expression, e.message , 'invalid_key_request')
 
-    if mtype == 's_init_cert_verify':
+    if mtype in [ 's_init_cert_verify', 'c_hand_and_app_secret' ] :
       if conf.msg( mtype )[ 'app_secret_authorized' ] == False: 
         self.authorized_secrets.remove( 'a_c' )
         self.authorized_secrets.remove( 'a_s' )
       if conf.msg( mtype )[ 'exporter_secret_authorized' ] == False: 
         self.authorized_secrets.remove( 'x' )
-    if mtype == 's_new_ticket':
+    elif mtype == 's_new_ticket':
       if conf.msg( mtype )[ 'resumption_secret_authorized' ] == False: 
-        self.authorized_secrets.remove( 'x' )
-    if mtype == 's_init_early_secret':
+        self.authorized_secrets.remove( 'r' )
+    elif mtype in [ 's_init_early_secret', 'c_init_early_secret' ]:
       if conf.msg( mtype )[ 'client_early_secret_authorized' ] ==  False:
         self.authorized_secrets.remove( 'e_c' )
       if conf.msg( mtype )[ 'early_exporter_secret_authorized' ] ==  False:
         self.authorized_secrets.remove( 'e_x' )
+#      client_hello_exts = handshake.msg('client_hello')[ 'extensions' ]
+#      early_data = get_struct(server_hello_exts, 'extension_type', 'early_data' )
+#      if early_data == None:
+      if handshake.has_extension( 'client_hello', 'early_data' ): 
+        self.authorized_secrets.remove( 'e_c' )
+          
 
-
-class SecretReq:
-
-  def __init__(self, secret_req, conf, mtype):
-    ## self.secret_req = secret_req 
-    self.conf = conf
-    self.mtype = mtype
-    self.hs_ctx = secret_req['handshake_context']
-    self.key_request = KeyRequest(secret_req[ 'key_request' ], mtype, conf )
-    self.ticket_nbr = None
-
-    ## extensions
-    self.ephemeral = None
-    self.session_id = None
-    self.freshness = None
-    self.psk_id = None
-    self.cert_fingher_print = None
-
-    extensions = secret_req[ 'extension_list' ]
-    print("::: extensions: %s"%extensions )
-    ext_types = [ e[ 'extension_type' ] for e in extensions ]
-    self.check_exts( ext_types, mtype )
-    for ext in extensions:
-      ext_type = ext[ 'extension_type' ]
-      ext_data = ext[ 'extension_data' ]
-      if ext_type == 'psk_id':
-        pass 
-      elif ext_type == 'ephemeral':
-        self.ephemeral = Ephemeral( ext_data, conf, mtype, \
-                                    secret_req['handshake_context'] ) 
-      elif ext_type == 'freshness':
-        print("::: ext_data %s"%ext_data )
-        self.freshness = Freshness( ext_data ) 
-      elif ext_type == 'session_id':
-        if self.conf.msg( mtype )[ 'session_id_ignored' ] is False: 
-          self.session_id = SessionID( ext_data )
-      elif ext_type == 'cert_finger_print':
-        pass
-      elif ext_type == 'sig_algo':
-        pass
-
-    if mtype == 's_new_ticket':
-      self.ticket_nbr = secret_req[ 'ticket_nbr' ]
-
-       
-  def check_exts( self, extension_type_list, mtype ):
-    """ sanity checks for LURK extensions """
-    if self.mtype == 's_init_early_secret':
-      mandatory = ['psk_id', 'session_id' ]
-      forbiden = ['ephemeral', 'freshness' ]
-    elif self.mtype == 's_init_cert_verify':
-      mandatory = ['ephemeral', 'freshness' ]
-      optional = [ 'session_id' ] 
-      forbiden = [ 'psk_id' ]
-    elif self.mtype == 's_hand_and_app_secret':
-      mandatory = [ 'freshness' ]
-      if self.conf[ 'ephemeral' ] == True:
-        mandatory.append( 'session_id' ) 
-      forbiden = [ 'psk_id' ]
-    elif self.mtype == 's_new_ticket':
-      mandatory = []
-      forbiden = ['ephemeral', 'psk_id', 'freshness']
-
-    if len(set(extension_type_list)) != len(extension_type_list):
-      raise LURKError( self.secret_req, "duplicated extensions " + \
-              "Found [%s]"%extension_type_list, 'invalid_extension')
-    try:
-      match_list(extension_type_list, mandatory=mandatory, forbiden=forbiden)
-    except LURKError as e :
-      e.status = 'invalid_extension'
-      raise e
-
-  def serve( self, key_scheduler ):
-   
-    ## secret_response --> To be moved to key_request
-    secret_list = []
-    for secret_type in self.key_request.authorized_secrets:
-      secret_list.append( \
-        { 'secret_type' : secret_type, 
-          'secret_data' : key_scheduler.secrets[ secret_type ] } ) 
-    ### should the check be part of the extention ?
-    ext_list = []
-    if isinstance( self.ephemeral, Ephemeral ):
-      if self.ephemeral.method == 'secret_generated':
-        ext_list.append( self.ephemeral.serve( ) )
-        
-    if isinstance( self.session_id, SessionID) : 
-      if self.mtype in [ 's_init_cert_verify', 's_init_early_secret' ]:  
-      if self.conf.msg( mtype )[ 'session_id_ignored' ] == False: 
-           ext_list.append( {  'extension_type' : 'session_id',
-                               'extension_data' : self.session_id.inbound } )
-    if self.mtype == 's_init_early_secret':
-      resp = { 'secret_list' : secret_list,
-               'extension_list' : ext_list }
-    if self.mtype == 's_hand_and_app_secret':
-      resp = { 'secret_list' : secret_list,
-               'extension_list' : ext_list }
-    if self.mtype == 's_init_cert_verify':
-      resp = { 'secret_list' : secret_list,
-               'extension_list' : ext_list }
-    elif self.mtype == 's_new_ticket':
-      resp = { 'secret_list' : secret_list, \
-               'ticket_list' : key_scheduler.get_tickets( self.ticket_nbr ) }
-  
-  def secret_list( self, secret_candidates:list)-> list:
+  def of( self, secret_candidates:list)-> list:
     """returns the sublist of secrets both authorized and requested.
 
      Usually useful to determine which secrets need to be computed """
     secret_list = []
     for secret in secret_candidates:
-      if secret in self.key_request.authorized_secrets:
+      if secret in self.authorized_secrets:
         secret_list.append( secret )
     return secret_list
 
-class SigningReq(SigAlgo):
-
-  def __init__(self, signing_req, conf, mtype):
-    self.conf = conf
-    print("::: name: %s"%signing_req[ 'sig_algo' ] )
-    SigAlgo.__init__( self, signing_req[ 'sig_algo' ] )
-#    self.sig_algo = SigAlgo( signing_req[ 'sig_algo' ]
-    if self.name not in conf.msg( 's_init_cert_verify' )[ 'sig_algo' ]:
-      raise LURKError( ( self.name, conf.msg( 's_init_cert_verify' )[ 'sig_algo' ] ),  'unsupported signature algorithm',\
-              'invalid_signature_scheme' )
+  def resp( self, scheduler ):
+    secret_list = []
+    for secret_type in self.authorized_secrets:
+      secret_list.append( \
+        { 'secret_type' : secret_type, 
+          'secret_data' : scheduler.secrets[ secret_type ] } ) 
+    return secret_list 
 
 class TlsHandshake:
 
@@ -789,12 +716,10 @@ class TlsHandshake:
   ## self.struct has an appropriated sequence. 
 
   def update_msg_type_index( self ) -> None:
-    """ build correspondence between msg_type and msg_list index """ 
+    """ build correspondence between msg_type and msg_list index """
+    self.msg_index = {}
     for index in range( len( self.msg_list ) ):
-      ## print("::: msg_list: %s"%self.msg_list )
-      ## print("::: msg_list[ index ]: %s"%self.msg_list[ index ] )
       msg_type = self.msg_list[ index ][ 'msg_type' ]
-      ## print("::: msg_type: %s"%msg_type )
       try:
         self.msg_index[ msg_type ].append( index )
       except KeyError:
@@ -818,8 +743,6 @@ class TlsHandshake:
 
   def later_of( self, msg_type_list:list, mode='server' ) -> (str, int):
      """returns the msg_type and position """
-     ## check hard_stop is present
-     print("::: later_of : msg_type_list: %s"%msg_type_list )
      try:
        if mode == 'server':
          ith = 0
@@ -840,9 +763,7 @@ class TlsHandshake:
        raise LURKError( ( mode, self.msg_index), " 'encrypted_extensions' " +\
               "or server 'finished' not found ", 'implementation_error' )
      msg_type_list.reverse()
-     print("::: later_of : msg_type_list: %s"%msg_type_list )
      for msg_type in msg_type_list:
-       print("::: later_of : msg_type (reverse): %s"%msg_type )
        try:
          msg_type_i = self.msg_index[ msg_type ][ ith ]
        except KeyError:
@@ -853,24 +774,32 @@ class TlsHandshake:
          continue
      msg_type = self.msg_list[ msg_type_i ][ 'msg_type' ]
      pos = self.msg_i( msg_type ).index( msg_type_i )
-     print("::: later_of : msg_type: %s"%msg_type )
-     print("::: later_of : pos: %s"%pos )
      return msg_type, pos
 
 
 
   def insert( self, msg_sub_list:list, after=None):
-    """ add additional context to TlsHandshakeCtx """
-    if after == None:
+    """ add additional handshake message  """
+    if after == None or after == ( None, None):
 ##      self.msg_list.append( msg_sub_list )
 ##      self.msg_list.insert( 0, msg_sub_list )
-      index = 0
+      index = len( self.msg_list )
     else:
       msg_type = after[ 0 ]
       ith = after[ 1 ] 
       index = self.msg_index[ msg_type ][ ith ] + 1
     for i in range( len( msg_sub_list ) ):
+      ## contruct parsing sometime creates None object in the list
+      ## this is likely to happen when a Optional structure is 
+      ## not present
+      if  msg_sub_list[ i ] == None:
+        continue 
       self.msg_list.insert( index + i , msg_sub_list[ i ] )
+    self.update_msg_type_index()
+
+  def post_post_hand_auth( self ):
+    """ removes the CertificateRequest, Certificate and CErtificateVerify """
+    self.msg_list = self.msg_list[ :-3] 
     self.update_msg_type_index()
  
   def bytes_messages( self, msg_type:str, ith: int=0 ) -> bytes:
@@ -886,97 +815,196 @@ class TlsHandshake:
     ## 00 00 Hash.length  ||  /* Handshake message length (bytes) */
     ##  Hash(ClientHello1) ||  /* Hash of ClientHello1 */
     ##  HelloRetryRequest  || ... || Mn)
-    print("::: msg_type: %s"%msg_type )
-    print("::: ith: %s"%ith )
-    print("::: self.msg_i( msg_type ): %s"%self.msg_i( msg_type ) )
     msgs = bytearray()
+    ## for server we can read it from the configuration file.
+    ## this does not considers the case of the client in which 
+    ## case we will have to read it from the handshake
+    ## problem may arise when different format are used between 
+    ## the client and the server. 
     ctx_struct = { '_certificate_type': self.conf.cert_type }
+    ## finished message needs the _cipher to be specified
+    if 'server_hello' in self.msg_index.keys():
+      ctx_struct[ '_cipher' ] = self.get_cipher()
     for i in range( self.msg_i( msg_type )[ ith ] ):  
-      print("::: msg_list[%i]: %s"%( i, self.msg_list[i] ) )
       msgs.extend( Handshake.build( self.msg_list[i], **ctx_struct ) ) 
     return msgs
 
-  def update_server_key_share( self, ephemeral:Ephemeral ) -> NoReturn:
-    """ update key_exchange value of the serverHello  """
-    exts = self.msg( 'server_hello', ith=0 )[ 'extensions' ] 
+  def has_extension( self, msg_type, ext ):
+    """ checks ext is present in msg_type and raises an error otherwise """
+    msg_exts = self.msg( msg_type )['extensions']
+    ext = get_struct( msg_exts, 'extension_type', ext )
+    if ext == None:
+      return False
+    return True
+
+
+  def has_ext( self, ext, status):
+    """ returns true if ext is agreed or proposed 
+      ext: designates the TLS extension or psk as a shortcur for 
+        'pre_shared_key' and 'psk_key_exchange_modes'
+      status: 'proposed' or 'agreed'
+    """
+    if ext == 'psk':
+      ext_list = [ 'pre_shared_key', 'psk_key_exchange_modes' ]
+    else:
+      ext_list = [ ext ]
+    
+    if status == 'agreed':
+      msg_list =  [ 'client_hello', 'server_hello' ]
+    elif status == 'proposed':
+      msg_list =  [ 'client_hello' ]
+
+    for msg in msg_list:
+      for ext in ext_list:
+        if self.has_extension( msg, ext ) == False:
+          return False
+    return True
+
+  def is_compatible_with( self, mtype, session_ticket=None ):
+    """ checks if the handshake is compatible with the lurk exchange """
+    error_txt = ""
+    if mtype == 's_init_cert_verify':
+      if self.has_ext( 'key_share', 'agreed' ) == False:
+        error_txt += "key_share not agreed"
+    elif mtype == 's_init_early_secret':
+      if self.has_ext( 'psk', 'proposed' ) == False:
+        error_txt = "psk not agreed"
+    elif mtype == 's_hand_and_app_secret':
+      if self.has_ext( 'psk', 'agreed' ) == False:
+        error_txt = "psk not agreed"
+      ## checking the ticket chosen by the LURK client ( to the 
+      ## LURK server) is the same ticket indicated in the server_hello
+      ## and used by the TLS client.
+      ## reading selected_identity from the server_hello
+      server_hello_exts = self.msg( 'server_hello')[ 'extensions' ] 
+      selected_identity = get_struct( server_hello_exts, 'extension_type', 'pre_shared_key' )[ 'extension_data' ]
+      ## getting the selected ticket identity and obfuscated age 
+      ## from the client_hello
+      ## selected_ticket is a structure
+      selected_ticket = self.get_ticket( selected_identity )
+      if selected_ticket[ 'identity' ] != session_ticket.psk_identity[ 'identity' ]:
+        raise LURKError( ( self.msg( 'server_hello' ), mtype ),\
+              "LURK / TLS Handshake do not use same ticket", 'invalid_handshake')
+      if self.get_cipher() != session_ticket.cipher:
+            raise LURKError( ( self.get_cipher( ), session_ticket.cipher ),\
+                  "TLS handshake and ticket have uncompatible cipher suite", 'invalid_handshake')
+    elif mtype == 'c_init_cert_verify':
+      if self.has_ext( 'psk', 'agreed' ) == True:
+        error_txt += "psk agreed"
+      if self.has_ext( 'key_share', 'agreed' ) == False:
+        error_txt += "key_share not agreed"
+      if self.msg( 'certificate_request' ) == None:
+        error_txt += "no certificate_request"
+    elif mtype in [ 'c_init_post_hand_auth', 'c_post_hand_auth' ]:
+      if self.has_ext( 'post_handshake_auth', 'proposed' ) == False:
+        error_txt += "post_handshake_auth missing"
+      client_finished_i = self.msg_i( 'finished' )[1] 
+      if self.msg_i( 'certificate_request' )[ -1 ] <= client_finished_i:
+        error_txt += "certificate_request (after client finished) missing" 
+    elif mtype == 'c_init_ephemeral':
+      if self.has_ext( 'psk', 'proposed' ) == True:
+        error_txt = "psk proposed"
+      if self.has_ext( 'key_share', 'proposed' ) == False:
+        error_txt = "key_share not proposed"
+    elif mtype == 'c_init_early_secret':
+      if self.has_ext( 'psk', 'proposed' ) == False:
+        error_txt = "psk not proposed"
+    elif mtype == 'c_hand_and_app_secret':
+      if self.has_ext( 'psk', 'proposed' ) == True: #c_init_early_secret
+        pass     
+      else: ## 'c_init_ephemeral
+        pass ## no additional 
+    else:
+      raise( LURKError( mtype, "unknown mtype", 'implementation_error' ) )
+    if error_txt != "":
+      raise( LURKError( self.msg( 'client_hello' ), self.msg( 'server_hello' ), \
+             error_txt, 'invalid_handshake' ) )
+
+
+
+  def update_random(self, freshness):
+    role = self.conf.role()
+    if role == 'server' :
+      random = self.msg( 'server_hello' )[ 'random' ]
+      msg_i = self.msg_i( 'server_hello' )[ 0 ]
+    elif role == 'client':
+      random = self.msg( 'client_hello' )[ 'random' ] 
+      msg_i = self.msg_i( 'client_hello' )[ 0 ]
+    else:
+        raise LURKError( self.conf.role(), "unknown role", 'conf_error' )
+    self.msg_list[ msg_i ][ 'data' ][ 'random'] = freshness.update_random( role, random ) 
+
+
+  def update_key_share( self, server_key_exchange ) -> NoReturn:
+    """ update key_exchange value of the CLientHello or ServerHello  """
+    if self.conf.role() == 'server':
+      mtype = 'server_hello'
+    elif self.conf.role() == 'client':
+      mtype = 'client_hello'
+    else:
+        raise LURKError( self.conf.role(), "unknown role", 'conf_error' )
+
+    exts = self.msg( mtype, ith=0 )[ 'extensions' ] 
     key_share = get_struct( exts, 'extension_type', 'key_share' )
     key_share_index = exts.index( key_share )
-    self.msg_list[1][ 'data' ][ 'extensions' ][ key_share_index ]\
-      [ 'extension_data' ][ 'server_share' ][ 'key_exchange' ] = ephemeral.server_key_exchange  
-
-
-
-  def update_server_certificate( self ):
-    """ build the various certificates payloads 
-
-     Ensure the Certificate message is generated in the handshake
-     context. If the server Certificate message is not provided, it
-     needs to be built. 
-     Building the certificate payload requires the following information:
-       * cert_type that can be X.509 or RawPublicKey
-       * format can be 'full' (default) or 'finger_print'
-      when finger_print is used, the handshake contains all necessary information
-      to build the certificate payload and check there is a common understanding 
-      between the TLS server, the TLS Client and the CS. 
-      When 'full' (the default) is used, the indication of the appropriated key 
-      needs to be specified ( unless a single key is used ).  
-    """
-    ## checking the Certtificate message is present
-    cert_idx = self.msg_i('certificate')
-    if cert_idx != None:
-      if cert_idx[0] <= 5:
-        return None
-    ## cert message needs to be built types/format are defined in
-    ## extensions 
-    server_hello_exts = self.msg( 'server_hello' )['extensions']
     
-    ## type is X.509 unless specified otherwise in server_certificate_type
-    cert_type = 'X.509'
-    try:
-       ext = get_struct(server_hello_exts, 'extension_type', 'server_certificate_type')
-       cert_type = ext['extension_data']['server_certificate_type']  
-    except ( KeyError, TypeError ):
-      pass
+    self.msg_list[ self.msg_index[ mtype ][ 0 ] ][ 'data' ]\
+      [ 'extensions' ][ key_share_index ][ 'extension_data' ]\
+      [ 'server_share' ][ 'key_exchange' ] = server_key_exchange  
 
-    ### define Certificate format (finger print versus full Certificate )
-    ## format is full format unless finger_print is specified 
-    finger_print = False
-    try: 
-      ext = get_struct( server_hello_exts, 'extension_type', 'cached_info' )
-      for cache_info in ext:
-        if ext['type'] == 'cert':
-          finger_print = True
-          if ext[ 'hash_value' ] != self.conf.cert_finger_print:
-            raise LURKError( (self.conf.cert_finger_print, ext['hash_value'] ), 
-                    'certificate mismatch', 'invalid_key_id')
-    except ( KeyError, TypeError ):
-      pass 
 
-    ## generates the certificate message according to 
-    ## cert_type and finger_print
-    if finger_print == False:
-      cert = self.conf.hs_cert_msg
-    else:
-      cert = { 'msg_type' : 'certificate', 
-               'data' : self.conf.cert_finger_print }
-    msg_type, ith = self.later_of( ['encrypted_extensions', 'certificate_request' ],\
-                            mode='server' )
-    self.insert( [ cert ], after=( msg_type, ith ) ) 
+  def update_certificate( self, lurk_cert:dict ):
+    """ build the various certificates payloads """
 
-  def update_server_certificate_verify( self, sig_algo ) :
+##    if self.conf.role() == 'server':
+##      msg_type, ith = self.later_of( ['encrypted_extensions',\
+##                        'certificate_request' ], mode='server' )
+##    elif self.conf.role() == 'client':
+##      msg_type, ith = self.later_of( ['finished' ], mode='server' )
+
+    if lurk_cert[ 'certificate_type' ] == 'empty' : 
+      raise LURKError( '', 'no valid PSK/ECDHE authentication with empty certificate', 'invalid_certificate')
+    elif lurk_cert[ 'certificate_type' ] == 'uncompressed' :
+      hs_cert_msg = { 'msg_type' : 'certificate', 
+               'data' : lurk_cert[ 'certificate_data' ] }    
+    elif lurk_cert[ 'certificate_type' ] == 'compressed' :
+      hs_cert_msg = 'XXX'
+    elif lurk_cert[ 'certificate_type' ] == 'finger_print' :
+      if lurk_cert[ 'certificate_data' ] != self.conf.cert_finger_print[:4] :
+        raise LURKError( (lurk_cert[ 'certificate_data' ], \
+          self.conf.cert_finger_print[:4] ), 'unmatching fingerprint', \
+          'invalid_certificate')
+      hs_cert_msg = self.conf.hs_cert_msg
+    else: 
+      raise LURKError( lurk_cert, 'unable to generate certificate message', 'implementation_error')
+    ## simply appending 
+    self.insert( [ hs_cert_msg ] ) 
+
+  def update_certificate_verify( self, sig_algo ) :
+    """ update the handshake with the CertificateVerify """ 
     string_64 = bytearray()
     for i in range(64):
       string_64.extend(b'\20')
     if self.conf.role() == 'server':
-      ctx = b'server: TLS 1.3, server CertificateVerify'
+      ctx_string = b'server: TLS 1.3, server CertificateVerify'
+      handshake_ctx = self.ctx( 'server_certificate_verify' ) 
+      msg_type, ith = self.later_of( ['encrypted_extensions', \
+                        'certificate_request', 'certificate' ], mode='server' )
+    elif self.conf.role() == 'client':
+      ctx_string = b'client: TLS 1.3, client CertificateVerify'
+      if len( self.msg_i( 'finished' ) ) == 1 :
+        handshake_ctx = self.ctx( 'client_certificate_verify' ) 
+      elif len( self.msg_i( 'finished' ) ) == 2 :
+        handshake_ctx = self.ctx( 'post_handshake_auth' ) 
+      else: 
+        raise LURKError( self.msg_i, 'unexpected number of finished messages',\
+              'implementation_error')
+      msg_type = None 
+      ith = None
+      ## appending should be sufficient
     else:
-      ctx = b'client: TLS 1.3, client CertificateVerify'
-    if self.conf.role() == 'server':
-      ith = 0
-    else:
-      ith = 1
-    content = bytes( string_64 + ctx + b'\x00' + \
-              self.ctx( 'server_certificate_verify' ) )
+      raise LURKError( self.conf.role(), 'unknown', 'implementation_error')
+    content = bytes( string_64 + ctx_string + b'\x00' + handshake_ctx )
 
 #    if sig_algo.name not in self.conf.msg('s_init_cert_verify')['sig_algo']:
 #      raise LURKError( sig_algo, 'disabled by conf', \
@@ -1015,7 +1043,7 @@ class TlsHandshake:
 ##           Transcript-Hash(Handshake Context,
 ##                               Certificate*, CertificateVerify*))
     server_finished = { 'msg_type' : 'finished', 
-                        'data' : verify_data }
+                        'data' : { 'verify_data' : verify_data } }
     msg_type, ith = self.later_of( ['encrypted_extensions', 'certificate_request',\
                                'certificate', 'certificate_verify' ],\
                                mode='server' )
@@ -1023,11 +1051,10 @@ class TlsHandshake:
    
   def ctx( self, ctx:str) -> bytes:
     """returns the bytes messages of ctx """
-    print( "::: 1 - ctx: %s"%ctx )
     if ctx == 'early_secrets': 
       ## ClientHello or ClientHello1, HelloRetryRequest, ClientHello2
       msg_type = 'client_hello'
-      ith = len ( self.msg_index[ 'client_hello' ] - 1 ) 
+      ith = len ( self.msg_index[ 'client_hello' ] ) - 1  
 
     elif ctx == 'handshake_secrets': 
       ## ClientHello...ServerHello
@@ -1041,17 +1068,13 @@ class TlsHandshake:
       ## ClientHello...client Finished 
       msg_type = 'finished'
       ith = 1
-      print("::: finished (msg_type, ith): %s, %s"%(msg_type, ith)) 
     elif ctx == 'server_certificate_verify':
       ## ClientHello ... later of EncryptedExtensions 
       ## CertificateRequest, Certificate
       ## checking Finished has/have been generated
-      print( "::: 2 - ctx: %s"%ctx )
       msg_type, ith = self.later_of( \
                         [ 'encrypted_extensions', 'certificate_request',\
                           'certificate' ], mode='server' )
-      print( "::: server_certificate_verify (msg_type, ith): %s, %s"%\
-               ( msg_type, ith ) ) 
     elif ctx == 'client_certificate_verify':
       ## ClientHello ... later of server Finished EndOfEarlyData
       msg_type, ith = self.later_of( \
@@ -1062,8 +1085,9 @@ class TlsHandshake:
                           'certificate', 'certificate_verify' ], mode='server' )
     elif ctx == 'client_finished':
       pass
-    elif ctx == 'post_handshake':
-      pass
+    elif ctx == 'post_handshake_auth':
+      msg_type = 'certificate_request'
+      ith = msg_i('certificate_request')[ -1 ]
     elif ctx == 'psk_binder':
     ## Truncate(ClientHello1)
     ##  ClientHello1, HelloRetryRequest, Truncate(ClientHello2)
@@ -1072,62 +1096,138 @@ class TlsHandshake:
       raise LURKError( ctx, "unknown context", 'implementation_error' )
     return self.bytes_messages( msg_type=msg_type, ith=ith ) 
 
-class NewSessionTicket
+  def get_cipher( self  ):
+    try:
+      return self.msg( 'server_hello' )[ 'cipher_suite' ]
+    except:
+      raise LURKError( self.msg( 'server_hello' ),\
+                       "unable to determine hash function",\
+                       'invalid_handshake')
 
-  def __init__( self, conf ):
-   self.ticket_lifetime = conf.msg('s_new_ticket')[ 'ticket_life_time' ]
-   self.ticket_age_add = randbits( 32 ) 
-   self.ticket_nonce = token_byte( conf.msg('s_new_ticket')[ 'ticket_nonce_len' ] )
-   self.ticket = token_byte( conf.msg('s_new_ticket')[ 'ticket_nonce' ] )
-   self.extensions = []
+  def get_hash( self ):
+    server_cipher = self.get_cipher()
+    if 'SHA256' in  server_cipher:
+      tls_hash = 'SHA256'
+    elif 'SHA384' in server_cipher:
+      tls_hash = 'SHA384'
+    else:
+      raise LURKError( server_cipher, "unable to determine hash function",\
+                       'invalid_handshake')
+    return tls_hash
+
+  def get_ticket( self, selected_identity:int=None ):
+    try:
+      client_hello_exts = self.msg( 'client_hello' )[ 'extensions' ]
+      pre_shared_key = get_struct(client_hello_exts, 'extension_type', 'pre_shared_key' )
+      identities = pre_shared_key[ 'extension_data' ][ 'identities' ]
+      if selected_identity == None:
+        return identities
+      else:
+        return identities[ selected_identity ]
+    except:
+      raise LURKError( ( self.msg( 'client_hello' ), selected_identity ),\
+                       "unable to get psk_identity",\
+                       'invalid_handshake')
+
+  def update_binders( self, scheduler_list ):
+    binders = []
+    msg = self.hs_client_hello_to_partial()
+    for scheduler in scheduler_list :
+      binders.append( scheduler.tls_hash.verify_data( scheduler.secrets[ 'b' ], msg ) )
+    client_hello_exts = self.msg( 'client_hello' )[ 'extensions' ]
+    pre_shared_key = get_struct(client_hello_exts, 'extension_type', 'pre_shared_key' )
+    pre_shared_key_i = client_hello_exts.index( pre_shared_key )
+    ### we need to check if the index is necessary. if python works by reference we may not need this.
+    self.msg_list[ self.msg_i( 'client_hello' )[ -1 ] ][ pre_shared_key_i ]['binders' ] = binders
+
+
+  def hs_client_hello_to_partial( self ) -> bytes:
+    client_hello_exts = self.msg( 'client_hello' )[ 'extensions' ]
+    pre_shared_key = get_struct( client_hello_exts, 'extension_type', 'pre_shared_key' )
+    binders = pre_shared_key[ 'extension_data' ][ 'binders' ]
+    l = 0
+    for binder in binders:
+      l += len( binder )
+    return HSClientHello.build( self.msg( 'client_hello' ) )[: -l ] 
+    
+    
+  def hs_partial_to_client_hello ( self, bytes_client_hello ):
+    """ makes HS partial ClientHello parsable. 
+
+   fills the binders with zero bytes. The length is derived from 
+   the difference between the received bytes and the indicated length.
+   """
+    ##session_ticket = SessionTicket( conf, psk_identity=psk_id ) )
+    binders = bytearray( len( bytes_client_hello ) - int.from_bytes( bytes_client_hello[1:4] ) )## bytes 2, 3 and 4
+    return Handshake.parse( bytes_client_hello + binders ) 
+    
+
+
+class SessionTicket:
+## We need to be able to generate encrypted tickets.
+  def __init__( self, conf, psk_identity:dict = None ):
+    """ session ticket 
+
+      psk_identity = { 'identity' : xxx, 'obfuscated_ticket_age' :xxx }
+    """
+    self.conf = conf
+    self.psk_identity = psk_identity
+    if psk_identity != None:
+      self.read_ticket( psk_identity )
    
-  def export( self ):
-    return { 'ticket_lifetime' : self.ticket_lifetime, \
-             'ticket_age_add' : self.ticket_age_add, \
-             'ticket_nonce' : self.ticket_nonce, \
-             'ticket' : self.ticket }
+  def new( self, scheduler, cipher ):
+    self.cipher = cipher 
+    self.tls_hash = self.tls_hash_from_cipher( self.cipher )
+    ticket_nonce = token_bytes( self.conf.msg('s_new_ticket')[ 'ticket_nonce_len' ] )
+    self.psk =  scheduler.compute_psk( ticket_nonce )
+    
+    ticket = dumps( { 'cipher' : cipher, 'psk': self.psk } )
+    return { \
+      'ticket_lifetime' : self.conf.msg('s_new_ticket')[ 'ticket_life_time' ], \
+      'ticket_age_add' : randbits( 4 * 8 ), \
+      'ticket_nonce' : ticket_nonce, \
+      'ticket' : ticket, 
+      'extensions' :[] }
 
+  def read_ticket( self, psk_identity:dict ):
+    
+    ticket =  loads( psk_identity[ 'identity' ] )  
+    self.cipher = ticket[ 'cipher' ]
+    self.psk = ticket[ 'psk' ]
+    self.tls_hash = self.tls_hash_from_cipher( self.cipher )
 
+  def tls_hash_from_cipher( self, cipher:str )-> str:
+    if 'SHA256' in cipher:
+      tls_hash = 'SHA256'
+    elif 'SHA384' in self.cipher:
+      tls_hash = 'SHA384'
+    else:
+      raise LURKError( server_cipher, "unable to determine hash function",\
+                       'invalid_handshake')
+    return tls_hash 
+#      self.psk = seed.compute_psk( psk_id )
+#      self.psk_wrapper = PSKWrapper( self.psk, self.tls_hash, is_ext = False )
 
 class KeyScheduler:
 
-  def __init__( self, seed, ecdhe:bytes=None, psk:bytes=None): ## seed is TlsHanshake or KeyScheduler
+  def __init__( self, tls_hash, ecdhe:bytes=None, psk:bytes=None, is_ext=False): ## seed is TlsHanshake or KeyScheduler
     self.secrets = { 'b' : None, 'e_c' : None, 'e_x' : None,\
                     'h_c' : None, 'h_s' : None, 'a_c' : None,\
                     'a_s' : None, 'x' : None, 'r' : None }
     self.tickets = []
-    self.server_cipher = None
     self.ecdhe = ecdhe
     self.psk = psk
 
-    if isinstance(seed, TlsHandshake ) == True:
-      try:
-        self.server_cipher = handshake.msg( 'server_hello' )[ 'cipher_suite' ]
-      except:
-        raise LURKError( server_cipher, "unable to determine hash function",\
-                         'invalid_handshake')
-      if 'SHA256' in  server_cipher:
-        self.tls_hash = TlsHash()
-      elif 'SHA384' in server_cipher:
-        self.tls_hash = TlsHash(hashmod=hashlib.sha384)
-      else:
-        raise LURKError( server_cipher, "unable to determine hash function",\
-          'invalid_handshake')
-      print("::: ecdhe: %s"%ecdhe)
-      self.init_scheduler( ecdhe, psk )
-    elif isinstance( seed, KeyScheduler):
-      self.tls_hash = TlsHash( hashmod=seed.tls_hash.hashmod )
-      self.psk = seed.compute_psk( psk_id )
-      self.psk_wrapper = PSKWrapper( self.psk, self.tls_hash, is_ext = False )
-      self.server_cipher = seed.server_cipher
-
-
-  def init_scheduler( ecdhe=None, psk=None):
-    if self.ecdhe is None:
-      self.ecdhe = ecdhe
-    if self.psk is None:
-      self.psk = psk
-      self.scheduler = self.tls_hash.scheduler( self.ecdhe, self.psk )
+    if tls_hash == 'SHA256':
+      self.tls_hash = TlsHash( hashmod=hashlib.sha256 )
+    elif tls_hash == 'SHA384':
+      self.tls_hash = TlsHash( hashmod=hashlib.sha384 )
+    else: 
+      raise LURKError( tls_hash, 'unknown tls_hash (SHA256 or SHA384)', \
+                                           'implementation_error')
+    self.psk_wrapper = PSKWrapper( self.psk, self.tls_hash, is_ext = is_ext )
+        
+    self.scheduler = self.tls_hash.scheduler( self.ecdhe, self.psk )
 
   def process( self, secret_list:list, handshake:TlsHandshake ) -> None: 
   
@@ -1139,16 +1239,11 @@ class KeyScheduler:
         self.secrets[ 'e_c' ] = \
           self.psk_wrapper.client_early_traffic_secret( messages )
       if 'e_x' in secret_list:
-        self.secrets[ 'e_c' ] = \
+        self.secrets[ 'e_x' ] = \
           self.psk_wrapper.early_exporter_master_secret( messages )
 
     if 'h_c' in secret_list or  'h_c' in secret_list:
-#      try: 
-      ## 'ClientHello...ServerHello'  
       messages = handshake.ctx( 'server_certificate_verify' )
-#      except: 
-#        raise LURKError( self.handshake.msg_list, 'unable to find server_hello', \
-#                                           'implementation_error')
       if 'h_c' in secret_list:
         self.secrets[ 'h_c' ] = \
           self.scheduler.client_handshake_traffic_secret( messages )
@@ -1156,11 +1251,7 @@ class KeyScheduler:
           self.scheduler.server_handshake_traffic_secret( messages )
     if 'a_c' in secret_list or  'a_c' in secret_list or\
        'x' in secret_list:
-##      try: 
-        ## ClientHello...server Finished
       messages = handshake.ctx( 'server_finished' )
-##     except: 
-##        raise LURKError()
       if 'a_c' in secret_list: 
         self.secrets[ 'a_c' ] =\
           self.scheduler.client_application_traffic_secret_0( messages )
@@ -1173,120 +1264,619 @@ class KeyScheduler:
       messages = handshake.ctx( 'resumption_secret' )
       self.secrets[ 'r' ] = self.scheduler.resumption_master_secret( messages )
 
-  def get_tickets( self, ticket_number) -> list :
-    tickets = []
-    for i in range( ticket_number ) :
-      if len( self.tickets ) < self.conf.msg( 's_new_ticket' )['max_new_ticket_exchange']:
-        new_ticket = NewSessionTicket( self.conf )
-        self.tickets.append( new_ticket )
-        tickets.append( new_ticket.export( ) )
-      else:
-        break
-    return tickets
-
-  def compute_psk( self, psk_id:PskID ) -> bytes: ## or None
-    for ticket in self.tickets:
-      if ticket.ticket == psk_id.identity:
-        break
-    return self.tls_hash.hkdf_expand_label(
-            secret, b"resumption", ticket_nonce, self.tls_hash.hash_len )
+  def compute_psk( self, ticket_nonce ) -> bytes: ## or None
+    return self.tls_hash.hkdf_expand_label( self.secrets[ 'r' ] , b"resumption",\
+             ticket_nonce, self.tls_hash.hash_len )
+  def get_hash( self ):
+    server_cipher = self.get_cipher()
+    if 'SHA256' in  server_cipher:
+      tls_hash = 'SHA256'
+    elif 'SHA384' in server_cipher:
+      tls_hash = 'SHA384'
+    else:
+      raise LURKError( server_cipher, "unable to determine hash function",\
+                       'invalid_handshake')
+    return tls_hash
 
 
-class Session:
+class SInitCertVerifyReq:
 
-  def __init__( self, conf ): # type Conf
-    self.conf = conf 
-    self.scheduler = None
+  def __init__(self, req, conf ):
+    ## self.secret_req = secret_req 
+    self.conf = conf
+    self.mtype = 's_init_cert_verify'
+   
+    self.tag = Tag( req[ 'tag' ], self.mtype, conf )
+    self.session_id = SessionID( req[ 'session_id' ], self.mtype )
+    self.freshness = Freshness( req[ 'freshness' ] )
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, conf )
+    self.secret_request = SecretRequest(req[ 'secret_request' ], self.mtype, conf )
+    self.sig_algo = SigAlgo( req[ 'sig_algo' ] )
+    self.cert = req[ 'certificate' ]
+    
     self.handshake = TlsHandshake( conf )
-    self.next_mtype = None
-    self.id = None
+    self.handshake.insert( req[ 'handshake' ] )
+    self.handshake.is_compatible_with( self.mtype )
+    self.handshake.update_random( self.freshness )
+    self.scheduler = None
+    self.last_exchange = None 
+    self.next_mtype = 's_new_ticket'
 
-  def serve( self, payload, mtype, status, session_db=None ):
+  def resp( self ):
+    self.ephemeral.compute_server_key_exchange( self.handshake ) 
+    if self.ephemeral.method == 'secret_generated':
+      self.handshake.update_key_share( self.ephemeral.server_key_exchange )
+    self.scheduler = KeyScheduler( self.handshake.get_hash(), \
+                                   ecdhe=self.ephemeral.shared_secret )
+    self.scheduler.process( self.secret_request.of([ 'h_c', 'h_s' ] ), self.handshake )
+    self.handshake.update_certificate( self.cert )
+    self.handshake.update_certificate_verify( self.sig_algo )
+    self.scheduler.process( self.secret_request.of( [ 'a_c', 'a_s' ] ), self.handshake )
+    self.handshake.update_server_finished( self.scheduler )
+    self.scheduler.process( self.secret_request.of( [ 'x' ] ), self.handshake )
+    tag_resp = self.tag.resp( )
+    self.last_message  = tag_resp[ 'last_exchange' ]
+    return { 'tag' : tag_resp,
+             'session_id' : self.session_id.resp( ctx=self.tag ),
+             'ephemeral' : self.ephemeral.resp(),
+             'secret_list' : self.secret_request.resp( self.scheduler ),
+             'signature' : self.handshake.msg( 'certificate_verify' )[ 'signature' ] }
+
+class SNewTicketReq:
+
+  def __init__( self, req, conf, handshake, scheduler, session_id, \
+                ticket_counter ):
+    self.conf = conf
+    self.mtype = 's_new_ticket'
+    self.handshake = handshake
+    self.scheduler = scheduler
+    self.ticket_counter = ticket_counter
+
+    self.tag = Tag( req[ 'tag' ], self.mtype, conf )
+    self.session_id = session_id
+    self.session_id.update( self.mtype )
+    self.session_id.is_in_session( self.mtype, 'request', req[ 'session_id' ])
+    self.handshake.insert( req[ 'handshake' ] )
+    self.cert = req[ 'certificate' ]
+    self.ticket_nbr = self.nbr( req[ 'ticket_nbr' ] )
+    self.secret_request = SecretRequest(req[ 'secret_request' ], self.mtype, conf )
+    self.last_exchange = None 
+    self.next_mtype = 's_new_ticket'
+    self.ticket_list = []
+
+  def nbr( self, ticket_nbr ):
+    if self.ticket_counter <= self.conf.msg( 's_new_ticket' )[ 'max_tickets' ]:
+      n =  min( ticket_nbr, self.conf.msg( 's_new_ticket' )[ 'max_tickets' ] ) 
+      self.ticket_counter += n
+    else: 
+      n = 0
+    return n
+  
+  def resp( self ):
+    self.scheduler.process( self.secret_request.of( [ 'r' ] ), self.handshake )
+    tag_resp = self.tag.resp( ctx=self.ticket_counter )
+    self.last_message  = tag_resp[ 'last_exchange' ]
+    ticket = SessionTicket( self.conf ) 
+    for t in range( self.ticket_nbr ):
+      self.ticket_list.append( \
+        ticket.new( self.scheduler, self.handshake.get_cipher() ) )
+    tag_resp = self.tag.resp( )
+    self.last_message  = tag_resp[ 'last_exchange' ]
+    return { 'tag' : tag_resp,
+             'session_id' : self.session_id.resp( ),
+             'secret_list' : self.secret_request.resp( self.scheduler ),
+             'ticket_list' : self.ticket_list }
+
+    
+class SInitEarlySecretReq:
+
+  def __init__( self, req, conf ):
+    self.conf = conf
+    self.mtype = 's_init_early_secret'
+   
+    self.session_id = SessionID( req[ 'session_id' ], self.mtype )
+    self.freshness = Freshness( req[ 'freshness' ] )
+    
+    self.handshake = TlsHandshake( conf )
+    self.handshake.insert( req[ 'handshake' ] )
+    self.handshake.is_compatible_with( self.mtype )
+    self.session_ticket = SessionTicket( conf, \
+      psk_identity=self.handshake.get_ticket( req[ 'selected_identity' ] ) )
+
+    self.secret_request = SecretRequest(req[ 'secret_request' ], \
+                          self.mtype, conf, handshake=self.handshake )
+    self.scheduler = KeyScheduler( self.session_ticket.tls_hash, \
+                                   psk=self.session_ticket.psk, is_ext=False)
+    self.last_exchange = None 
+    self.next_mtype = 's_hand_and_app_secret'
+  
+  def resp( self ):
+    self.scheduler.process( self.secret_request.of([ 'b', 'e_c', 'e_x' ] ), self.handshake )
+    return  { 'session_id' : self.session_id.resp( ),
+              'secret_list' : self.secret_request.resp( self.scheduler ) }
+
+class SHandAndAppSecretReq: 
+
+  def __init__( self, req, conf, handshake, scheduler, session_id, session_ticket, freshness ):
+    self.conf = conf
+    self.mtype = 's_hand_and_app_secret'
+    self.tag = Tag( req[ 'tag' ], self.mtype, conf )
+    self.session_id = session_id
+    self.session_id.update( self.mtype )
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, conf )
+    self.freshness = freshness
+    self.handshake = handshake
+    self.secret_request = SecretRequest(req[ 'secret_request' ], self.mtype, conf )
+    self.handshake.insert( req[ 'handshake' ] )
+    self.scheduler = scheduler
+    self.session_ticket = session_ticket 
+    self.handshake.is_compatible_with( self.mtype, session_ticket=session_ticket )
+    self.handshake.update_random( self.freshness )
+    self.next_mtype = 's_new_ticket'
+      
+
+  def resp( self ):
+    self.ephemeral.compute_server_key_exchange( self.handshake ) 
+    if self.ephemeral.method == 'secret_generated':
+      self.handshake.update_key_share( self.ephemeral.server_key_exchange )
+    self.scheduler.ecdhe = self.ephemeral.shared_secret 
+    self.scheduler.process( self.secret_request.of([ 'h_c', 'h_s',  'a_c', 'a_s' ] ), self.handshake )
+    self.handshake.update_server_finished( self.scheduler )
+    self.scheduler.process( self.secret_request.of( [ 'x' ] ), self.handshake )
+    tag_resp = self.tag.resp( )
+    self.last_exchange  = tag_resp[ 'last_exchange' ]
+    return { 'tag' : tag_resp,
+             'session_id' : self.session_id.resp( ctx=self.tag ),
+             'ephemeral' : self.ephemeral.resp(),
+             'secret_list' : self.secret_request.resp( self.scheduler ) }
+
+
+class SSession:
+
+  def __init__( self, conf, session_db=None, ticket_db=None ): # type Conf
+    """ handles the various requests associated to a given session """ 
+    self.conf = conf 
+    self.next_mtype = None
+    self.scheduler = None
+    self.handshake = None
+    self.session_id = None
+    self.freshness = None
+    self.next_mtype = None
+    self.last_exchange = None
+    self.ticket_counter = 0
+    self.session_db = session_db
+    self.ticket_db = ticket_db
+
+  def save_session_ctx( self, req ):
+    """ saves context for next messages"""
+    if req.mtype in 's_init_cert_verify':
+      self.scheduler = req.scheduler
+      self.handshake = req.handshake
+      self.session_id = req.session_id
+      self.last_exchange = req.last_exchange
+    elif req.mtype == 's_new_ticket':
+      self.ticket_counter = req.ticket_counter 
+      self.last_exchange = req.last_exchange
+    elif req.mtype == 's_init_early_secret':
+      self.scheduler = req.scheduler
+      self.handshake = req.handshake
+      self.session_id = req.session_id
+      self.freshness = req.freshness
+      self.session_ticket = req.session_ticket
+    elif req.mtype == 's_hand_and_app_secret':
+      self.last_exchange = req.last_exchange
+    else: 
+      raise LURKError( req.mtype, "unknown mtype", 'implementation_error')
+    self.next_mtype = req.next_mtype
+    
+  def is_expected_message( self, mtype, status ):
     if status != 'request':
       raise LURKError( status, "expecting 'request' status", \
                        'invalid_request')
-    if self.next_mtype == None:
-      self.next_mtype = mtype
-    if mtype != self.next_mtype:
-      raise LURKError( mtype, "expecting %s mtype "%self.next_mtype, \
-                       'invalid_request')
-    if mtype == 's_init_early_secret':
+    if ( self.next_mtype == None and 'init' in mtype ) or\
+       mtype == self.next_mtype:
       pass
-    elif mtype == 's_init_cert_verify':
-      secret_req = SecretReq( payload[ 'secret_request' ], self.conf, mtype )
-      signing_req = SigningReq( payload[ 'signing_request' ], self.conf, mtype )
-      ## initializing objects 
-      print("::: hs_ctx: %s"% secret_req.hs_ctx)
-      self.handshake.insert( secret_req.hs_ctx )
-      shared_secret  = secret_req.ephemeral.ecdhe
-      if secret_req.ephemeral.method == 'secret_generated':
-        self.handshake.update_server_key_share( secret_req.ephemeral )
-      self.scheduler = KeyScheduler( self.handshake, shared_secret )
-      self.scheduler.process( secret_req.secret_list([ 'h_c', 'h_s' ] ), self.handshake )
-      self.handshake.update_server_certificate()
-      self.handshake.update_server_certificate_verify( signing_req )
-      self.scheduler.process( secret_req.secret_list( [ 'a_c', 'a_s' ] ), self.handshake )
-      self.handshake.update_server_finished( self.scheduler )
-      self.scheduler.process( secret_req.secret_list( [ 'x' ] ), self.handshake )
-      print("::: certificate_verify: %s"%self.handshake.msg( 'certificate_verify' ) ) 
-      sig = self.handshake.msg( 'certificate_verify' )[ 'signature' ] 
-      print("::: scheduler: %s"%self.scheduler ) 
-      resp = { 'secret_response' : secret_req.serve( self.scheduler ), 
-               'signing_response' : { 'signature' : sig } }
-      self.id = secret_req.session_id
-      if isinstance( self.id, SessionID ):
-        self.next_mtype = 's_new_ticket'
-      else:
-        self.next_mtype = None
+    else: 
+      raise LURKError( mtype, "expecting %s mtype or initial request"%\
+              self.next_mtype, 'invalid_request') 
+
+  def serve( self, payload, mtype, status ):
+    self.is_expected_message( mtype, status )
+    if mtype == 's_init_cert_verify':
+      req = SInitCertVerifyReq( payload, self.conf )
     elif mtype == 's_new_ticket':
-      secret_req  = SecretReq( payload, self.conf, mtype )
-      self.handshake.insert( secret_req.hs_ctx )
-      self.scheduler.process( secret_req.secret_list( [ 'r' ] ), self.handshake )
-      resp = secret_req.serve( self.scheduler )
-      resp[ 'session_id' ] = self.id.outbound
-      if len( self.scheduler.tickets) < self.conf.msg( 's_new_ticket' )[ 'max_new_ticket_exchange' ]:
-        self.next_mtype = 's_new_ticket'
-      else:
-        self.next_mtype = None
+      req = SNewTicketReq( payload, self.conf, self.handshake,\
+              self.scheduler, self.session_id, self.ticket_counter )
     elif mtype == 's_init_early_secret':
-      secret_req = SecretReq( payload[ 'secret_request' ], self.conf, mtype )
-      self.handshake.insert( secret_req.hs_ctx )
-      parent_session = session_db.search( secret_req.psk_id )
-      psk = parent_session.compute_psk( secret_req.psk_id )
-      ## TBD: check same Hash and same cipher_suite. 
-      self.handshake.insert( secret_req.hs_ctx )
-      self.scheduler = KeyScheduler( parent_session.scheduler, psk=psk)
-      self.scheduler.process( secret_req.secret_list([ 'b', 'e_c', 'e_x' ] ), self.handshake )
-      resp = { 'secret_response' : secret_req.serve( self.scheduler ) } 
-      self.id = secret_req.session_id
-      if isinstance( self.id, SessionID ):
-        self.next_mtype = 's_hand_and_app_secret'
-      else:
-        self.next_mtype = None
-      
-      
+      req = SInitEarlySecretReq( payload, self.conf )
     elif mtype == 's_hand_and_app_secret':
-      secret_req = SecretReq( payload[ 'secret_request' ], self.conf, mtype )
-      self.handshake.insert( secret_req.hs_ctx )
-      if isinstance( secret_req.ephemeral, Ephemeral ) is True:
-        shared_secret  = secret_req.ephemeral.ecdhe
-        if secret_req.ephemeral.method == 'secret_generated':
-          self.handshake.update_server_key_share( secret_req.ephemeral )
-      else:
-        shared_secret = None
-      self.scheduler.init_scheduler( shared_secret, psk )
-      shared_secret  = secret_req.ephemeral.ecdhe 
-      self.scheduler.process( secret_req.secret_list([ 'h_c', 'h_s', 'a_c', 'a_s' ] ), self.handshake )
-      self.handshake.update_server_finished( self.scheduler )
-      self.scheduler.process( secret_req.secret_list( [ 'x' ] ), self.handshake )
-      
+      req = SHandAndAppSecretReq( payload, self.conf, self.handshake,\
+              self.scheduler, self.session_id, self.session_ticket, self.freshness )
     else: 
       raise LURKError( mtype, "expecting %s mtype "%self.next_mtype, \
                        'invalid_request')
-    
+    resp = req.resp()
+    self.save_session_ctx( req )
     return resp
 
+class CInitCertVerify:
 
+  def __init__(self, req, conf ):
+    ## self.secret_req = secret_req 
+    self.conf = conf
+    self.mtype = 'c_init_cert_verify'
+   
+    self.freshness = Freshness( req[ 'freshness' ] )
+    self.sig_algo = SigAlgo( req[ 'sig_algo' ] )
+    self.cert = req[ 'certificate' ]
+    
+    self.handshake = TlsHandshake( conf )
+    self.handshake.insert( req[ 'handshake' ] )
+    self.handshake.is_compatible_with( self.mtype )
+    self.last_exchange = None 
+    if self.conf.msg( self.mtype )[ 'post_handshake_authentication' ] == True:
+      self.next_mtype = 'c_post_hand_auth'
+    self.next_type = None
+
+  def resp( self ):
+    self.handshake.update_certificate( self.cert )
+    self.handshake.update_certificate_verify( self.sig_algo )
+    return { 'signature' : self.handshake.msg( 'certificate_verify' )[ 'signature' ] }
+
+
+
+class CInitPostHandAuthReq:
+ 
+  def __init__(self, req, conf ):
+    self.conf = conf
+    self.mtype = 'c_init_post_hand_auth'
+   
+    self.tag = Tag( req[ 'tag' ], self.mtype, conf )
+    self.session_id = SessionID( req[ 'session_id' ], self.mtype )
+    self.freshness = Freshness( req[ 'freshness' ] )
+    self.sig_algo = SigAlgo( req[ 'sig_algo' ] )
+    self.cert = req[ 'certificate' ]
+    
+    self.handshake = TlsHandshake( conf )
+    self.handshake.insert( req[ 'handshake' ] )
+    self.handshake.is_compatible_with( self.mtype )
+    cert_req_ctx = self.handshake.msg( 'certificate_request', ith=-1 )['certificate_request_context']  
+    self.conf.load_cert( cert_req_ctx=cert_req_ctx )
+
+    self.last_exchange = None 
+    if self.conf.msg( self.mtype )[ 'post_handshake_authentication' ] == True:
+      self.next_mtype = 'c_post_hand_auth'
+    self.next_mtype = 'c_post_hand_auth'
+
+  def resp( self ):
+    self.handshake.update_certificate( self.cert )
+    self.handshake.update_certificate_verify( self.sig_algo )
+    tag_resp = self.tag.resp( )
+    self.last_message  = tag_resp[ 'last_exchange' ]
+    sig = self.handshake.msg( 'certificate_verify', ith=-1 )[ 'signature' ]
+    self.handshake.post_post_hand_auth()
+    return { 'tag' : tag_resp,
+             'session_id' : self.session_id.resp( ctx=self.tag ),
+             'signature' : sig }
+
+class CPostHandAuthReq:
+
+  def __init__(self, req, conf, handshake, session_id, post_hand_auth_counter ):
+    self.conf = conf
+    self.mtype = 'c_post_hand_auth'
+   
+    self.tag = Tag( req[ 'tag' ], self.mtype, conf )
+    self.session_id = session_id 
+    self.session_id.update( self.mtype )
+    self.sig_algo = SigAlgo( req[ 'sig_algo' ] )
+    self.cert = req[ 'certificate' ]
+    
+    self.handshake = handshake
+    self.handshake.insert( req[ 'handshake' ] )
+    self.handshake.is_compatible_with( self.mtype )
+    cert_req_ctx = self.handshake.msg( 'certificate_request', ith=-1 )['certificate_request_context']  
+    self.conf.load_cert( cert_req_ctx=cert_req_ctx )
+
+    self.last_exchange = None 
+    self.next_mtype = 'c_post_hand_auth'
+    self.post_hand_auth_counter += 1
+    if self.post_hand_auth_counter <= self.conf.msg( self.mtype )[ 'max_post_handshake_authentication' ] == True:
+      self.next_mtype = 'c_post_hand_auth'
+    self.next_mtype = None
+
+  def resp( self ):
+    self.handshake.update_certificate( self.cert )
+    self.handshake.update_certificate_verify( self.sig_algo )
+    tag_resp = self.tag.resp( ctx=self.post_hand_auth_counter )
+    self.last_message  = tag_resp[ 'last_exchange' ]
+    sig = self.handshake.msg( 'certificate_verify', ith=-1 )[ 'signature' ]
+    self.handshake.post_post_hand_auth()
+    return { 'tag' : tag_resp,
+             'session_id' : self.session_id.resp( ctx=self.tag ),
+             'signature' : sig }
+
+
+class CInitEphemeralReq:
+
+  def __init__(self, req, conf ):
+    self.conf = conf
+    self.mtype = 'c_init_ephemeral'
+   
+    self.session_id = SessionID( req[ 'session_id' ], self.mtype )
+    self.freshness = Freshness( req[ 'freshness' ] )
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, conf )
+    
+    self.handshake = TlsHandshake( conf )
+    client_hello = self.handshake.hs_partial_to_client_hello ( req[ 'handshake'] [0] )
+    self.handshake.insert( [ client_hello ] )
+    self.handshake.is_compatible_with( self.mtype )
+
+    self.next_mtype = 'c_hand_and_app_secret'
+
+  def resp( self ):
+    self.ephemeral.compute_server_key_exchange( self.handshake ) 
+    self.handshake.update_key_share( self.ephemeral.server_key_exchange )
+    return { 'session_id' : self.session_id.resp( ctx=self.tag ),
+             'ephemeral' : self.ephemeral.resp() }
+
+
+class CInitEarlySecretReq:
+
+  def __init__( self, req, conf ):
+    self.conf = conf
+    self.mtype = 'c_init_early_secret'
+   
+    self.session_id = SessionID( req[ 'session_id' ], self.mtype )
+    self.freshness = Freshness( req[ 'freshness' ] )
+    
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, conf )
+    self.handshake = TlsHandshake( conf )
+    client_hello = self.handshake.hs_partial_to_client_hello ( req[ 'handshake'] [0] )
+    self.handshake.insert( [ client_hello ] )
+    self.handshake.is_compatible_with( self.mtype )
+    self.scheduler_list = []
+    self.next_mtype = 'c_hand_and_app_secret'
+    
+    for psk_id in self.handshake.get_ticket():
+      session_ticket = SessionTicket( conf, psk_identity=psk_id )
+      scheduler = KeyScheduler( session_ticket.tls_hash, \
+                                psk=session_ticket.psk, is_ext=False)
+      scheduler.process( self.secret_request.of([ 'b' ] ), self.handshake )
+      self.scheduler_list.append( scheduler ) 
+##       
+##    
+##      binders.append( )
+##      self.scheduler_list.
+##    self.session_ticket = SessionTicket( conf, \
+##      psk_identity=self.handshake.get_ticket( req[ 'selected_identity' ] ) )
+##
+    self.secret_request = SecretRequest(req[ 'secret_request' ], \
+                          self.mtype, conf, handshake=self.handshake )
+    self.last_exchange = None 
+    self.next_mtype = 's_hand_and_app_secret'
+  
+  def resp( self ):
+    self.ephemeral.compute_server_key_exchange( self.handshake )
+    if self.ephemeral.method == 'secret_generated':
+      self.handshake.update_key_share( self.ephemeral.server_key_exchange )
+    self.handshake_update_binders( self.scheduler_list )
+    secret_list_list = [] 
+    for scheduler in self.scheduler_list:
+      scheduler.process( self.secret_request.of([ 'b', 'e_c', 'e_x' ] ), self.handshake )
+      secret_list_list.append( self.secret_request.resp( scheduler )) 
+    return  { 'session_id' : self.session_id.resp( ),
+              'ephemeral' : self.ephemeral.resp(),
+              'secret_list_list' : self.secret_request.resp( self.scheduler ) }
+
+class CHandAndAppSecretReq: 
+
+  def __init__( self, payload, conf, handshake, scheduler_list, session_id, ephemeral_method ):
+    self.conf = conf
+    self.mtype = 'c_hand_and_app_secret'
+    self.tag = Tag( req[ 'tag' ], self.mtype, conf )
+    self.session_id = session_id
+    self.session_id.update( self.mtype )
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype,\
+                                conf, ephemeral_method )
+
+    self.handshake = handshake
+    self.secret_request = SecretRequest(req[ 'secret_request' ], self.mtype, conf )
+    self.handshake.insert( req[ 'handshake' ][0] ) ## ServerHello
+    self.tls_cipher_text = req[ 'handshake' ][1]
+    if len( req[ 'handshake' ] ) > 2:
+      self.handshake_remainder =  req[ 'handshake' ] [ 1: ] 
+    else:
+      self.handshake_remainder = None
+    if self.handshake.has_ext( 'key_share', 'agreed' ):
+      self.ephemeral.compute_server_key_exchange( self.handshake )
+    if self.hanshake.has_ext( 'psk', 'proposed' ) == False: 
+    ## ecdhe-only c_init_ephemeral
+        self.scheduler = KeyScheduler( self.handshake.get_hash(), \
+                                ecdhe=self.ephemeral.shared_secret, is_ext=False)
+    else:
+    ## presence of psk/psk-echde in ClientHello indicates c_init_early_secret
+      if self.handshake.has_ext( 'psk', 'agreed' ) == True:
+        selected_identity = self.handshake.get_selected_identity() 
+        self.scheduler = self.scheduler_list( selected_identity )
+      else: ## ecdhe
+        self.scheduler = KeyScheduler( self.handshake.get_hash(), \
+                                ecdhe=self.ephemeral.shared_secret, is_ext=False)
+    ## do we need the ticket
+##    self.session_ticket = session_ticket 
+##    self.handshake.is_compatible_with( self.mtype, session_ticket=session_ticket )
+##    self.handshake.update_random( self.freshness )
+    self.next_mtype = []
+    if ( self.conf.msg( 'c_post_auth' ) != None and \
+         self.handshake.has_ext( 'post_handshake_auth', 'proposed') ) == True :
+      self.next_mtype.append( 'c_post_hand_auth' )
+    self.next_mtype = [ 'c_register_tickets' ]
+      
+
+  def resp( self ):
+    self.scheduler.process( self.secret_request.of([ 'h_c', 'h_s' ] ), self.handshake )
+    ## decrypt handshake
+    secret = self.scheduler.secret_list[ 'h_s' ] 
+##    server_write_key = self.sheduler.tls_hash.derive_key( secret, )  
+##    server_write_iv =  self.sheduler.tls_hash.derive_key( secret, )
+##   
+    ## from section 5.2
+    ## encrypted packet is:
+    ##  struct {
+##          ContentType opaque_type = application_data; /* 23 */
+##          ProtocolVersion legacy_record_version = 0x0303; /* TLS v1.2 */
+##          uint16 length;
+##          opaque encrypted_record[TLSCiphertext.length];
+##      } TLSCiphertext;
+
+    ## additional data = opaque || legacy || length
+## section 5.3 describes how the nonce is derived
+## iv_length define dby the cipher suite
+## seq = 0 (length = iv_length )
+## seq xor server_write_iv
+##
+##    plaintext of encrypted_record =
+##      AEAD-Decrypt(peer_write_key, nonce,
+##                       additional_data, AEADEncrypted)
+##      struct {
+##          opaque content[TLSPlaintext.length];
+##          ContentType type;
+##          uint8 zeros[length_of_padding];
+##      } TLSInnerPlaintext;
+    cipher = self.handshake.get_cipher() 
+    if cipher == 'TLS_CHACHA20_POLY1305_SHA256' :
+      aead == TLS_CHACHA20_POLY1305_SHA256( secret )
+    elif cipher == 'TLS_AES_128_GCM_SHA256':
+      aead = TLS_AES_128_GCM_SHA256( secret )
+    elif cipher == 'TLS_AES_256_GCM_SHA256' :
+      aead = TLS_AES_256_GCM_SHA256( secret )
+    elif cipher == 'TLS_AES_256_GCM_SHA384' : 
+      aead = TLS_AES_256_GCM_SHA384()
+    elif cipher == 'TLS_AES_128_CCM_SHA256' :
+      aead = TLS_AES_128_CCM_SHA256( secret )
+    elif cipher == 'TLS_AES_128_CCM_8_SHA256' :
+      aead = TLS_AES_128_CCM_8_SHA256( secret )
+    bytes_tls_cipher_text = TLSCiphertext.build( self.tls_cipher_text )
+    additional_data = bytes_tls_cipher_text[:5] 
+    bytes_plain_text = aead.decrypt( \
+      self.tls_cipher_text[ 'encrypted_record' ], additional_data )
+    length_of_padding = 0
+    while bytes_plain_text[ -1 -length_of_padding ] == '\x00':
+      length_of_padding += 1
+    plain_text = TLSInnerPlaintext.parse( bytes_plain_text, \
+                   _length_of_padding=length_of_padding ) 
+    content = plain_text[ 'content' ]
+    ## content = {EncryptedExtensions}, {CertificateRequest*},  
+    ## {Certificate*}, {CertificateVerify*}  {Finished}
+    encrypted_msgs = ClearTextHSMsgs.parse()
+    self.handshake.insert( encrypted_msgs )
+    if self.handshake_remainder != None:
+      self.handshake.insert( self.handshake_remainder )
+    self.scheduler.process( self.secret_request.of([ 'h_c', 'h_s', 'x' ] ), self.handshake )
+
+    ## generates messages
+    cert_req = self.handshake.msg( 'certificate_request' )
+    if cert_req != None:
+      cert_req_ctx = cert_req[ 'certificate_request_context' ]
+      self.conf.load_cert( cert_req_ctx=cert_req_ctx )
+      self.handshake_update_certificate()
+      self.handshake.update_certificate_verify()
+    self.handshake.update_client_finished( self.scheduler )
+    
+    self.scheduler.process( self.secret_request.of( [ 'r' ] ), self.handshake )
+    tag_resp = self.tag.resp( )
+    self.last_exchange  = tag_resp[ 'last_exchange' ]
+    cert_verify = self.handshake.msg( 'certificate_verify', -1 )
+    return { 'tag' : tag_resp,
+             'session_id' : self.session_id.resp( ctx=self.tag ),
+             'LURKTLS13Certificate': cert, 
+             'sig_algo' : cert_verify[ 'algorithm' ], 
+             'signature' : cert_verify[ 'signature' ],
+             'secret_list' : self.secret_request.resp( self.scheduler ) }
+
+class register_tickets:
+
+  def resp( self ):
+    tag_resp = self.tag.resp( )
+    self.last_exchange  = tag_resp[ 'last_exchange' ]
+    return { 'tag' : tag_resp,
+             'session_id' : self.session_id.resp( ctx=self.tag ) }
+
+
+
+
+class CSession:
+  def __init__( self, conf, session_db=None, ticket_db=None ): # type Conf
+    """ handles the various requests associated to a given session """ 
+    self.conf = conf
+    self.next_mtype = None
+    self.scheduler = None
+    self.handshake = None
+    self.session_id = None
+    self.next_mtype = None
+    self.last_exchange = None
+    self.ticket_counter = 0
+    self.session_db = session_db
+    self.ticket_db = ticket_db
+    self.scheduler_list = None
+
+  def save_session_ctx( self, req ):
+    """ saves context for next messages"""
+    if req.mtype == 'c_init_cert_verify':
+      self.last_exchange = True
+    elif req.mtype == 'c_init_post_auth':
+      self.handshake = req.handshake
+      self.session_id = req.session_id
+    elif req.mtype == 'c_post_auth':
+      self.handshake = req.handshake
+      self.session_id = req.session_id
+      self.post_hand_auth_counter += 1
+    elif req.mtype == 'c_init_ephemeral':
+      self.handshake = req.handshake
+      self.session_id = req.session_id
+      self.ephemeral_method = req.ephemeral.method
+    elif req.mtype == 'c_init_early_secret':
+      self.session_id = req.session_id
+      self.scheduler_list = req.scheduler_list
+      self.handshake = req.handshake
+      self.ephemeral_method = req.ephemeral.method
+    elif req.mtype == 'c_hand_and_app_secret':
+      self.last_exchange = req.last_exchange
+      self.post_hand_auth_counter = 0
+    else: 
+      raise LURKError( req.mtype, "unknown mtype", 'implementation_error')
+    self.next_mtype = req.next_mtype
+    
+  def is_expected_message( self, mtype, status ): 
+    if status != 'request':
+      raise LURKError( status, "expecting 'request' status", \
+                       'invalid_request')
+    if ( self.next_mtype == None and 'init' in mtype ) or\
+       mtype == self.next_mtype:
+      pass
+    else: 
+      raise LURKError( mtype, "expecting %s mtype or initial request"%\
+              self.next_mtype, 'invalid_request') 
+
+  def serve( self, payload, mtype, status ):
+    self.is_expected_message( mtype, status )
+    if mtype == 'c_init_post_hand_auth':
+      req = CInitPostHandAuthReq( payload, self.conf )
+    elif mtype == 'c_post_hand_auth':
+      req = CPostHandAuthReq( payload, self.conf, self.handshake, self.session_id, post_hand_auth_counter=self.post_hand_auth_counter )
+    elif mtype == 'c_init_ephemeral': ## only ECDHE
+      req = CInitEphemeralReq( payload, self.conf )
+    elif mtype == 'c_init_early_secret':
+      req = CInitEarlySecret( payload, self.conf )
+    elif mtype == 'c_hand_and_app_secret':
+      req = CHandAndAppSecret( payload, self.conf, self.handshake, \
+              self.scheduler_list, self.session_id,\
+              self.ephemeral_method )
+    else: 
+      raise LURKError( mtype, "expecting %s mtype "%self.next_mtype, \
+                       'invalid_request')
+    resp = req.resp()
+    self.save_session_ctx( req )
+    return resp
 
 class SessionDB:
 
@@ -1294,80 +1884,159 @@ class SessionDB:
 
     self.db = {}
 
-  def store( self, session:Session):
-    self.session_db[ session.id.inbound ] = session
+  def store( self, session:SSession):
+    self.db[ session.session_id.inbound ] = session
 
   def unstore( self, session_id:bytes ):
     return self.db[ session_id ]
 
-  def search_session(psk_id:PskID) -> Session :  
-    for session in self.db.values():
-      for ticket in session.tickets:
-        if ticket.ticket == psk_id.identity:
-          return session
-    raise LURKError( psk_id, "unable to find ticket", 'invalid_psk') 
+##  def search_session(psk_id:PskID) -> Session :  
+##    for session in self.db.values():
+##      for ticket in session.tickets:
+##        if ticket.ticket == psk_id.identity:
+##          return session
+##    raise LURKError( psk_id, "unable to find ticket", 'invalid_psk') 
 
-class LURKExt:
+class TicketDb:
+
+  def __init__( self ):
+    pass
+
+
+class TLS13SServer:
   def __init__(self, conf=default_conf):
     ## configuration
     ## session DB
     self.session_db = SessionDB()
+    self.conf = conf 
 
-
-    
-  def get_ctx_struct(self, status, mtype):
-    ctx_struct = { '_type': mtype, '_status' : status}
-    if mtype == 's_hand_and_app_secret':
-      ctx_struct['_session_id_agreed'] = self.conf[mtype][0]['session_id_enable']
-    return ctx_struct
-
-  def parse( self, status, mtype, pkt_bytes ):
-    """ parse payload """
-    ctx_struct = self.get_ctx_struct(status, mtype)
+  def serve( self, req ):
     try:
-      return LURKTLS13Payload.parse(pkt_bytes, **ctx_struct )
-    except Error as e:
-      self.treat_exception(e)
-
-  def build( self, status, mtype, **kwargs):
-    ctx_struct = self.get_ctx_struct(status, mtype)
-    try:
-      return LURKTLS13Payload.parse.build( **kwargs, **ctx_struct)
-    except Error as e:
-      self.treat_exception(e)
-
-  def serve( self, mtype, request  ):
-    try:
+      header = req[ 'header' ]
+      if header[ 'designation' ] != 'tls13':
+          raise LURKError( header, "expecting 'tls13'", 'invalid_designation')
+      if header[ 'version' ] != 'v1':
+          raise LURKError( header, "expecting 'v1'", 'invalid_version')
+      if header[ 'status' ] != 'request' :
+          raise LURKError( header, "expecting 'request'", 'invalid_status')
+      mtype = req[ 'header' ][ 'type' ]
+      payload_req = req[ 'payload' ] 
       if mtype in [ 's_init_early_secret', 's_init_cert_verify' ]:
-        session = Session( self.conf )
-        response  = session.serve( request, mtype, 'request')
-        if session.id != None :
+        session = SSession( self.conf )
+        payload_resp  = session.serve( payload_req, mtype, 'request')
+        if session.session_id != None :
           self.session_db.store( session ) 
-        return response
       elif mtype == 's_hand_and_app_secret':
-        return s_hand_and_app.serve(request)
+        try:
+          session = self.session_db.unstore( req[ 'payload' ][ 'session_id' ] )
+        except KeyError:
+          raise LURKError( req, "session_id not found in DB", 'invalid_session_id')
+        payload_resp = session.serve( payload_req, mtype, 'request' )
       elif mtype == 's_new_ticket':
         try:
-          session = self.session_db.unstore( request['session_id' ] )
-          response  = session.serve( request, mtype, 'request')
+          session = self.session_db.unstore( req[ 'payload' ][ 'session_id' ] )
         except KeyError:
-          raise LURKError( request, "session_id not found in DB", 'invalid_session_id')
+          raise LURKError( req, "session_id not found in DB", 'invalid_session_id')
+        payload_resp  = session.serve( payload_req, mtype, 'request')
+      else:
+        raise LURKError( header, "unexpected type", 'invalid_type')
+      return { 'header' :  \
+               { 'designation' : 'tls13', 
+                 'version' : 'v1', 
+                 'type' : mtype,
+                 'status' : 'success', 
+                 'id' : req[ 'header' ][ 'id' ]
+               }, 
+              'payload' : payload_resp
+            }             
+    except Exception as e:
+      if isinstance( e, LURKError ):
+        status = e.status
+        print( "----------")
+        print( e.expresion ) 
+        print( e.message ) 
+        print( e.status ) 
+        print( "----------")
+      else:
+        status = 'undefined_error'
+        print( "----------")
+        print( getattr(e, 'message', repr(e) ) )
+        print( "----------")
+      payload_resp = { 'lurk_state' : b'\x00\x00\x00\x00' } 
+      return { 'header' :  \
+               { 'designation' : 'tls13', 
+                 'version' : 'v1', 
+                 'type' : mtype,
+                 'status' : status, 
+                 'id' : req[ 'header' ][ 'id' ]
+               }, 
+              'payload' : payload_resp
+            }             
+  
 
-    except Error as e:
-      self.treat_exception(e)
-
-  def check( self, status, mtype, payload ):
-      return self.ext_class[ ( status, mtype ) ].check( payload )
-
-  def show( self, status, mtype, pkt_bytes, prefix="", le_len=LINE_LEN ):
-      return self.ext_class[ ( status, mtype ) ].show( pkt_bytes, \
-                 prefix=prefix, line_len=line_len )
-
-  def build_payload( self, status, mtype, payload ):
-      return self.ext_class[ ( status, mtype ) ].build_payload(**kwargs )
-
-  def treat_exception(self, e):
-    ##return status_code
-    pass
+##
+##
+##class LURKExt:
+##  def __init__(self, conf=default_conf):
+##    ## configuration
+##    ## session DB
+##    self.session_db = SessionDB()
+##
+##
+##    
+##  def get_ctx_struct(self, status, mtype):
+##    ctx_struct = { '_type': mtype, '_status' : status}
+##    if mtype == 's_hand_and_app_secret':
+##      ctx_struct['_session_id_agreed'] = self.conf[mtype][0]['session_id_enable']
+##    return ctx_struct
+##
+##  def parse( self, status, mtype, pkt_bytes ):
+##    """ parse payload """
+##    ctx_struct = self.get_ctx_struct(status, mtype)
+##    try:
+##      return LURKTLS13Payload.parse(pkt_bytes, **ctx_struct )
+##    except Error as e:
+##      self.treat_exception(e)
+##
+##  def build( self, status, mtype, **kwargs):
+##    ctx_struct = self.get_ctx_struct(status, mtype)
+##    try:
+##      return LURKTLS13Payload.parse.build( **kwargs, **ctx_struct)
+##    except Error as e:
+##      self.treat_exception(e)
+##
+##  def serve( self, mtype, request  ):
+##    try:
+##      if mtype in [ 's_init_early_secret', 's_init_cert_verify' ]:
+##        session = Session( self.conf )
+##        response  = session.serve( request, mtype, 'request')
+##        if session.id != None :
+##          self.session_db.store( session ) 
+##        return response
+##      elif mtype == 's_hand_and_app_secret':
+##        return s_hand_and_app.serve(request)
+##      elif mtype == 's_new_ticket':
+##        try:
+##          session = self.session_db.unstore( request['session_id' ] )
+##          response  = session.serve( request, mtype, 'request')
+##        except KeyError:
+##          raise LURKError( request, "session_id not found in DB", 'invalid_session_id')
+##
+##    except Error as e:
+##      self.treat_exception(e)
+##
+##  def check( self, status, mtype, payload ):
+##      return self.ext_class[ ( status, mtype ) ].check( payload )
+##
+##  def show( self, status, mtype, pkt_bytes, prefix="", le_len=LINE_LEN ):
+##      return self.ext_class[ ( status, mtype ) ].show( pkt_bytes, \
+##                 prefix=prefix, line_len=line_len )
+##
+##  def build_payload( self, status, mtype, payload ):
+##      return self.ext_class[ ( status, mtype ) ].build_payload(**kwargs )
+##
+##  def treat_exception(self, e):
+##    ##return status_code
+##    pass
 
 

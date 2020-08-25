@@ -8,19 +8,23 @@ from pylurk.extensions.tls13_tls13_struct import PskIdentity, Certificate,\
   NewSessionTicket, ClientHello, ServerHello, EndOfEarlyData,\
   EncryptedExtensions, CertificateRequest, Certificate, CertificateVerify,\
   Finished, KeyUpdate,\
-  HSClientHello, HSServerHello, HSEndOfEarlyData, HSEncryptedExtensions,\
-  HSCertificateRequest, HSCertificate, HSCertificateVerify, HSFinished
-  
+  HSClientHello, HSPartialClientHello, HSServerHello, HSEndOfEarlyData, HSEncryptedExtensions,\
+  HSCertificateRequest, HSCertificate, HSCertificateVerify, HSFinished, \
+  TLSCiphertext
+from pylurk.extensions.lurk_lurk_struct import ErrorResponse, NoPayload
 
+## TODO
+##  * structure for secret list secret_request depending on _type
+##  * handshakeList is does not handle properly the combination of multiple optional messages. 
 
 
 TLS13Type = Enum( BytesInteger(1), 
   capabilities = 0, 
   ping = 1,
-  s_init_early_secret = 2,
-  s_init_cert_verify = 3,
-  s_hand_and_app_secret = 4,
-  s_new_ticket = 5,
+  s_init_cert_verify = 2,
+  s_new_ticket = 3,
+  s_init_early_secret = 4,
+  s_hand_and_app_secret = 5,
   c_binder_key = 6, 
   c_init_early_secret = 7, 
   c_init_hand_secret = 8,
@@ -35,13 +39,19 @@ TLS13Status = Enum( BytesInteger(1),
   request = 0,
   success = 1, 
   undefined_error = 2,
-  invalid_payload_format = 3, 
-  invalid_psk = 4, 
-  
+  invalid_payload_format = 3,
+  invalid_type = 11,
+  invalid_secret_request = 4, 
+  invalid_session_id = 5,
+  invalid_handshake = 6, 
+  invalid_freshness = 7, 
+  invalid_ephemeral = 8, 
+  invalid_psk = 9, 
+  invalid_certificate = 10
 )
 
 ## Common structures
-KeyRequest = BitStruct(
+SecretRequest = BitStruct(
   "b"   / Flag, 
   "e_s" / Flag,
   "e_x" / Flag,
@@ -73,20 +83,56 @@ Secret = Struct(
   'secret_data' / Prefixed( BytesInteger(1), GreedyBytes )
 )
 
-
-
-LURK13ExtensionType = Enum( BytesInteger(1),
-  psk_id = 1, 
-  ephemeral = 2, 
-  freshness = 3,
-  session_id = 4
+HandshakeList = Switch( this._type, 
+  { 's_init_early_secret' : Sequence( 
+      HSClientHello ), 
+    's_init_cert_verify' : Sequence( 
+      HSClientHello, HSServerHello, HSEncryptedExtensions, 
+      Optional( HSCertificateRequest )),
+    's_new_ticket' : Sequence(
+      Select( HSCertificateVerify, HSFinished ),
+      Optional( HSFinished ) ),
+    's_hand_and_app_secret' : Sequence(
+      HSServerHello, HSEncryptedExtensions, Optional( HSCertificateRequest )),
+    'c_init_cert_verify' : Sequence(HSClientHello, HSServerHello, HSEncryptedExtensions, HSCertificateRequest, HSCertificate, HSCertificateVerify, Finished), 
+    'c_init_post_hand_auth' : Select(
+      ## we are missing ClientHelloRetry
+      ## server cert = yes / no
+      ## client cert = no
+      ## early data = yes / no
+      ## ( server cert, early_data ) = (yes, yes) 
+      Sequence(
+      HSClientHello, HSServerHello, HSEncryptedExtensions, HSCertificateRequest, HSCertificate, HSCertificateVerify, HSFinished, HSEndOfEarlyData, HSFinished, HSCertificateRequest),  
+      ## ( server cert, early_data ) = (yes, no) 
+      Sequence(
+      HSClientHello, HSServerHello, HSEncryptedExtensions, HSCertificateRequest, HSCertificate, HSCertificateVerify, HSFinished, HSFinished, HSCertificateRequest), 
+      ## ( server cert, early_data ) = (no, yes) 
+      Sequence(
+      HSClientHello, HSServerHello, HSEncryptedExtensions, HSFinished, HSEndOfEarlyData, HSFinished, HSCertificateRequest),  
+      ## ( server cert, early_data ) = (no, no) 
+      Sequence(
+      HSClientHello, HSServerHello, HSEncryptedExtensions, HSFinished, HSFinished, HSCertificateRequest) 
+    ),  
+    'c_post_hand_auth' : Sequence( HSCertificateRequest ), 
+    'c_init_ephemeral' : Sequence( HSPartialClientHello ),
+    'c_init_early_secret' : Sequence( HSPartialClientHello ),
+    'c_hand_and_app_secret' : Sequence(
+      ServerHello, TLSCiphertext, Optional( EndOfEarlyData ) ),
+      ## TLSCiphertext {EncryptedExtensions}, {CertificateRequest*},  
+      ##               {Certificate*},  {CertificateVerify*}  {Finished}
+  }, default=Error
 )
 
-## Extension Data
+Freshness = Enum( BytesInteger(1),
+    sha256 = 0,
+    null = 255,
+)
+
 
 EphemeralMethod = Enum ( BytesInteger(1),
-  shared_secret = 0,
-  secret_generated = 1
+  no_secret = 0,
+  secret_provided = 1,
+  secret_generated = 2
 )
 
 SharedSecret = Struct(
@@ -101,218 +147,179 @@ SharedSecret = Struct(
   }, Error)
 )
 
-EphemeralData = Struct(
+Ephemeral = Struct(
+  '_name' / Computed('Ephemeral'),
+  '_status' / Computed( this._._status ),
   'ephemeral_method' / EphemeralMethod, 
-   'key' / Switch(this.ephemeral_method, 
-    { 'shared_secret' : Switch(this._._._status, {
+   'key' / Switch(this.ephemeral_method,
+    { 'secret_provided' : Switch(this._status, {
          'request' : Prefixed(BytesInteger(2), SharedSecret),
-##         'success' : Const(b'')
+         'success' : Const(b'')
         }, Error),
-      'secret_generated' : Switch(this._._._status, {
-         'request' : Const(b''), 
+      'secret_generated' : Switch(this._status, {
+         'request' : Const( b'' ), 
          'success' : Prefixed(BytesInteger(2), KeyShareEntry),
-        }, Error)
+        }, Error),
+      'no_secret' : Switch(this._status, {
+         'request' : Const( b'' ), 
+         'success' : Const( b'' ),
     }, Error)
-)
-
-FreshnessFunct = Enum( BytesInteger(1),
-    sha256 = 0,
-    null = 255,
+  } )
 )
 
 
-
-LURK13Extension = Struct (
-  '_name' / Computed('LURK13Extension'),
-  'extension_type' / LURK13ExtensionType, 
-##  'extension_data' / Prefixed(1, GreedyBytes())
-  'extension_data' / Prefixed(BytesInteger(1), Switch(this.extension_type,
-    { 'psk_id' : PskIdentity, 
-      'ephemeral': EphemeralData, 
-      'freshness': FreshnessFunct,
-      'session_id': Bytes(4), 
-      'finger_print': Bytes(4)
-    }) 
-  )
+LURKTLS13CertificateType = Enum ( BytesInteger(1),
+  empty = 0,
+  finger_print = 1,
+  uncompressed = 128
 )
 
-## Sub exchange structures
-
-HandshakeContext = Switch( this._type, 
-  { 's_init_early_secret' : Sequence( 
-      HSClientHello ), 
-    's_init_cert_verify' : Sequence( 
-      HSClientHello, HSServerHello, HSEncryptedExtensions, 
-      Optional( HSCertificateRequest )),
-    's_new_ticket' : Sequence( 
-      Optional( HSCertificate ), Optional( HSCertificateVerify ), 
-      HSFinished ), 
-    's_hand_and_app_secret' : Sequence(
-      HSServerHello, HSEncryptedExtensions, Optional( HSCertificateRequest )),
-    'c_binder_key' : Sequence(), 
-    'c_init_early_secret' : Sequence( 
-      HSClientHello ),  
-    'c_init_hand_secret' : Sequence( 
-      HSClientHello, HSServerHello ), 
-    'c_hand_secret' : Sequence( 
-      HSServerHello ),
-    'c_app_secret' : Sequence( 
-      HSEncryptedExtensions, Optional( HSCertificateRequest ),
-      Optional( HSCertificate ), Optional( HSCertificateVerify ),  
-      HSFinished ),
-    'c_cert_verify' : Sequence( 
-      HSEncryptedExtensions, Optional( HSCertificateRequest ), 
-      Optional( HSCertificate ), Optional( HSCertificateVerify ), HSFinished,
-      Optional( EndOfEarlyData )),
-    'c_register_ticket' : Sequence( 
-      Optional( HSCertificate ), Optional( HSCertificateVerify ),
-      HSFinished )
-  }, default=Error
-)
-
-
-
-
-SecretRequest = Struct(
-  '_name' / Computed('SecretRequest'),
-  '_type' / Computed(this._._type),
-  '_status' / Computed('request'),
-  'key_request' / KeyRequest,
-  'handshake_context' / Prefixed( BytesInteger(4), HandshakeContext ),
-  'extension_list' / Prefixed( BytesInteger(2), GreedyRange(LURK13Extension )),  
-)
-
-
-
-SecretResponse = Struct(
-  '_name' / Computed('SecretResponse'),
-  '_status' / Computed('success'),
-  'secret_list' / Prefixed( BytesInteger(2), GreedyRange(Secret)),
-  'extension_list' / Prefixed( BytesInteger(2), GreedyRange(LURK13Extension))  
-)
-
-LURK13CertificateType = Enum ( BytesInteger(1),
-  X509 = 0,
-  RawPublicKey = 1,
-  sha256_32 = 128
-)
-
-## CertificateEntry is a TLS 1.3 structure but is redefined here as the
-## certificate type  is not contained in the original structure. 
-## _certificate_type is defined so that it can be interpreted by TLS 1.3
-## sub construtors. 
-
-LURK13Certificate = Struct(
-  '_name' / Computed('LURK13Certificate'),
-  'certificate_type' /  LURK13CertificateType, 
-  '_certificate_type' /  Computed(this.certificate_type), 
+LURKTLS13Certificate = Struct(
+  '_name' / Computed('LURKTLS13Certificate'),
+  'certificate_type' /  LURKTLS13CertificateType, 
+ '_certificate_type' / If( this.certificate_type == 'uncompressed', Computed(this._._certificate_type)),
   'certificate_data' / Switch( this.certificate_type,
-    { 'sha256_32' : Bytes(4), 
-      'X509' : Certificate,
-      'RawPublicKey' : Certificate
+    { 'empty' : Const(b''), 
+      'finger_print' : Bytes(4),
+      'uncompressed' : Certificate
     }  
   ) 
 )
 
-KeyPairIDType = Enum( BytesInteger(1),
-  sha256_32 = 0
+Tag = BitStruct(
+  "last_exchange"   / Flag, 
+  "reserved" / Const(0,BitsInteger(7))
 )
 
-KeyPairID = Struct(
-  '_name' / Computed('KeyPairID'),
-  'key_id_type' / KeyPairIDType,
-  'key_id' / Switch( this.key_id_type,
-        { 'sha256_32' : Bytes(4)
-        }
-    )
-)
 
-SigningRequest = Struct(
-  '_name' / Computed('SigningRequest'),
-##  'key_id'/ KeyPairID, 
-  'sig_algo' / SignatureScheme, 
-##  'certificate' / LURK13Certificate
-)
-
-SigningResponse = Struct(
-  '_name' / Computed('SigningResponse'),
-  'signature' / Prefixed( BytesInteger(2), GreedyBytes)
-)
-
-SessionID = Struct(
-  '_name' / Computed('SessionID'),
-  'session_id' / Bytes(4)
-)
-
+##SigningRequest = Struct(
+##  '_name' / Computed('SigningRequest'),
+####  'key_id'/ KeyPairID, 
+##  'sig_algo' / SignatureScheme, 
+####  'certificate' / LURK13Certificate
+##)
+##
+##SigningResponse = Struct(
+##  '_name' / Computed('SigningResponse'),
+##  'signature' / Prefixed( BytesInteger(2), GreedyBytes)
+##)
+##
+##SessionID = Struct(
+##  '_name' / Computed('SessionID'),
+##  'session_id' / Bytes(4)
+##)
+##
 ## LURK request / response structures on the TLS server
 
-InitEarlySecretRequest = Struct(
-  '_name' / Computed('InitEarlySecretRequest'),
+SInitEarlySecretRequest = Struct(
+  '_name' / Computed('SInitEarlySecretRequest'),
   '_type' / Computed(this._._type),
-  'secret_request' / SecretRequest
-)
-
-
-InitEarlySecretResponse = Struct(
-  '_name' / Computed('InitEarlySecretResponse'),
-  'secret_response' / SecretResponse
-)
-
-
-InitCertVerifyRequest = Struct(
-  '_name' / Computed('InitCertVerifyRequest'),
-  '_type' / Computed(this._._type),
+  'session_id' / Bytes( 4 ),
+  'freshness' / Freshness, 
+  'selected_identity' / BytesInteger( 2 ), 
+  'handshake' / Prefixed( BytesInteger(4), HandshakeList ),
   'secret_request' / SecretRequest,
-  'signing_request' / SigningRequest
-)
-
-InitCertVerifyResponse = Struct(
-  '_name' / Computed('InitCertVerifyResponse'),
-  'secret_response' / SecretResponse,
-  'signing_response' / SigningResponse
 )
 
 
-HandAndAppRequest = Struct(
-  '_name' / Computed('HandAndAppRequest'),
+SInitEarlySecretResponse = Struct(
+  '_name' / Computed('SInitEarlySecretResponse'),
   '_type' / Computed(this._._type),
-  'session_id' / Optional(If(this._._session_id_agreed == True, Bytes(4))), 
+  'session_id' / Bytes( 4 ),
+  'secret_list' / Prefixed( BytesInteger(2), GreedyRange( Secret ) )
+)
+
+
+SInitCertVerifyRequest = Struct(
+  '_name' / Computed('SInitCertVerifyRequest'),
+  '_type' / Computed(this._._type),
+  '_status' / Computed('request'),
+  '_certificate_type' / Computed(this._._certificate_type),
+  'tag' / Tag,
+  'session_id' / Switch( this.tag.last_exchange,
+    { True : Const( b'' ), 
+      False : Bytes( 4 ),
+    }  
+  ), 
+  'freshness' / Freshness,
+  'ephemeral' / Ephemeral, 
+  'handshake' / Prefixed( BytesInteger(4), HandshakeList ), 
+  'certificate' / LURKTLS13Certificate, 
+  'secret_request' / SecretRequest,
+  'sig_algo' / SignatureScheme,
+)
+
+SInitCertVerifyResponse = Struct(
+  '_name' / Computed('SInitCertVerifyResponse'),
+  '_type' / Computed(this._._type),
+  '_status' / Computed('success'),
+  'tag' / Tag,
+  'session_id' / Switch( this.tag.last_exchange,
+    { True : Const(b''), 
+      False : Bytes(4),
+    }  
+  ),
+  'ephemeral' / Ephemeral, 
+  'secret_list' / Prefixed( BytesInteger(2), GreedyRange( Secret ) ),
+  'signature' / Prefixed( BytesInteger(2), GreedyBytes )
+)
+
+
+SHandAndAppRequest = Struct(
+  '_name' / Computed('SHandAndAppRequest'),
+  '_type' / Computed(this._._type),
+  '_status' / Computed('request'),
+  'tag' / Tag,
+##  'session_id' / Optional(If(this._._session_id_agreed == True, Bytes(4))), 
+  'session_id' / Bytes( 4 ), 
+  'ephemeral' / Ephemeral, 
+  'handshake' / Prefixed( BytesInteger(4), HandshakeList ), 
   'secret_request' / SecretRequest
 )
   
-HandAndAppResponse = Struct(
-  '_name' / Computed('HandAndAppResponse'),
-  'session_id' / If(this._._session_id_agreed == True, Bytes(4)), 
-  'secret_response' / SecretResponse
+SHandAndAppResponse = Struct(
+  '_name' / Computed('SHandAndAppResponse'),
+  '_status' / Computed('success'),
+  'tag' / Tag,
+  'session_id' / Bytes(4) , 
+  'ephemeral' / Ephemeral, 
+  'secret_list' / Prefixed( BytesInteger(2), GreedyRange( Secret ) )
 )
 
 
-NewTicketRequest = Struct(
-  '_name' / Computed('NewTicketRequest'),
+SNewTicketRequest = Struct(
+  '_name' / Computed('SNewTicketRequest'),
+  '_type' / Computed(this._._type),
+  '_certificate_type' / Computed(this._._certificate_type),
+#  '_cipher' / Computed(this._._cipher),
+  'tag' / Tag,
   'session_id' / Bytes(4), 
+  'handshake' / Prefixed( BytesInteger(4), HandshakeList),
+  'certificate' / LURKTLS13Certificate, 
   'ticket_nbr' / BytesInteger(1), 
-  'key_request' / KeyRequest,
-  'handshake_context' / Prefixed( BytesInteger(4), GreedyBytes),
+  'secret_request' / SecretRequest,
 )
 
-NewTicketResponse = Struct(
-  '_name' / Computed('NewTicketResponse'),
+SNewTicketResponse = Struct(
+  '_name' / Computed('SNewTicketResponse'),
+  'tag' / Tag,
   'session_id' / Bytes(4),
-  'ticket_list' / Prefixed(BytesInteger(2), GreedyRange(NewSessionTicket))
+  'secret_list' / Prefixed( BytesInteger(2), GreedyRange( Secret ) ),
+  'ticket_list' / Prefixed( BytesInteger( 2 ), GreedyRange( NewSessionTicket ) )
 )
 
 
 ## LURK request / response structures on the TLS client
 
-BinderKeyRequest = Struct(
-  '_name' / Computed('BinderKeyRequest'),
-  '_type' / Computed(this._._type),
-  'secret_request' / SecretRequest 
-)
+
+CInitCertVerifyRequest = SInitCertVerifyRequest 
+CInitCertVerifyResponse = SInitCertVerifyResponse
+
+BinderKeyRequest = Struct()
 
 BinderKeyResponse = Struct(
   '_name' / Computed('BinderKeyResponse'),
-  'secret_response' / SecretResponse 
+  'secret_list' / Prefixed( BytesInteger(2), GreedyRange( Secret ) )
 )
 
 InitHandRequest = Struct(            #### to be checked in the draft
@@ -323,7 +330,7 @@ InitHandRequest = Struct(            #### to be checked in the draft
 
 InitHandResponse = Struct(
   '_name' / Computed('InitHandResponse'),
-  'secret_response' / SecretResponse 
+  'secret_list' / Prefixed( BytesInteger(2), GreedyRange( Secret ) )
 )
 
 CertVerifyRequest = Struct(
@@ -331,22 +338,22 @@ CertVerifyRequest = Struct(
   '_type' / Computed(this._._type),
   'session_id' / Bytes(4), 
   'secret_request' / SecretRequest,
-  'signing_request' / SigningRequest
+  'sig_algo' / SignatureScheme
 )
 
 CertVerifyResponse =Struct(
   '_name' / Computed('CertVerifyResponse'),
   'session_id' / Bytes(4), 
-  'secret_response' / SecretResponse,
-  'signing_response' / SigningResponse
+  'secret_list' / Prefixed( BytesInteger(2), GreedyRange( Secret ) ),
+  'signature' / Prefixed( BytesInteger(2), GreedyBytes )
 )
 
 RegisterTicketRequest = Struct(
   '_name' / Computed('RegisterTicketRequest'),
   'session_id' / Bytes(4), 
-  'handshake_context' / Prefixed( BytesInteger(4), GreedyBytes),
+  'handshake' / Prefixed( BytesInteger(4), HandshakeList),
   'ticket_list' / Prefixed(BytesInteger(2), GreedyRange(NewSessionTicket)),
-  'key_request' / KeyRequest,
+  'secret_request' / SecretRequest,
 )
 
 RegisterTicketResponse = Struct(
@@ -357,7 +364,7 @@ RegisterTicketResponse = Struct(
 PostHandRequest = Struct(
   '_name' / Computed('PostHandRequest'),
   'session_id' / Bytes(4), 
-  'handshake_context' / Prefixed( BytesInteger(4), GreedyBytes),
+  'handshake' / Prefixed( BytesInteger(4), HandshakeList ),
   'app_n' / BytesInteger(2), 
 )
 
@@ -367,45 +374,45 @@ PostHandResponse = Struct(
 )
 
 
-ErrorResponse = Struct()
+##ErrorResponse = Struct()
 
 
 LURKTLS13Payload = Switch(this._type, 
   { 's_init_early_secret' : Switch( this._status,
-       { 'request' : InitEarlySecretRequest, 
-         'success' : InitEarlySecretResponse, 
+       { 'request' : SInitEarlySecretRequest, 
+         'success' : SInitEarlySecretResponse, 
         }, default=ErrorResponse), 
     's_init_cert_verify' : Switch( this._status,
-       { 'request' : InitCertVerifyRequest, 
-         'success' : InitCertVerifyResponse, 
+       { 'request' : SInitCertVerifyRequest, 
+         'success' : SInitCertVerifyResponse, 
         }, default=ErrorResponse), 
     's_hand_and_app_secret' : Switch( this._status,
-       { 'request' : HandAndAppRequest, 
-         'success' : HandAndAppResponse, 
+       { 'request' : SHandAndAppRequest, 
+         'success' : SHandAndAppResponse, 
         }, default=ErrorResponse), 
     's_new_ticket' : Switch( this._status,
-       { 'request' : NewTicketRequest, 
-         'success' : NewTicketResponse, 
+       { 'request' : SNewTicketRequest, 
+         'success' : SNewTicketResponse, 
         }, default=ErrorResponse), 
     'c_binder_key' : Switch( this._status,
        { 'request' : BinderKeyRequest, 
          'success' : BinderKeyResponse, 
         }, default=ErrorResponse), 
     'c_init_early_secret' : Switch( this._status,
-       { 'request' : InitEarlySecretRequest, 
-         'success' : InitEarlySecretResponse, 
+       { 'request' : SInitEarlySecretRequest, 
+         'success' : SInitEarlySecretResponse, 
         }, default=ErrorResponse), 
     'c_init_hand_secret' : Switch( this._status,
        { 'request' : InitHandRequest, 
          'success' : InitHandResponse, 
         }, default=ErrorResponse), 
     'c_hand_secret' : Switch( this._status,
-       { 'request' : HandAndAppRequest, 
-         'success' : HandAndAppResponse, 
+       { 'request' : SHandAndAppRequest, 
+         'success' : SHandAndAppResponse, 
         }, default=ErrorResponse), 
     'c_app_secret' : Switch( this._status,
-       { 'request' : HandAndAppRequest, 
-         'success' : HandAndAppResponse, 
+       { 'request' : SHandAndAppRequest, 
+         'success' : SHandAndAppResponse, 
         }, default=ErrorResponse), 
     'c_cert_verify' : Switch( this._status,
        { 'request' : CertVerifyRequest, 
