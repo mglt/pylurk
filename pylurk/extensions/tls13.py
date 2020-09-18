@@ -1902,14 +1902,183 @@ class TicketDb:
   def __init__( self ):
     pass
 
+def nothing( req ):
+  return 'nothing'
+
+## from concurrent.futures import ProcessPoolExecutor
+## from multiprocessing import Pool, shared_memory
+## import asyncio
+## cannot pickle 'CompiledFFI' object
 
 class TLS13SServer:
   def __init__(self, conf=default_conf):
     ## configuration
     ## session DB
     self.session_db = SessionDB()
-    self.conf = conf 
 
+    self.conf = conf 
+##    nprocs = 8 
+##    self.executor = ProcessPoolExecutor( max_workers=nprocs ) 
+##    self.pool = Pool( 5 ) 
+
+###  def test_serve( self, req ):
+##    print( "::: server - req: %s"%req )
+##    with self.executor:
+##      op = self.executor.submit( self.mono_serve, req )   
+##      print( "::: server - submit:ok" )
+###    try:
+##      resp =  op.result( timeout=1 )
+##      print( "::: server - resp: %s"%resp )
+##      return resp
+###    except Exception as e:
+##  async  def serve( self, req):
+##    loop = asyncio.get_running_loop()
+##    with ProcessPoolExecutor() as pool:
+##        result = await loop.run_in_executor(
+##            pool, self.mono_serve, req )
+####    self.async_serve( req )
+####    await self.async_serve( req )
+##
+##  async  def async_serve( self, req ):
+##    try:
+##      header = req[ 'header' ]
+##      if header[ 'designation' ] != 'tls13':
+##          raise LURKError( header, "expecting 'tls13'", 'invalid_designation')
+##      if header[ 'version' ] != 'v1':
+##          raise LURKError( header, "expecting 'v1'", 'invalid_version')
+##      if header[ 'status' ] != 'request' :
+##          raise LURKError( header, "expecting 'request'", 'invalid_status')
+##      mtype = req[ 'header' ][ 'type' ]
+##      payload_req = req[ 'payload' ] 
+##      if mtype in [ 's_init_early_secret', 's_init_cert_verify' ]:
+##        session = SSession( self.conf )
+##        payload_resp  = session.serve( payload_req, mtype, 'request')
+##        if session.session_id != None :
+##          self.session_db.store( session ) 
+##      elif mtype == 's_hand_and_app_secret':
+##        try:
+##          session = self.session_db.unstore( req[ 'payload' ][ 'session_id' ] )
+##        except KeyError:
+##          raise LURKError( req, "session_id not found in DB", 'invalid_session_id')
+##        payload_resp = session.serve( payload_req, mtype, 'request' )
+##      elif mtype == 's_new_ticket':
+##        try:
+##          session = self.session_db.unstore( req[ 'payload' ][ 'session_id' ] )
+##        except KeyError:
+##          raise LURKError( req, "session_id not found in DB", 'invalid_session_id')
+##        payload_resp  = session.serve( payload_req, mtype, 'request')
+##      else:
+##        raise LURKError( header, "unexpected type", 'invalid_type')
+##      return { 'header' :  \
+##               { 'designation' : 'tls13', 
+##                 'version' : 'v1', 
+##                 'type' : mtype,
+##                 'status' : 'success', 
+##                 'id' : req[ 'header' ][ 'id' ]
+##               }, 
+##              'payload' : payload_resp
+##            }             
+##    except Exception as e:
+##      if isinstance( e, LURKError ):
+##        status = e.status
+##        print( "----------")
+##        print( e.expresion ) 
+##        print( e.message ) 
+##        print( e.status ) 
+##        print( "----------")
+##      else:
+##        status = 'undefined_error'
+##        print( "----------")
+##        print( getattr(e, 'message', repr(e) ) )
+##        print( "----------")
+##      payload_resp = { 'lurk_state' : b'\x00\x00\x00\x00' } 
+##      return { 'header' :  \
+##               { 'designation' : 'tls13', 
+##                 'version' : 'v1', 
+##                 'type' : mtype,
+##                 'status' : status, 
+##                 'id' : req[ 'header' ][ 'id' ]
+##               }, 
+##              'payload' : payload_resp
+##            }             
+##  
+##      
+##    
+##  def process_pool_serve( self, req ):
+##    ## does not work trying to pool multiuprocesses
+##    try:
+##      header = req[ 'header' ]
+##      if header[ 'designation' ] != 'tls13':
+##          raise LURKError( header, "expecting 'tls13'", 'invalid_designation')
+##      if header[ 'version' ] != 'v1':
+##          raise LURKError( header, "expecting 'v1'", 'invalid_version')
+##      if header[ 'status' ] != 'request' :
+##          raise LURKError( header, "expecting 'request'", 'invalid_status')
+##      mtype = req[ 'header' ][ 'type' ]
+##      payload_req = req[ 'payload' ] 
+##      if mtype in [ 's_init_early_secret', 's_init_cert_verify' ]:
+##        session = SSession( self.conf )
+##        with self.pool:
+##          ## payload_resp  = session.serve( payload_req, mtype, 'request')
+##          print( "::: serve : req %s"%req )
+##          result = self.pool.apply_async( session.serve, ( payload_req, mtype, 'request') )
+##          payload_resp = result.get( timeout=1 )
+##          print( "::: payload_resp : %s"%payload_resp )
+##        if session.session_id != None :
+##          self.session_db.store( session ) 
+##      elif mtype == 's_hand_and_app_secret':
+##        try:
+##          session = self.session_db.unstore( req[ 'payload' ][ 'session_id' ] )
+##        except KeyError:
+##          raise LURKError( req, "session_id not found in DB", 'invalid_session_id')
+##        with self.pool:
+##          ## payload_resp = session.serve( payload_req, mtype, 'request' )
+##          result = self.pool.apply_async( session.serve, ( payload_req, mtype, 'request' ) )
+##          payload_resp = resp.get( timeout=1 )
+##      elif mtype == 's_new_ticket':
+##        try:
+##          session = self.session_db.unstore( req[ 'payload' ][ 'session_id' ] )
+##        except KeyError:
+##          raise LURKError( req, "session_id not found in DB", 'invalid_session_id')
+##        with self.pool:
+##          ##  payload_resp  = session.serve( payload_req, mtype, 'request')
+##          result  = self.pool( session.serve, ( payload_req, mtype, 'request') )
+##          payload_resp = resp.get( timeout=1 )
+##      else:
+##        raise LURKError( header, "unexpected type", 'invalid_type')
+##      return { 'header' :  \
+##               { 'designation' : 'tls13', 
+##                 'version' : 'v1', 
+##                 'type' : mtype,
+##                 'status' : 'success', 
+##                 'id' : req[ 'header' ][ 'id' ]
+##               }, 
+##              'payload' : payload_resp
+##            }             
+##    except Exception as e:
+##      if isinstance( e, LURKError ):
+##        status = e.status
+##        print( "----------")
+##        print( e.expresion ) 
+##        print( e.message ) 
+##        print( e.status ) 
+##        print( "----------")
+##      else:
+##        status = 'undefined_error'
+##        print( "----------")
+##        print( getattr(e, 'message', repr(e) ) )
+##        print( "----------")
+##      payload_resp = { 'lurk_state' : b'\x00\x00\x00\x00' } 
+##      return { 'header' :  \
+##               { 'designation' : 'tls13', 
+##                 'version' : 'v1', 
+##                 'type' : mtype,
+##                 'status' : status, 
+##                 'id' : req[ 'header' ][ 'id' ]
+##               }, 
+##              'payload' : payload_resp
+##            }             
+    
   def serve( self, req ):
     try:
       header = req[ 'header' ]

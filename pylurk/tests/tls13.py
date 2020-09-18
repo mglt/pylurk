@@ -22,11 +22,11 @@ from pylurk.core.lurk_struct import LURKMessage
 # import from utils.py instead of copying the fucntion
 
 ## TLS 1.3 structures
-TLS13_STRUCTURE = True
+TLS13_STRUCTURE = False
 ## payload exchange on TLS server
-LURK_SERVER_PAYLOAD_EXCHANGE = True
+LURK_SERVER_PAYLOAD_EXCHANGE = False
 ## payload exchange on TLS server (most possibilities)
-LURK_SERVER_PAYLOAD_SESSION_RESUMPTION_LOOP = True
+LURK_SERVER_PAYLOAD_SESSION_RESUMPTION_LOOP = False
 ## lurk exchange on TLS server
 LURK_SERVER_SESSION_RESUMPTION = True
 ## lurk exchange on TLS server (most possibilities)
@@ -1197,7 +1197,7 @@ def lurk_client_ecdhe( server, s_init_cert_verify_req:dict,
                  'id' : token_bytes( 8 ) },
     'payload' : s_init_cert_verify_req }
   test_struct ( LURKMessage, lurk_s_init_cert_verify_req )
-  
+   
   resp = server.serve( LURKMessage.build( lurk_s_init_cert_verify_req ))
   lurk_s_init_cert_verify_resp = LURKMessage.parse( resp )
   test_struct ( LURKMessage, lurk_s_init_cert_verify_resp )

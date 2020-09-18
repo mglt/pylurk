@@ -11,6 +11,8 @@ from socketserver import ThreadingMixIn, UDPServer, TCPServer, BaseRequestHandle
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from select import select
 #from socket import error as SocketError
+import sys
+import traceback
 
 import socket
 import os
@@ -881,6 +883,8 @@ class LurkMessage(Payload):
             else: ## the payload is an error payload
                 LURKErrorPayload.parse(payload_bytes)
 
+##import asyncio
+##import concurrent.futures
 
 class LurkServer():
   """ Basic Lurk Server
@@ -905,6 +909,39 @@ class LurkServer():
         self.tls13 = TLS13CServer( self.conf )
 #    if 'tls12' in supported_ext:
 #        tls12 = TLS12SServer( self.conf )
+
+## multithreading attempt
+##  def serve(self, pkt_bytes) -> bytes:
+##    """ read the HEADER_LEN bytes of pkt_bytes. If an error occurs, it
+##    associated to the errors encountered by reading the payload part.
+##    """
+##    resp = b''
+##    while len( pkt_bytes ) >= HEADER_LEN:
+##      try:
+##        msg_len = HEADER_LEN + int.from_bytes( pkt_bytes[: HEADER_LEN ][-4:], byteorder='big')  
+##        if len( pkt_bytes ) < msg_len :
+##          break
+##        req = LURKMessage.parse( pkt_bytes[ : msg_len ] )
+##        pkt_bytes = pkt_bytes[ msg_len : ]
+##        if req[ 'header' ][ 'designation' ] == 'tls12' and\
+##           req[ 'header'][ 'version' ] == 'v1' and\
+##           req[ 'header' ][ 'status' ] == 'request':
+##           pass
+###          resp += LURKMessage.build( tls12.serve( req ) )
+##        elif req[ 'header' ][ 'designation' ] == 'tls13' and\
+##           req[ 'header'][ 'version' ] == 'v1' and\
+##           req[ 'header' ][ 'status' ] == 'request':
+##          resp += LURKMessage.build( asyncio.run( self.tls13.serve( req ) ) )
+##      except Exception as e:
+##          ## stop when an error is encountered
+##           _, _, tb = sys.exc_info()
+##           traceback.print_tb(tb) # Fixed format
+##           tb_info = traceback.extract_tb(tb)
+##           filename, line, func, text = tb_info[-1]
+##           print('An error occurred on line {} in statement {}'.format(line, text))
+##           print(e)
+##           return resp
+##    return resp
 
   def serve(self, pkt_bytes) -> bytes:
     """ read the HEADER_LEN bytes of pkt_bytes. If an error occurs, it
