@@ -1,0 +1,18 @@
+from struct_lurk import *
+from struct_lurk_tls13 import *
+from secrets import randbelow
+
+## ping message
+msg = { 'designation' : 'lurk', 
+        'version' : 'v1', 
+        'type'  : 'ping',
+        'status' : 'request',
+        'id' : randbelow( 2  **  ) 
+        'payload' : {} }
+
+LURKMessage.build( msg )
+
+
+
+
+

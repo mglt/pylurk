@@ -1,0 +1,92 @@
+[2022-01-25 20:59:09,172 : lurk.py:67 -                serve() ] 'tag'
+[2022-01-25 21:10:39,744 : lurk.py:70 -                serve() ] 'tag'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 62, in serve
+    return LURKMessage.build( resp )
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 336, in build
+    self.build_stream(obj, stream, **contextkw)
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 348, in build_stream
+    self._build(obj, stream, context, "(building)")
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 2144, in _build
+    buildret = sc._build(subobj, stream, context, path)
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 2657, in _build
+    return self.subcon._build(obj, stream, context, path)
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 4715, in _build
+    buildret = self.subcon._build(obj, stream2, context, path)
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 3924, in _build
+    return sc._build(obj, stream, context, path)
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 3924, in _build
+    return sc._build(obj, stream, context, path)
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 3924, in _build
+    return sc._build(obj, stream, context, path)
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 2139, in _build
+    subobj = obj[sc.name] # raises KeyError
+KeyError: 'tag'
+[2022-01-25 21:12:48,241 : lurk.py:71 -                serve() ] 'tag'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 63, in serve
+    return LURKMessage.build( resp )
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 336, in build
+    self.build_stream(obj, stream, **contextkw)
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 348, in build_stream
+    self._build(obj, stream, context, "(building)")
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 2144, in _build
+    buildret = sc._build(subobj, stream, context, path)
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 2657, in _build
+    return self.subcon._build(obj, stream, context, path)
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 4715, in _build
+    buildret = self.subcon._build(obj, stream2, context, path)
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 3924, in _build
+    return sc._build(obj, stream, context, path)
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 3924, in _build
+    return sc._build(obj, stream, context, path)
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 3924, in _build
+    return sc._build(obj, stream, context, path)
+  File "/home/emigdan/.local/lib/python3.8/site-packages/construct/core.py", line 2139, in _build
+    subobj = obj[sc.name] # raises KeyError
+KeyError: 'tag'
+[2022-01-25 21:14:50,195 : lurk.py:71 -                serve() ] 'Tls13Ext' object has no attribute 'payload'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload( req )
+AttributeError: 'Tls13Ext' object has no attribute 'payload'
+[2022-01-25 21:18:51,673 : lurk.py:74 -                serve() ] 'Tls13Ext' object has no attribute 'payload'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload( req )
+AttributeError: 'Tls13Ext' object has no attribute 'payload'
+[2022-01-25 21:35:22,571 : lurk.py:73 -                serve() ] name 'payload_req' is not defined
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 2172, in payload_resp
+    payload  = session.serve( payload_req, mtype, 'request')
+NameError: name 'payload_req' is not defined
+[2022-01-25 21:44:04,658 : lurk.py:73 -                serve() ] name 'mtype' is not defined
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 2177, in payload_resp
+    elif mtype == 's_hand_and_app_secret':
+NameError: name 'mtype' is not defined
+[2022-01-25 21:46:52,455 : lurk.py:73 -                serve() ] name 'mtype' is not defined
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 2177, in payload_resp
+    elif mtype == 's_hand_and_app_secret':
+NameError: name 'mtype' is not defined
+[2022-01-25 21:48:30,846 : lurk.py:73 -                serve() ] name 'mtype' is not defined
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 2177, in payload_resp
+    elif mtype == 's_hand_and_app_secret':
+NameError: name 'mtype' is not defined
+[2022-01-25 21:51:42,160 : lurk.py:73 -                serve() ] name 'mtype' is not defined
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 2177, in payload_resp
+    elif mtype == 's_hand_and_app_secret':
+NameError: name 'mtype' is not defined
