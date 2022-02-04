@@ -5,8 +5,8 @@ import hashlib
 
 class TlsHash:
     def __init__(self, hashmod=hashlib.sha256):
-        self.hashmod = hashmod
         self.hash_len = hashmod().digest_size
+        self.hashmod = hashmod
 
     def hkdf_extract(self, salt: bytes, input_key_material: bytes) -> bytes:
         if input_key_material is None:
@@ -32,12 +32,14 @@ class TlsHash:
     def derive_secret(self, secret: bytes, label: bytes, messages) -> bytes:
         if type(messages) == list:
             messages = b"".join(messages)
-        return self.hkdf_expand_label(
-            secret, label, self.hashmod(messages).digest(), self.hash_len
-        )
-
-    def transcript_hash(self, *msgs):
-        return self.hashmod(b"".join(msgs)).digest()
+#        return self.hkdf_expand_label(
+#            secret, label, self.hashmod(messages).digest(), self.hash_len
+#        )
+        ## message is the transcript
+        return self.hkdf_expand_label(  secret, label, messages, self.hash_len )
+    
+#    def transcript_hash(self, *msgs):
+#        return self.hashmod(b"".join(msgs)).digest()
 
     # def transcript_hash(self, client_hello_data, *others):
     #     digest = self.hashmod(client_hello_data).digest()
@@ -58,9 +60,14 @@ class TlsHash:
         return self.hkdf_expand_label(base_key, b"finished", b"", self.hash_len)
 
     def verify_data(self, secret: bytes, msg: bytes) -> bytes:
+        ## this is changed as we provide the transscript in msg 
+        ## as opposed to the messages themselves. 
         return hmac.new(
-            self.finished_key(secret), self.transcript_hash(msg), self.hashmod
+            self.finished_key(secret), msg, self.hashmod
         ).digest()
+#        return hmac.new(
+#            self.finished_key(secret), self.transcript_hash(msg), self.hashmod
+#        ).digest()
 
     def scheduler(self, ecdhe: bytes, psk: bytes = None):
         return KeyScheduler(self, ecdhe, psk)

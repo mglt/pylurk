@@ -2,6 +2,7 @@ from  os.path import join
 import pkg_resources
 from copy import deepcopy
 from construct.core import MappingError
+import hashlib ## mostly for compatibility with key_schedule
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
@@ -103,6 +104,10 @@ conf_template = {
 # class SigAlgo
 class SigScheme:
   def __init__( self, name:str) :
+    """ used to pars ethe signature scheme
+
+    The function also extract the hash for cipher suites
+    """
     self.name = name
     self.algo = self.get_algo()
     self.hash = self.get_hash()
@@ -114,15 +119,21 @@ class SigScheme:
     return self.name.split('_')[0]
 
   def get_hash( self ):
-    if self.algo not in [ 'rsa', 'ecdsa' ]:
+    ## returns None in case of ed25519 or ed448 sig scheme
+    ## TLS cipher suite are expected to pass.
+    ## we use hashlib to remain compatible with key_schedule
+    if self.algo in [ 'ed25519', 'ed448' ]:
       return None
-    hash_algo = self.name.split( '_' )[-1]
+    hash_algo = self.name.split( '_' )[-1].lower()
     if hash_algo == 'sha256':
       h = SHA256()
+#      h = hashlib.sha256
     elif hash_algo == 'sha384':
       h = SHA384()
+#      h = hashlib.sha384
     elif hash_algo == 'sha512':
       h = SHA512()
+#      h = hashlib.sha512
     else:
       raise LURKError( 'invalid_signature_scheme', f"{hash_algo} is not implemented" )
     return h

@@ -41,15 +41,15 @@ TLS13Status = Enum( BytesInteger(1),
   request = 0,
   success = 1, 
   undefined_error = 2,
-  invalid_payload_format = 3,
-  invalid_type = 11,
+  invalid_format = 3,
   invalid_secret_request = 4, 
   invalid_session_id = 5,
   invalid_handshake = 6, 
   invalid_freshness = 7, 
   invalid_ephemeral = 8, 
   invalid_psk = 9, 
-  invalid_certificate = 10
+  invalid_certificate = 10,
+  invalid_type = 11,
 )
 
 ## Common structures
@@ -91,7 +91,7 @@ HandshakeList = Switch( this._type,
       Sequence( HSClientHello, HSServerHello, HSEncryptedExtensions, HSCertificateRequest ),
       Sequence( HSClientHello, HSServerHello, HSEncryptedExtensions )),  
     's_new_ticket' : Select( \
-      Sequence( HSCertificateVerify, HSFinished ),
+      Sequence( HSCertificate, HSCertificateVerify, HSFinished ),
       Sequence( HSFinished ) ),
     's_hand_and_app_secret' : Select(\
       Sequence( HSServerHello, HSEncryptedExtensions, HSCertificateRequest ),
