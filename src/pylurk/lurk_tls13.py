@@ -31,13 +31,8 @@ import datetime
 
 from construct.core import *
 from construct.lib import *
-#from pylurk.extensions.tls12_struct import FreshnessFunct, KeyPairId
-#from pylurk.extensions.tls13_tls13_struct import PskIdentity, Certificate,\
-#                                                  SignatureScheme, Handshake
 from struct_tls13 import PskIdentity, Certificate, SignatureScheme, Handshake
-# from pylurk.extensions.key_schedule import TlsHash, PSKWrapper
 from key_schedule import TlsHash, PSKWrapper
-#from pylurk.core.conf import default_conf
 from conf import default_conf, SigScheme
 from lurk_lurk import LURKError, ImplementationError, ConfigurationError
 
@@ -106,18 +101,22 @@ class Ephemeral:
 
     error = False
     if self.method not in self.conf['ephemeral_method_list']:
-      error = True
+      raise LURKError( 'invalid_ephemeral', f"method {self.method} expected to be"\
+                       "in {self.conf['ephemeral_method_list']}" )
     if ( mtype == 's_init_cert_verify' and self.method == 'no_secret' ) or\
-       ( mtype == 'c_init_ephemeral' and self.method != 'secret_generated' ) or\
-       ( mtype == 'c_init_early_secret' and self.method == 'secret_provided' ):
-      error = True
+       ( mtype == 'c_init_ephemeral' and self.method != 'cs_generated' ) or\
+       ( mtype == 'c_init_early_secret' and self.method == 'e_generated' ):
+      raise LURKError( 'invalid_ephemeral', f"Incompatible {self.method} and {mtype}" )
+    elif ( mtype == 's_hand_and_app_secret' and self.method == 'no_secret' ):
+      if handshake.is_ks_agreed() :
+        raise LURKError( 'invalid_ephemeral', f"unexpected key_share extension with 'no_secret'" )
     elif  mtype == 'c_hand_and_app_secret' :
      if handshake.has_ext( 'psk', 'proposed' ) == False: ## c_init_ephemeral
        if self.method != 'no_secret':
          error = True
      else: ## c_init_early_secret
-       if  ( self.ephemeral_method == 'secret_generated' and self.method != 'no_secret' ) or\
-           ( self.ephemeral_method == 'no_secret' and self.method != 'secret_generated'):
+       if  ( self.ephemeral_method == 'cs_generated' and self.method != 'no_secret' ) or\
+           ( self.ephemeral_method == 'no_secret' and self.method != 'cs_generated'):
          error = True 
     if error == True:
       raise LURKError( 'invalid_ephemeral', \
@@ -131,7 +130,7 @@ class Ephemeral:
     if self.method == 'shared_secret':
       ## makes more sense if only one secret is sent, not a list
       self.shared_secret = self.struct['key'][ 'shared_secret' ]
-    elif self.method == 'secret_generated':
+    elif self.method == 'cs_generated':
       ## key_shae is taken in the serverhello to make sure the extension
       ## is in the same place. Note that inserting the extension
       ## may require to update all length.
@@ -178,10 +177,10 @@ class Ephemeral:
 
   def resp( self):
     resp = { 'ephemeral_method' : self.method }
-    if self.method == 'secret_generated' :
+    if self.method == 'cs_generated' :
       key = { 'group' : self.group, \
               'key_exchange' : self.server_key_exchange }
-    elif self.method in [ 'no_secret', 'secret_provided' ]: 
+    elif self.method in [ 'no_secret', 'e_generated' ]: 
       key = None
     resp[ 'key' ] = key 
     return resp
@@ -232,7 +231,14 @@ class Freshness:
       ctx = "tls13 pfs srv"
     elif role == 'client':
      ctx = "tls13 pfs clt"
-    digest = Hash( SHA256(), backend=default_backend())
+    if self.freshness_funct == 'sha256' :
+      digest = Hash( SHA256() )
+    elif self.freshness_funct == 'sha384' :
+      digest = Hash( SHA384() )
+    elif self.freshness_funct == 'sha512' :
+      digest = Hash( SHA512() )
+    else: 
+      raise LURKError( 'invalid_freshness', f"{self.freshness_funct}" )
     digest.update( random )
     return digest.finalize()
     
@@ -388,7 +394,7 @@ class TlsHandshake:
     ext_list = []
     for ext in self.msg_list[ sh_index ][ 'data' ][ 'extensions' ] :
       ext_list.append( ext[ 'extension_type' ] )
-    if 'pre_shared_key' in ext_list  and  'psk_key_exchange_modes' in ext_list :
+    if 'pre_shared_key' in ext_list :
       psk_agree = True
     else: 
       psk_agree = False
@@ -424,7 +430,7 @@ class TlsHandshake:
       ks_agree = False
     return ks_agree
     
-  def is_compatible_with( self, mtype, session_ticket=None ):
+  def sanity_check( self, mtype, session_ticket=None ):
     """ checks if the handshake is compatible with the lurk exchange """
     error_txt = ""
     if mtype == 's_init_cert_verify':
@@ -455,7 +461,9 @@ class TlsHandshake:
         raise LURKError( 'invalid_handshake', f"server hello not selecting "\
                 f" currenlty used ticket: server hello {sh_selected_identity} "\
                 f" expecting value: {session_ticket.selected_identity}" )
-      if self.msg_list[ 0 ][ 'data' ][ 'cipher_suite' ] != session_ticket.cipher:
+      self.cipher_suite = self.msg_list[ 0 ][ 'data' ][ 'cipher_suite' ]
+      
+      if type( SigScheme( self.cipher_suite ).get_hash() ) != type( session_ticket.tls_hash ) :
         raise LURKError( 'invalid_handshake', f"TLS handshake cipher "\
                 f"suite {self.get_cipher( )} and ticket cipher suites "\
                 f"are not compatible {session_ticket.cipher}" )
@@ -545,8 +553,8 @@ class TlsHandshake:
 
   def update_certificate( self, lurk_cert:dict ):
     """ build the various certificates payloads """
-
-    if lurk_cert[ 'certificate_type' ] == 'empty' : 
+    
+    if lurk_cert[ 'certificate_type' ] == 'no_certificate' : 
       raise LURKError( 'invalid_certificate', f"no valid PSK/ECDHE "
             f"authentication with empty certificate" )
     elif lurk_cert[ 'certificate_type' ] == 'uncompressed' :
@@ -616,8 +624,7 @@ class TlsHandshake:
     """ returns the instance of the hash function used in the TLS exchange 
 
     """
-    sig_scheme = SigScheme( self.get_cipher_suite() ) 
-    return sig_scheme.get_hash()
+    return SigScheme( self.get_cipher_suite() ).get_hash() 
        
   def append_transcript( self, upper_msg_index:int=None  ):
     """ provides the transcript of all or up to msg_index (excluded) """
@@ -886,7 +893,7 @@ class SInitCertVerifyReq:
     self.cert = req[ 'certificate' ]
     self.handshake = TlsHandshake( 'server', self.conf )
     self.handshake.msg_list.extend( req[ 'handshake' ] )
-    self.handshake.is_compatible_with( self.mtype )
+    self.handshake.sanity_check( self.mtype )
     self.handshake.update_random( self.freshness )
     self.scheduler = None
     self.last_exchange = None 
@@ -894,7 +901,7 @@ class SInitCertVerifyReq:
 
   def resp( self ):
     self.ephemeral.compute_server_key_exchange( self.handshake ) 
-    if self.ephemeral.method == 'secret_generated':
+    if self.ephemeral.method == 'cs_generated':
       self.handshake.update_key_share( self.ephemeral.server_key_exchange )
     self.scheduler = KeyScheduler( self.handshake.get_tls_hash(), \
                                    ecdhe=self.ephemeral.shared_secret )
@@ -976,7 +983,7 @@ class SInitEarlySecretReq:
     
     self.handshake = TlsHandshake( 'server', self.conf )
     self.handshake.msg_list.extend( req[ 'handshake' ] )
-    self.handshake.is_compatible_with( self.mtype )
+    self.handshake.sanity_check( self.mtype )
     ## the binary format of the ticket 
     psk_identity=self.handshake.get_ticket( req[ 'selected_identity' ] )
     self.session_ticket = SessionTicket( self.conf, psk_identity=psk_identity )
@@ -1003,22 +1010,23 @@ class SHandAndAppSecretReq:
     self.tag = Tag( req[ 'tag' ], self.mtype, self.conf )
     self.session_id = session_id
     self.session_id.update( self.mtype )
-    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf )
     self.freshness = freshness
     self.handshake = handshake
     self.secret_request = SecretReq(req[ 'secret_request' ], self.mtype, self.conf )
     self.handshake.msg_list.extend( req[ 'handshake' ] )
     self.scheduler = scheduler
     self.session_ticket = session_ticket 
-    self.handshake.is_compatible_with( self.mtype, session_ticket=session_ticket )
+    self.handshake.sanity_check( self.mtype, session_ticket=session_ticket )
     self.handshake.update_random( self.freshness )
+    print( f"initilaizing ephemeral {req[ 'ephemeral' ]} - {self.mtype} - {self.handshake.msg_type_list()}" )
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf, self.handshake)
     self.next_mtype = 's_new_ticket'
       
     print("initialized SHandAndAppSecretReq")
 
   def resp( self ):
     self.ephemeral.compute_server_key_exchange( self.handshake ) 
-    if self.ephemeral.method == 'secret_generated':
+    if self.ephemeral.method == 'cs_generated':
       self.handshake.update_key_share( self.ephemeral.server_key_exchange )
     self.scheduler.ecdhe = self.ephemeral.shared_secret 
     self.scheduler.process( self.secret_request.of( [ 'h_c', 'h_s'] ), self.handshake )
@@ -1115,7 +1123,7 @@ class CInitCertVerify:
     self.handshake = TlsHandshake( 'client',  self.conf )
 #    self.handshake.insert( req[ 'handshake' ] )
     self.handshake.msg_list.extend( req[ 'handshake' ] )
-    self.handshake.is_compatible_with( self.mtype )
+    self.handshake.sanity_check( self.mtype )
     self.last_exchange = None 
     if self.conf[ 'post_handshake_authentication' ] == True:
       self.next_mtype = 'c_post_hand_auth'
@@ -1142,7 +1150,7 @@ class CInitPostHandAuthReq:
     
     self.handshake = TlsHandshake( 'client',  self.conf )
     self.handshake.msg_list.extend( req[ 'handshake' ] )
-    self.handshake.is_compatible_with( self.mtype )
+    self.handshake.sanity_check( self.mtype )
     cert_req_ctx = self.handshake.msg( 'certificate_request', ith=-1 )['certificate_request_context']  
     ## check why cert are generated
 ##    self.conf.load_cert( cert_req_ctx=cert_req_ctx )
@@ -1180,7 +1188,7 @@ class CPostHandAuthReq:
     
     self.handshake = handshake
     self.handshake.msg_list.extend( req[ 'handshake' ] )
-    self.handshake.is_compatible_with( self.mtype )
+    self.handshake.sanity_check( self.mtype )
     cert_req_ctx = self.handshake.msg( 'certificate_request', ith=-1 )['certificate_request_context']  
 #    self.conf.load_cert( cert_req_ctx=cert_req_ctx )
 
@@ -1216,7 +1224,7 @@ class CInitEphemeralReq:
     self.handshake = TlsHandshake( 'client', self.conf )
     client_hello = self.handshake.hs_partial_to_client_hello ( req[ 'handshake'] [0] )
     self.handshake.msg_list.extend( [ client_hello ] )
-    self.handshake.is_compatible_with( self.mtype )
+    self.handshake.sanity_check( self.mtype )
 
     self.next_mtype = 'c_hand_and_app_secret'
 
@@ -1240,7 +1248,7 @@ class CInitEarlySecretReq:
     self.handshake = TlsHandshake( 'client', self.conf )
     client_hello = self.handshake.hs_partial_to_client_hello ( req[ 'handshake'] [0] )
     self.handshake.msg_list.extend( [ client_hello ] )
-    self.handshake.is_compatible_with( self.mtype )
+    self.handshake.sanity_check( self.mtype )
     self.scheduler_list = []
     self.next_mtype = 'c_hand_and_app_secret'
     
@@ -1264,7 +1272,7 @@ class CInitEarlySecretReq:
   
   def resp( self ):
     self.ephemeral.compute_server_key_exchange( self.handshake )
-    if self.ephemeral.method == 'secret_generated':
+    if self.ephemeral.method == 'cs_generated':
       self.handshake.update_key_share( self.ephemeral.server_key_exchange )
     self.handshake_update_binders( self.scheduler_list )
     secret_list_list = [] 
@@ -1310,7 +1318,7 @@ class CHandAndAppSecretReq:
                                 ecdhe=self.ephemeral.shared_secret, is_ext=False)
     ## do we need the ticket
 ##    self.session_ticket = session_ticket 
-##    self.handshake.is_compatible_with( self.mtype, session_ticket=session_ticket )
+##    self.handshake.sanity_check( self.mtype, session_ticket=session_ticket )
 ##    self.handshake.update_random( self.freshness )
     self.next_mtype = []
     if ( 'c_post_auth' ) in self.conf[ 'type_authorized' ] and \

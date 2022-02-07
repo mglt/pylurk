@@ -128,14 +128,16 @@ HandshakeList = Switch( this._type,
 
 Freshness = Enum( BytesInteger(1),
     sha256 = 0,
+    sha384 = 1,
+    sha512 = 2,
     null = 255,
 )
 
 
 EphemeralMethod = Enum ( BytesInteger(1),
   no_secret = 0,
-  secret_provided = 1,
-  secret_generated = 2
+  e_generated = 1,
+  cs_generated = 2
 )
 
 SharedSecret = Struct(
@@ -155,11 +157,11 @@ Ephemeral = Struct(
   '_status' / Computed( this._._status ),
   'ephemeral_method' / EphemeralMethod, 
    'key' / Switch(this.ephemeral_method,
-    { 'secret_provided' : Switch(this._status, {
+    { 'e_generated' : Switch(this._status, {
          'request' : Prefixed(BytesInteger(2), SharedSecret),
          'success' : Const(b'')
         }, Error),
-      'secret_generated' : Switch(this._status, {
+      'cs_generated' : Switch(this._status, {
          'request' : Const( b'' ), 
          'success' : Prefixed(BytesInteger(2), KeyShareEntry),
         }, Error),
@@ -172,7 +174,7 @@ Ephemeral = Struct(
 
 
 LURKTLS13CertificateType = Enum ( BytesInteger(1),
-  empty = 0,
+  no_certificate = 0,
   finger_print = 1,
   uncompressed = 128
 )
@@ -182,7 +184,7 @@ LURKTLS13Certificate = Struct(
   'certificate_type' /  LURKTLS13CertificateType, 
  '_certificate_type' / If( this.certificate_type == 'uncompressed', Computed(this._._certificate_type)),
   'certificate_data' / Switch( this.certificate_type,
-    { 'empty' : Const(b''), 
+    { 'no_certificate' : Const(b''), 
       'finger_print' : Bytes(4),
       'uncompressed' : Certificate
     }  

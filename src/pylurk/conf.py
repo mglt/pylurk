@@ -56,7 +56,7 @@ conf_template = {
        ## is expected to be the last one
      'public_key' : [join( data_dir, 'cert-rsa-enc.der' )], 
      'private_key' : join( data_dir, 'key-rsa-enc.pkcs8' ), ## der, pkcs8
-     'ephemeral_method_list' : ['no_secret', 'secret_generated', 'secret_provided'],
+     'ephemeral_method_list' : ['no_secret', 'cs_generated', 'e_generated'],
      'authorized_ecdhe_group' : ['secp256r1', 'secp384r1', 
                                  'secp521r1', 'x25519', 'x448'], 
      'sig_scheme' : ['rsa_pkcs1_sha256', \
@@ -184,6 +184,13 @@ class SigScheme:
               f"{self.name}, {self.curve}, {key.curve} ,"\
               f"incompatible curve and signature algorithm" )
 
+class CipherSuite:
+  def __init__( self, name:str) :
+    self.name = name
+    self.hash = self.get_hash()
+
+  def get_hash( self ):
+    return SigScheme( self.name ).get_hash( )
 
 class Configuration:
 
@@ -652,7 +659,7 @@ default_conf = {
          'last_exchange' : False,  
          'app_secret_authorized' : True, 
          'exporter_secret_authorized' : True, 
-         'ephemeral_methods' : ['no_secret', 'secret_generated', 'secret_provided'],
+         'ephemeral_methods' : ['no_secret', 'cs_generated', 'e_generated'],
          'authorized_ecdhe_group' : ['secp256r1', 'secp384r1', 
                                      'secp521r1', 'x25519', 'x448'], 
 ##         'public_key' : [join(data_dir, 'cert-rsa-enc.der')], ## certificate chain
@@ -678,7 +685,7 @@ default_conf = {
          'last_exchange' : False,  
          'app_secret_authorized' : True, 
          'exporter_secret_authorized' : True, 
-         'ephemeral_methods' : ['no_secret', 'secret_generated', 'secret_provided'],
+         'ephemeral_methods' : ['no_secret', 'cs_generated', 'e_generated'],
          'authorized_ecdhe_group' : ['secp256r1', 'secp384r1', 
                                      'secp521r1', 'x25519', 'x448'], 
         }, 
@@ -699,7 +706,7 @@ default_conf = {
         {'designation' : 'tls13',
          'version' : 'v1',
          'type' : 'c_init_cert_verify',
-         'ephemeral_methods' : ['secret_provided'],
+         'ephemeral_methods' : ['e_generated'],
          'authorized_ecdhe_group' : ['secp256r1', 'secp384r1', 
                                      'secp521r1', 'x25519', 'x448'],
          'last_exchange' : False,  
@@ -724,7 +731,7 @@ default_conf = {
          'version' : 'v1',
          'type' : 'c_init_post_auth',
          'last_exchange' : False,  
-         'ephemeral_methods' : ['secret_provided'], ## MANDATORY
+         'ephemeral_methods' : ['e_generated'], ## MANDATORY
          'authorized_ecdhe_group' : ['secp256r1', 'secp384r1', 
                                      'secp521r1', 'x25519', 'x448'], 
          'last_exchange' : False
@@ -753,7 +760,7 @@ default_conf = {
         {'designation' : 'tls13',
          'version' : 'v1',
          'type' : 'c_init_ephemeral',
-         'ephemeral_methods' : [ 'secret_generated' ], ## MANDATORY
+         'ephemeral_methods' : [ 'cs_generated' ], ## MANDATORY
          'authorized_ecdhe_group' : ['secp256r1', 'secp384r1', 
                                      'secp521r1', 'x25519', 'x448'], 
         }, 
@@ -762,7 +769,7 @@ default_conf = {
          'type' : 'c_init_early_secret',
          'client_early_secret_authorized' : True,
          'early_exporter_secret_authorized' : True,
-         'ephemeral_methods' : [ 'no_secret', 'secret_generated' ], ## MANDATORY
+         'ephemeral_methods' : [ 'no_secret', 'cs_generated' ], ## MANDATORY
          'authorized_ecdhe_group' : ['secp256r1', 'secp384r1', 
                                      'secp521r1', 'x25519', 'x448'], 
         }, 

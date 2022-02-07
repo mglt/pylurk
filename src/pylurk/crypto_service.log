@@ -841,3 +841,133 @@ Traceback (most recent call last):
   File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 753, in msg
     msg = self.msg_list[self.msg_i( msg_type)[ ith ] ][ 'data' ]
 TypeError: 'NoneType' object is not subscriptable
+[2022-02-04 09:42:28,178 : lurk.py:73 -                serve() ] 'TlsHandshake' object has no attribute 'get_cipher'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1537, in payload_resp
+    payload = session.serve( req_payload, req_type, 'request' )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1095, in serve
+    req = SHandAndAppSecretReq( payload, self.conf, self.handshake,\
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1013, in __init__
+    self.handshake.is_compatible_with( self.mtype, session_ticket=session_ticket )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 460, in is_compatible_with
+    raise LURKError( 'invalid_handshake', f"TLS handshake cipher "\
+AttributeError: 'TlsHandshake' object has no attribute 'get_cipher'
+[2022-02-04 09:43:16,991 : lurk.py:73 -                serve() ] 'TlsHandshake' object has no attribute 'get_cipher'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1537, in payload_resp
+    payload = session.serve( req_payload, req_type, 'request' )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1095, in serve
+    req = SHandAndAppSecretReq( payload, self.conf, self.handshake,\
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1013, in __init__
+    self.handshake.is_compatible_with( self.mtype, session_ticket=session_ticket )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 460, in is_compatible_with
+    raise LURKError( 'invalid_handshake', f"TLS handshake cipher "\
+AttributeError: 'TlsHandshake' object has no attribute 'get_cipher'
+[2022-02-04 09:44:48,669 : lurk.py:73 -                serve() ] 'TlsHandshake' object has no attribute 'get_cipher'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1539, in payload_resp
+    payload = session.serve( req_payload, req_type, 'request' )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1097, in serve
+    req = SHandAndAppSecretReq( payload, self.conf, self.handshake,\
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1015, in __init__
+    self.handshake.is_compatible_with( self.mtype, session_ticket=session_ticket )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 462, in is_compatible_with
+    raise LURKError( 'invalid_handshake', f"TLS handshake cipher "\
+AttributeError: 'TlsHandshake' object has no attribute 'get_cipher'
+[2022-02-04 15:33:22,543 : lurk.py:73 -                serve() ] 'NoneType' object has no attribute 'is_ks_agreed'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1544, in payload_resp
+    payload = session.serve( req_payload, req_type, 'request' )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1102, in serve
+    req = SHandAndAppSecretReq( payload, self.conf, self.handshake,\
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1013, in __init__
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 111, in __init__
+    if handshake.is_ks_agreed :
+AttributeError: 'NoneType' object has no attribute 'is_ks_agreed'
+[2022-02-04 15:34:12,351 : lurk.py:73 -                serve() ] 'NoneType' object has no attribute 'is_ks_agreed'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1544, in payload_resp
+    payload = session.serve( req_payload, req_type, 'request' )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1102, in serve
+    req = SHandAndAppSecretReq( payload, self.conf, self.handshake,\
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1013, in __init__
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 111, in __init__
+    if handshake.is_ks_agreed() :
+AttributeError: 'NoneType' object has no attribute 'is_ks_agreed'
+[2022-02-04 15:35:19,364 : lurk.py:73 -                serve() ] 'NoneType' object has no attribute 'is_ks_agreed'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1545, in payload_resp
+    payload = session.serve( req_payload, req_type, 'request' )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1103, in serve
+    req = SHandAndAppSecretReq( payload, self.conf, self.handshake,\
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1014, in __init__
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 111, in __init__
+    print( f"{mtype} {self.method } {handshake.is_ks_agreed()}")
+AttributeError: 'NoneType' object has no attribute 'is_ks_agreed'
+[2022-02-04 15:37:51,021 : lurk.py:73 -                serve() ] 'NoneType' object has no attribute 'is_ks_agreed'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1546, in payload_resp
+    payload = session.serve( req_payload, req_type, 'request' )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1104, in serve
+    req = SHandAndAppSecretReq( payload, self.conf, self.handshake,\
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1015, in __init__
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 112, in __init__
+    print( f"{mtype} {self.method } {handshake.is_ks_agreed()}")
+AttributeError: 'NoneType' object has no attribute 'is_ks_agreed'
+[2022-02-04 15:38:17,970 : lurk.py:73 -                serve() ] 'NoneType' object has no attribute 'is_ks_agreed'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1546, in payload_resp
+    payload = session.serve( req_payload, req_type, 'request' )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1104, in serve
+    req = SHandAndAppSecretReq( payload, self.conf, self.handshake,\
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1015, in __init__
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 112, in __init__
+    print( f"{mtype} {self.method } {handshake.is_ks_agreed()}")
+AttributeError: 'NoneType' object has no attribute 'is_ks_agreed'
+[2022-02-04 15:40:00,916 : lurk.py:73 -                serve() ] 'NoneType' object has no attribute 'is_ks_agreed'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1546, in payload_resp
+    payload = session.serve( req_payload, req_type, 'request' )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1104, in serve
+    req = SHandAndAppSecretReq( payload, self.conf, self.handshake,\
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1023, in __init__
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 112, in __init__
+    print( f"{mtype} {self.method } {handshake.is_ks_agreed()}")
+AttributeError: 'NoneType' object has no attribute 'is_ks_agreed'
+[2022-02-04 16:05:37,448 : lurk.py:73 -                serve() ] 'extensions'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1546, in payload_resp
+    payload = session.serve( req_payload, req_type, 'request' )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1104, in serve
+    req = SHandAndAppSecretReq( payload, self.conf, self.handshake,\
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1023, in __init__
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf, self.handshake)
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 111, in __init__
+    print( f"{[ e[ 'extension_type' ]  for e in  handshake.msg_list[0]['extensions'] ]}" )
+KeyError: 'extensions'
