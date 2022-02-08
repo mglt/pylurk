@@ -140,29 +140,62 @@ ctx_struct = {'_status' : 'success'}
 test_struct( Ephemeral, eph_cs_resp, ext_title="cs_generated", ctx_struct=ctx_struct )
 
 ## certificate ( empty )
-no_cert = { 'certificate_type': 'no_certificate', 'certificate_data' : b'' }
-test_struct( LURKTLS13Certificate, no_cert, ext_title = "no_certificate" ) 
+#no_cert = { 'certificate_type': 'no_certificate', 'certificate_data' : b'' }
+#test_struct( LURKTLS13Certificate, no_cert, ext_title = "no_certificate" ) 
+
+## no_certificate
+no_cert = { 'cert_type' : 'no_certificate', 'certificate' : b'' }
+test_struct( Cert, no_cert, ext_title = "no_certificate" ) 
+
+## uncompressed
+certificate_entry = {'cert' : b'certificate_entry', 'extensions':[] }
+certificate = { 'certificate_request_context': b'',
+                'certificate_list' : [certificate_entry, certificate_entry] }
+uncompressed_cert = { 'cert_type' : 'uncompressed',\
+                      'certificate' : certificate }
+test_struct( Cert, uncompressed_cert, ext_title = "uncompressed" ) 
+
+## finger_print
+digest = Hash( SHA256() )
+digest.update( certificate_entry[ 'cert' ] )
+finger_certificate_entry = { 'finger_print' : digest.finalize()[ : 4 ],\
+                             'extensions' : [] }
+finger_print_certificate = \
+  { 'certificate_request_context': b'',
+    'certificate_list'  : [ finger_certificate_entry, finger_certificate_entry ] }  
+finger_print_cert = { 'cert_type' : 'finger_print', \
+                      'certificate' : finger_print_certificate }
+
+test_struct( Cert, uncompressed_cert, ext_title = "finger_print cert" ) 
+
+compressed_certificate = \
+  { 'algorithm' : 'zlib', \
+    'uncompressed_length' : 512, \
+    'compressed_certificate_message' : b'\x00\x00'} 
+compressed_cert = {  'cert_type' : 'zlib', \
+                     'certificate' : compressed_certificate } 
+test_struct( Cert, compressed_cert, ext_title = "compressed cert" ) 
+
 
 ## certificate ( finger_print )
-cert_entry = {'cert' : b'certificate_entry', 'extensions':[] }
+#cert_entry = {'cert' : b'certificate_entry', 'extensions':[] }
   ## TLS certificate structure 
 hs_cert = { 'msg_type' : 'certificate', 
-            'data' :  { 'certificate_request_context': b'',
-                        'certificate_list' : [cert_entry, cert_entry] } }
+            'data' : certificate }
 #digest = Hash( SHA256(), backend=default_backend())
-digest = Hash( SHA256() )
-digest.update( Handshake.build( hs_cert, _certificate_type='X509' ))
-cert_finger = {'certificate_type': 'finger_print', 'certificate_data': digest.finalize()[:4]}
-test_struct( LURKTLS13Certificate, cert_finger, ext_title = "finger_print" ) 
+#digest = Hash( SHA256() )
+#digest.update( Handshake.build( hs_cert, _certificate_type='X509' ))
+#cert_finger = {'certificate_type': 'finger_print', 'certificate_data': digest.finalize()[:4]}
+#test_struct( LURKTLS13Certificate, cert_finger, ext_title = "finger_print" ) 
 
 ## certificate ( uncompressed) 
-cert_uncompressed = {'certificate_type': 'uncompressed', 
-                     'certificate_data': hs_cert[ 'data' ] }
-ctx_struct = { '_certificate_type' : 'X509' }
-test_struct( Certificate, hs_cert[ 'data' ],\
-             ext_title = "certificate", ctx_struct=ctx_struct ) 
-test_struct( LURKTLS13Certificate, cert_uncompressed,\
-             ext_title = "uncompressed", ctx_struct=ctx_struct ) 
+#cert_uncompressed = {'certificate_type': 'uncompressed', 
+#                     'certificate_data': hs_cert[ 'data' ] }
+#ctx_struct = { '_certificate_type' : 'X509' }
+#test_struct( Certificate, hs_cert[ 'data' ],\
+#             ext_title = "certificate", ctx_struct=ctx_struct ) 
+#test_struct( LURKTLS13Certificate, cert_uncompressed,\
+#             ext_title = "uncompressed", ctx_struct=ctx_struct ) 
 
 ## psk_id
 psk_id = { 'identity': b'key_id', 'obfuscated_ticket_age': b'\x00\x01\x02\x03'}
@@ -343,21 +376,31 @@ def init_cert_verify_request_list( sig_algo: str ='ed25519', role='server', \
 
   if tls13_conf == None:
     role_list = [ 'server' ]
-    cert_finger_print = token_bytes( 4 )
-    lhs_certificate = deepcopy( hs_certificate )
+    finger_print_entry_list = [ { 'finger_print' : token_bytes( 4 ), 'extensions' : [] } ]
+    cert_entry_list = [ { 'cert' : b'public bytes', 'extensions' : [] } ]
+#    lhs_certificate = deepcopy( hs_certificate )
   else: ## conf overwrites the parameters
     role_list = tls13_conf[ 'role' ]
-    cert_finger_print = tls13_conf[ '_cert_finger_print' ]
-    lhs_certificate = deepcopy( tls13_conf[ '_hs_certificate' ] )
+    cert_entry_list = tls13_conf[ '_cert_entry_list' ]
+    finger_print_entry_list = tls13_conf[ '_finger_print_entry_list' ]
     
+  uncompressed_cert = \
+    { 'cert_type' : 'uncompressed', 
+      'certificate' : { 'certificate_request_context': b'', 
+                         'certificate_list' : cert_entry_list } }
+  finger_print_cert = \
+    { 'cert_type' : 'finger_print', 
+      'certificate' : { 'certificate_request_context': b'', 
+                         'certificate_list' : finger_print_entry_list } }
+      
+#    lhs_certificate = deepcopy( { 'msg_type' : 'certificate', 
+#                                  'data' : uncompressed_cert[ 'certificate' ] } )
+  print( f"finger_print_cert : {finger_print_cert}" )  
   if last_exchange == None:
     last_exchange_list = [ True, False ]
   else:
     last_exchange_list = [ last_exchange ]
-  cert_finger = { 'certificate_type' : 'finger_print', 
-                  'certificate_data' : cert_finger_print }
-  cert_uncompressed = { 'certificate_type' : 'uncompressed',
-                        'certificate_data' : lhs_certificate[ 'data' ] }
+
   list_req = []
   for role in role_list:
     if role == 'server':
@@ -372,7 +415,7 @@ def init_cert_verify_request_list( sig_algo: str ='ed25519', role='server', \
       for ephemeral in eph_list:
         ephemeral_method = ephemeral[ 'ephemeral_method' ]
         for handshake in init_cert_verify_handshake_list( ephemeral_method, role=role ):
-          for cert in [ cert_finger, cert_uncompressed ]:
+          for cert in [ finger_print_cert, uncompressed_cert ]:
             init_cert_verify_req = {\
               'tag' : { 'last_exchange' : last_exchange }, 
               'session_id' : session_id, 
@@ -395,7 +438,7 @@ def init_cert_verify_request_title( req:dict ) -> str:
 
   tag = req[ 'tag' ][ 'last_exchange' ]
   eph = req[ 'ephemeral' ][ 'ephemeral_method' ]
-  cert = req[ 'certificate' ]['certificate_type'] 
+  cert = req[ 'certificate' ]['cert_type'] 
   return "last_exchange [%s] - %s - cert_type [%s]"%( tag, eph, cert )
 
 def init_cert_verify_test( payload, status, role='server' ):
@@ -409,9 +452,11 @@ def init_cert_verify_test( payload, status, role='server' ):
     ext_title = init_cert_verify_request_title( payload )
   elif status == 'success':
     ext_title = init_cert_verify_response_title( payload )
-  ctx_struct = { '_type' : _type, '_certificate_type' : 'X509',\
-                 '_status' : status }
-#  TLS13Payload.build( payload, _type=_type, _certificate_type='X509', _status=status )
+#  ctx_struct = { '_type' : _type, '_certificate_type' : 'X509',\
+#                 '_status' : status }
+  ctx_struct = { '_type' : _type, '_status' : status }
+#  print( f"payload : {payload}" )
+#  TLS13Payload.build( payload, _type=_type, _status=status )
   test_struct( TLS13Payload, payload, ctx_struct=ctx_struct, \
                ext_title=ext_title, print_data_struct=False, print_binary=False) 
 
@@ -610,7 +655,7 @@ def s_new_ticket_handshake_list() -> list:
 def s_new_ticket_request_list( ):
   list_req = []
   for last_exchange in [ True, False ]:
-    for cert in [ no_cert, cert_finger, cert_uncompressed ]:
+    for cert in [ no_cert, finger_print_cert, uncompressed_cert ]:
       for handshake in s_new_ticket_handshake_list():
         list_req.append( {\
           'tag' : { 'last_exchange' : last_exchange }, 
@@ -626,13 +671,15 @@ def s_new_ticket_request_list( ):
 def s_new_ticket_request_title( req:dict ) -> str:
   """ returns the title associated to the request """
   tag = req[ 'tag' ][ 'last_exchange' ]
-  cert = req[ 'certificate' ]['certificate_type'] 
+  cert = req[ 'certificate' ]['cert_type'] 
   return "last_exchange [%s] - cert_type [%s]"%( tag, cert )
 
 def s_new_ticket_test( payload, status ):
   if status == 'request':
+#    ctx_struct = { '_type' : 's_new_ticket', '_status' : 'request', \
+#                   '_certificate_type' : 'X509', '_cipher' : 'TLS_AES_128_GCM_SHA256' } 
     ctx_struct = { '_type' : 's_new_ticket', '_status' : 'request', \
-                   '_certificate_type' : 'X509', '_cipher' : 'TLS_AES_128_GCM_SHA256' } 
+                   '_cipher' : 'TLS_AES_128_GCM_SHA256' } 
     ext_title = s_new_ticket_request_title( payload )
     test_struct( TLS13Payload, payload, ctx_struct=ctx_struct,\
                  ext_title=ext_title, print_data_struct=False, print_binary=False) 
@@ -752,7 +799,9 @@ def s_new_ticket_session():
     tickets are built after the init_cert_verify exchange
   """
   ctx_req = { '_type' : 's_new_ticket', '_status' : 'request', \
-              '_certificate_type' : 'X509', '_cipher' : 'TLS_AES_128_GCM_SHA256' } 
+              '_cipher' : 'TLS_AES_128_GCM_SHA256' } 
+#  ctx_req = { '_type' : 's_new_ticket', '_status' : 'request', \
+#              '_certificate_type' : 'X509', '_cipher' : 'TLS_AES_128_GCM_SHA256' } 
   ctx_resp = { '_type' : 's_new_ticket', '_status' : 'success' } 
   sig_scheme = 'ed25519'
   conf = configure( sig_scheme, role= 'server' ) 
@@ -768,8 +817,10 @@ def s_new_ticket_session():
     s_init_cert_verify_req_resp = session.serve( s_init_cert_verify_req, 's_init_cert_verify', 'request')
     req[ 'session_id' ] = s_init_cert_verify_req_resp[ 'session_id' ]
     ext_title = s_new_ticket_request_title( req )
+#    ctx_req = { '_type' : 's_new_ticket', '_status' : 'request', \
+#                '_certificate_type' : 'X509', '_cipher' : 'TLS_AES_128_GCM_SHA256' } 
     ctx_req = { '_type' : 's_new_ticket', '_status' : 'request', \
-                '_certificate_type' : 'X509', '_cipher' : 'TLS_AES_128_GCM_SHA256' } 
+                '_cipher' : 'TLS_AES_128_GCM_SHA256' } 
     test_struct( TLS13Payload, req, ctx_struct=ctx_req, ext_title=ext_title ) 
     resp = session.serve( req, 's_new_ticket', 'request')
     test_struct( TLS13Payload, req, ctx_struct=ctx_req, ext_title=ext_title ) 
@@ -1038,7 +1089,8 @@ print( "EOF" )
 conf = configure('ed25519', role='client')
 for req in c_init_cert_verify_request_list( conf=conf):
   ext_title = init_cert_verify_request_title( req )
-  ctx_struct = { '_type' : 'c_init_cert_verify', '_certificate_type' : 'X509' }
+#  ctx_struct = { '_type' : 'c_init_cert_verify', '_certificate_type' : 'X509' }
+  ctx_struct = { '_type' : 'c_init_cert_verify' }
 
 ## CInitCertVerifyResponse
 for resp in init_cert_verify_response_list( role='server'):

@@ -313,21 +313,37 @@ CertificateType = Enum( BytesInteger(1),
 
 CertificateEntry = Struct(
    
-   '_certificate_type' / Computed(this._._certificate_type),
-   'cert' / Switch( this._certificate_type, {
-    'RawPublicKey': Prefixed( BytesInteger(3), GreedyBytes),
-    'X509': Prefixed(BytesInteger(3), GreedyBytes)
-    }
-  ),
+#   '_certificate_type' / Computed(this._._certificate_type),
+#   'cert' / Switch( this._certificate_type, {
+#    'RawPublicKey': Prefixed( BytesInteger(3), GreedyBytes),
+#    'X509': Prefixed(BytesInteger(3), GreedyBytes)
+#    }
+#  ),
+  'cert' / Prefixed(BytesInteger(3), GreedyBytes),
   'extensions' / Prefixed( BytesInteger(2), GreedyRange(Extension))
 )
 
 Certificate = Struct(
   '_name' / Computed('Certificate'),
-  '_certificate_type' / Computed(this._._certificate_type),
+#  '_certificate_type' / Computed(this._._certificate_type),
   'certificate_request_context' / Prefixed( BytesInteger(1), GreedyBytes),
   'certificate_list' / Prefixed(BytesInteger(3), GreedyRange(CertificateEntry))
 )
+
+## Compressed Certificate
+CertificateCompressionAlgorithm = Enum ( BytesInteger(2),
+  zlib = 1,
+  brotli = 2,
+  zstd = 3
+)
+
+CompressedCertificate = Struct( 
+  '_name' / Computed('CompressedCertificate'),
+  'algorithm' / CertificateCompressionAlgorithm, 
+  'uncompressed_length' / BytesInteger(3),
+  'compressed_certificate_message' / Prefixed(BytesInteger(3), GreedyBytes)
+)
+
 
 ## CertificateRequest
 CertificateRequest = Struct(
@@ -404,7 +420,7 @@ HandshakeType = Enum( BytesInteger(1),
 Handshake = Struct(
   '_name' / Computed('Handshake'),
   'msg_type' / HandshakeType,
-  '_certificate_type' / If( this.msg_type == 'certificate', Computed(this._._certificate_type)),   
+#  '_certificate_type' / If( this.msg_type == 'certificate', Computed(this._._certificate_type)),   
 ##  '_certificate_type' / If( this.msg_type == 'certificate', Computed('X509') ),   
 ##  '_cipher' / If( this.msg_type == 'finished', Computed(this._._cipher)),   
   'data' / Prefixed( BytesInteger(3), Switch(this.msg_type,
@@ -456,7 +472,7 @@ HSCertificateRequest = Struct(
 )
 
 HSCertificate = Struct( 
-  '_certificate_type' / Computed(this._._._certificate_type),
+#  '_certificate_type' / Computed(this._._._certificate_type),
   'msg_type' / Const('certificate', HandshakeType), 
   'data' / Certificate
 )

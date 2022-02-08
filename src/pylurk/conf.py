@@ -422,15 +422,15 @@ class Configuration:
 
   ### TLS or LURK engine related functions
   
-  def load_cert_list( self ):
+  def load_cert_entry_list( self ):
     """ returns the certificate list """
     cert_file_list = self.conf[ ( 'tls13', 'v1' )  ] ['public_key']
-    cert_list = [] 
+    cert_entry_list = [] 
     for cert_file in cert_file_list:
       with open( cert_file, 'rb' ) as f:
         public_bytes = f.read() 
-      cert_list.append( { 'cert' : public_bytes, 'extensions': [] } ) ## certificateEntry
-    return cert_list 
+      cert_entry_list.append( { 'cert' : public_bytes, 'extensions': [] } ) ## certificateEntry
+    return cert_entry_list 
 
   def set_extention( self, ext=None ) : 
 #  def export_conf( self ):
@@ -446,18 +446,24 @@ class Configuration:
       self.conf[ ( 'tls13', 'v1' ) ] [ '_private_key' ] = private_key 
       self.conf[ ( 'tls13', 'v1' ) ] [ '_public_key' ] = public_key 
       self.conf[ ( 'tls13', 'v1' ) ] [ '_cert_type' ] = cert_type
-      cert_list = self.load_cert_list() 
-      self.conf[ ( 'tls13', 'v1' ) ][ '_cert_list' ] = cert_list
-      hs_certificate =\
-        { 'msg_type' : 'certificate',
-          'data' :  { 'certificate_request_context': b'',
-                      'certificate_list' : cert_list } }
+      cert_entry_list = self.load_cert_entry_list() 
+      self.conf[ ( 'tls13', 'v1' ) ][ '_cert_entry_list' ] = cert_entry_list
+#      hs_certificate =\
+#        { 'msg_type' : 'certificate',
+#          'data' :  { 'certificate_request_context': b'',
+#                      'certificate_list' : cert_list } }
 ##     digest = Hash( SHA256(), backend=default_backend())
-      digest = Hash( SHA256() )
-      digest.update( Handshake.build( hs_certificate, _certificate_type=cert_type ))
-      cert_finger_print = digest.finalize()[:4]
-      self.conf[ ( 'tls13', 'v1' ) ] [ '_hs_certificate' ] = hs_certificate
-      self.conf[ ( 'tls13', 'v1' ) ] [ '_cert_finger_print' ] = cert_finger_print
+      finger_print_dict = {}
+      finger_print_entry_list = []
+      for cert_entry in cert_entry_list:
+        public_bytes = cert_entry[ 'cert' ]
+        digest = Hash( SHA256() )
+        digest.update( public_bytes )
+        finger_print = digest.finalize()[ :4 ]
+        finger_print_dict[ finger_print ] = public_bytes
+        finger_print_entry_list.append( { 'finger_print' : finger_print, 'extensions': [] } )
+      self.conf[ ( 'tls13', 'v1' ) ] [ '_finger_print_entry_list' ] = finger_print_entry_list
+      self.conf[ ( 'tls13', 'v1' ) ] [ '_finger_print_dict' ] = finger_print_dict
     else: 
       raise ConfigurationError( f"unknown extention {ext} " )
     return self.conf[ ext ]

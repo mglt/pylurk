@@ -328,8 +328,11 @@ class TlsHandshake:
     self.hs_cert_msg = \
       { 'msg_type' : 'certificate',
         'data' :  { 'certificate_request_context': b'',
-                    'certificate_list' : self.conf[ '_cert_list' ] } }
-    self.cert_finger_print = self.conf[ '_cert_finger_print' ]
+                    'certificate_list' : self.conf[ '_cert_entry_list' ] } }
+#    self.cert_finger_print = self.conf[ '_cert_finger_print' ]
+    self.finger_print_dict = self.conf[ '_finger_print_dict' ]
+    self.finger_print_entry_list =  self.conf[ '_finger_print_entry_list' ]
+    self.cert_entry_list = self.conf[ '_cert_entry_list' ]
     self.cert_type =  self.conf[ '_cert_type' ]
     self.private_key = self.conf[ '_private_key' ]
     ## list of structures representing the TLS handshake messages
@@ -554,20 +557,31 @@ class TlsHandshake:
   def update_certificate( self, lurk_cert:dict ):
     """ build the various certificates payloads """
     
-    if lurk_cert[ 'certificate_type' ] == 'no_certificate' : 
+    if lurk_cert[ 'cert_type' ] == 'no_certificate' : 
       raise LURKError( 'invalid_certificate', f"no valid PSK/ECDHE "
             f"authentication with empty certificate" )
-    elif lurk_cert[ 'certificate_type' ] == 'uncompressed' :
+    elif lurk_cert[ 'cert_type' ] == 'uncompressed' :
       hs_cert_msg = { 'msg_type' : 'certificate', 
-               'data' : lurk_cert[ 'certificate_data' ] }    
-    elif lurk_cert[ 'certificate_type' ] == 'compressed' :
+                      'data' : lurk_cert[ 'certificate' ] }    
+    elif lurk_cert[ 'cert_type' ] == 'compressed' :
       hs_cert_msg = 'XXX'
-    elif lurk_cert[ 'certificate_type' ] == 'finger_print' :
-      if lurk_cert[ 'certificate_data' ] != self.cert_finger_print :
-        raise LURKError( 'invalid_certificate', \
-                f"fingerprint {self.cert_finger_print} npot matching conf " \
-                f"{sel.tls13_onf[ '_cert_finger_print' ] }" )
-      hs_cert_msg = self.conf[ '_hs_certificate' ]
+    elif lurk_cert[ 'cert_type' ] == 'finger_print' :
+      cert_entry_list = []       
+      finger_print_entry_list = lurk_cert[ 'certificate' ][ 'certificate_list' ]
+      try: 
+        for entry in finger_print_entry_list :
+          cert_entry = { 'cert' : self.finger_print_dict[ entry[ 'finger_print' ] ], \
+                         'extensions' : entry[ 'extensions' ][ : ] }
+          cert_entry_list.append( cert_entry )
+      except KeyError: 
+        raise LURKError( 'invalid_certificate', f"unrecognized fingerprint "\
+                         f"{finger_print_entry_list} {self.finger_print_dict}" )
+      cert_req_ctx = lurk_cert[ 'certificate' ][ 'certificate_request_context' ]
+      certificate = { 'certificate_request_context' : cert_req_ctx, \
+                      'certificate_list' : cert_entry_list }
+      hs_cert_msg = { 'msg_type' : 'certificate', 
+                      'data' : certificate }    
+      
     else: 
       raise ImplementationError( "unable to generate certificate message" )
     self.msg_list.append( hs_cert_msg )
@@ -633,7 +647,8 @@ class TlsHandshake:
     ## case we will have to read it from the handshake
     ## problem may arise when different format are used between 
     ## the client and the server. 
-    ctx_struct = { '_certificate_type': self.cert_type }
+#    ctx_struct = { '_certificate_type': self.cert_type }
+    ctx_struct = { }
     ## finished message needs the _cipher to be specified
     if 'server_hello' in self.msg_type_list() :
       ctx_struct[ '_cipher' ] = self.get_cipher_suite()

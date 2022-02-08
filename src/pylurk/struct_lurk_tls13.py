@@ -2,9 +2,9 @@ from construct.core import *
 from construct.lib import *
 from construct.debug import *
 
-from struct_tls13 import PskIdentity, Certificate,\
+from struct_tls13 import PskIdentity, Certificate, CompressedCertificate, \
   SignatureScheme, KeyShareEntry, NamedGroup, ExtensionType,\
-  HandshakeType,\
+  HandshakeType, Extension, \
   NewSessionTicket, ClientHello, ServerHello, EndOfEarlyData,\
   EncryptedExtensions, CertificateRequest, Certificate, CertificateVerify,\
   Finished, KeyUpdate,\
@@ -49,6 +49,7 @@ TLS13Status = Enum( BytesInteger(1),
   invalid_ephemeral = 8, 
   invalid_psk = 9, 
   invalid_certificate = 10,
+  invalid_cert_type = 10,
   invalid_type = 11,
 )
 
@@ -173,22 +174,58 @@ Ephemeral = Struct(
 )
 
 
-LURKTLS13CertificateType = Enum ( BytesInteger(1),
-  no_certificate = 0,
-  finger_print = 1,
-  uncompressed = 128
+#LURKTLS13CertificateType = Enum ( BytesInteger(1),
+#  no_certificate = 0,
+#  finger_print = 1,
+#  uncompressed = 128
+#)
+
+#LURKTLS13Certificate = Struct(
+#  '_name' / Computed('LURKTLS13Certificate'),
+#  'certificate_type' /  LURKTLS13CertificateType, 
+# '_certificate_type' / If( this.certificate_type == 'uncompressed', Computed(this._._certificate_type)),
+#  'certificate_data' / Switch( this.certificate_type,
+#    { 'no_certificate' : Const(b''), 
+#      'finger_print' : Bytes(4),
+#      'uncompressed' : Certificate
+#    }  
+#  ) 
+#)
+
+CertType = Enum ( BytesInteger(2),
+  zlib = 1, 
+  brotli = 2, 
+  zstd = 3,
+  no_certificate = 128,
+  finger_print = 129,
+  uncompressed = 130
 )
 
-LURKTLS13Certificate = Struct(
-  '_name' / Computed('LURKTLS13Certificate'),
-  'certificate_type' /  LURKTLS13CertificateType, 
- '_certificate_type' / If( this.certificate_type == 'uncompressed', Computed(this._._certificate_type)),
-  'certificate_data' / Switch( this.certificate_type,
-    { 'no_certificate' : Const(b''), 
-      'finger_print' : Bytes(4),
-      'uncompressed' : Certificate
-    }  
-  ) 
+FingerPrintCertificateEntry = Struct(
+  '_name' / Computed('FingerPrintCertificateEntry'),
+  'finger_print' / Bytes( 4 ),
+  'extensions' / Prefixed( BytesInteger(2), GreedyRange( Extension ) )
+)
+
+FingerPrintCertificate = Struct(
+  '_name' / Computed('FingerPrintCertificate'),
+  'certificate_request_context' / Prefixed( BytesInteger(1), GreedyBytes),
+  'certificate_list' / Prefixed(BytesInteger(3), GreedyRange(FingerPrintCertificateEntry))
+)
+
+Cert = Struct(
+  '_name' / Computed('Cert'),
+  'cert_type' /  CertType,
+  Probe( this.cert_type ),
+  'certificate' / Switch( this.cert_type, {
+    'zlib' : CompressedCertificate, 
+    'brotli' : CompressedCertificate,
+    'zstd' : CompressedCertificate,
+    'no_certificate' : Const( b'' ), 
+    'finger_print' : FingerPrintCertificate,
+    'uncompressed' : Certificate
+    }
+  )
 )
 
 Tag = BitStruct(
@@ -220,31 +257,32 @@ SInitCertVerifyRequest = Struct(
   '_name' / Computed('SInitCertVerifyRequest'),
   '_type' / Computed(this._._type),
   '_status' / Computed('request'),
-  '_certificate_type' / Computed(this._._certificate_type),
+#  '_certificate_type' / Computed(this._._certificate_type),
   'tag' / Tag,
-  Probe(this.tag),
-  Probe(this._type),
-  Probe(this._status),
+#  Probe(this.tag),
+#  Probe(this._type),
+#  Probe(this._status),
   'session_id' / Switch( this.tag.last_exchange,
     { True : Const( b'' ), 
       False : Bytes( 4 ),
     }  
   ),
-  Probe(this.session_id),
+#  Probe(this.session_id),
   'freshness' / Freshness,
-  Probe(this.freshness),
+#  Probe(this.freshness),
   'ephemeral' / Ephemeral, 
-  Probe(this.ephemeral),
+#  Probe(this.ephemeral),
   'handshake' / Prefixed( BytesInteger(4), HandshakeList ), 
 #  'handshake' / Prefixed( BytesInteger(4), GreedyRange( Handshake ) ), 
 #  'handshake' / Prefixed( BytesInteger(4), Sequence(
 #      HSClientHello, HSServerHello, HSEncryptedExtensions) ), 
-  Probe(this.handshake),
-  'certificate' / LURKTLS13Certificate, 
-  Probe(this.certificate),
+#  Probe(this.handshake),
+#  'certificate' / LURKTLS13Certificate, 
+  'certificate' / Cert, 
+#  Probe(this.certificate),
   'secret_request' / SecretRequest,
   'sig_algo' / SignatureScheme,
-  Probe(this.sig_algo),
+#  Probe(this.sig_algo),
 )
 
 SInitCertVerifyResponse = Struct(
@@ -288,12 +326,13 @@ SHandAndAppResponse = Struct(
 SNewTicketRequest = Struct(
   '_name' / Computed('SNewTicketRequest'),
   '_type' / Computed(this._._type),
-  '_certificate_type' / Computed(this._._certificate_type),
+#  '_certificate_type' / Computed(this._._certificate_type),
 #  '_cipher' / Computed(this._._cipher),
   'tag' / Tag,
   'session_id' / Bytes(4), 
   'handshake' / Prefixed( BytesInteger(4), HandshakeList),
-  'certificate' / LURKTLS13Certificate, 
+#  'certificate' / LURKTLS13Certificate, 
+  'certificate' / Cert, 
   'ticket_nbr' / BytesInteger(1), 
   'secret_request' / SecretRequest,
 )
@@ -324,7 +363,8 @@ CInitPostHandAuthRequest = Struct(
   ),
   'freshness' / Freshness,
   'handshake' / Prefixed( BytesInteger(4), HandshakeList ),
-  'certificate' / LURKTLS13Certificate,
+#  'certificate' / LURKTLS13Certificate,
+  'certificate' / Cert,
   'sig_algo' / SignatureScheme,
 )
 
@@ -345,7 +385,8 @@ CPostHandAuthRequest = Struct(
   'tag' / Tag,
   'session_id' / Bytes(4), 
   'handshake' / Prefixed( BytesInteger(4), HandshakeList ),
-  'certificate' / LURKTLS13Certificate,
+#  'certificate' / LURKTLS13Certificate,
+  'certificate' / Cert,
   'sig_algo' / SignatureScheme,
 )
 
