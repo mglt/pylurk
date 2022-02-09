@@ -971,3 +971,73 @@ Traceback (most recent call last):
   File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 111, in __init__
     print( f"{[ e[ 'extension_type' ]  for e in  handshake.msg_list[0]['extensions'] ]}" )
 KeyError: 'extensions'
+[2022-02-08 21:43:01,509 : lurk.py:73 -                serve() ] 'TlsHandshake' object has no attribute 'is_early_data_proposed'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1593, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1157, in serve
+    req = SInitEarlySecretReq( payload, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1040, in __init__
+    if self.handshake.is_early_data_proposed( ) is False and\
+AttributeError: 'TlsHandshake' object has no attribute 'is_early_data_proposed'
+[2022-02-08 21:47:07,996 : lurk.py:73 -                serve() ] 'TlsHandshake' object has no attribute 'is_early_data_proposed'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1594, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1158, in serve
+    req = SInitEarlySecretReq( payload, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1040, in __init__
+    if self.handshake.is_early_data_proposed( ) is False and\
+AttributeError: 'TlsHandshake' object has no attribute 'is_early_data_proposed'
+[2022-02-08 21:52:42,343 : lurk.py:73 -                serve() ] 'TlsHandshake' object has no attribute 'is_early_data_proposed'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1595, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1159, in serve
+    req = SInitEarlySecretReq( payload, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1041, in __init__
+    if self.handshake.is_early_data_proposed( ) is False and\
+AttributeError: 'TlsHandshake' object has no attribute 'is_early_data_proposed'
+[2022-02-08 21:53:22,021 : lurk.py:73 -                serve() ] 'TlsHandshake' object has no attribute 'is_early_data_proposed'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1596, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1160, in serve
+    req = SInitEarlySecretReq( payload, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1041, in __init__
+    print( f"checking early_data {self.handshake.is_early_data_proposed( )}" )
+AttributeError: 'TlsHandshake' object has no attribute 'is_early_data_proposed'
+[2022-02-08 22:05:39,186 : lurk.py:73 -                serve() ] name 'ext_list' is not defined
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1606, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1170, in serve
+    req = SInitEarlySecretReq( payload, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1051, in __init__
+    print( f"checking early_data {self.handshake.is_early_data_proposed( )}" )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 463, in is_early_data_proposed
+    ext_list.append( ext[ 'extension_type' ] )
+NameError: name 'ext_list' is not defined
+[2022-02-08 22:06:27,503 : lurk.py:73 -                serve() ] name 'ext_list' is not defined
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1607, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1171, in serve
+    req = SInitEarlySecretReq( payload, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1052, in __init__
+    print( f"checking early_data {self.handshake.is_early_data_proposed( )}" )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 464, in is_early_data_proposed
+    ext_list.append( ext[ 'extension_type' ] )
+NameError: name 'ext_list' is not defined

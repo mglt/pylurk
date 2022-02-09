@@ -186,6 +186,8 @@ class SigScheme:
 
 class CipherSuite:
   def __init__( self, name:str) :
+    """ Handle the cipher suite string  
+    """
     self.name = name
     self.hash = self.get_hash()
 

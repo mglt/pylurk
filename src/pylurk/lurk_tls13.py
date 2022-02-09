@@ -33,7 +33,7 @@ from construct.core import *
 from construct.lib import *
 from struct_tls13 import PskIdentity, Certificate, SignatureScheme, Handshake
 from key_schedule import TlsHash, PSKWrapper
-from conf import default_conf, SigScheme
+from conf import default_conf, SigScheme, CipherSuite
 from lurk_lurk import LURKError, ImplementationError, ConfigurationError
 
 import pkg_resources
@@ -325,20 +325,26 @@ class TlsHandshake:
     self.role = role #tls13_conf[ 'role' ]  ## list of role
     ## mostly makes sense for the server side
     self.conf = tls13_conf
-    self.hs_cert_msg = \
-      { 'msg_type' : 'certificate',
-        'data' :  { 'certificate_request_context': b'',
-                    'certificate_list' : self.conf[ '_cert_entry_list' ] } }
+#    self.hs_cert_msg = \
+#      { 'msg_type' : 'certificate',
+#        'data' :  { 'certificate_request_context': b'',
+#                    'certificate_list' : self.conf[ '_cert_entry_list' ] } }
 #    self.cert_finger_print = self.conf[ '_cert_finger_print' ]
     self.finger_print_dict = self.conf[ '_finger_print_dict' ]
-    self.finger_print_entry_list =  self.conf[ '_finger_print_entry_list' ]
-    self.cert_entry_list = self.conf[ '_cert_entry_list' ]
-    self.cert_type =  self.conf[ '_cert_type' ]
+#    self.finger_print_entry_list =  self.conf[ '_finger_print_entry_list' ]
+#    self.cert_entry_list = self.conf[ '_cert_entry_list' ]
+#    self.cert_type =  self.conf[ '_cert_type' ]
     self.private_key = self.conf[ '_private_key' ]
     ## list of structures representing the TLS handshake messages
     self.msg_list = []
     self.cipher_suite = None 
     self.transcript = None
+    ## define if a client certificate is requested / expected
+    self.is_certificate_request_state = None
+    ## transcript for the resumption secret 
+    ## this is used to prevent recomputing a erroneous transcript 
+    ## when multiple s_new_session are sent. 
+    self.transcript_r = None
 
   def post_post_hand_auth( self ):
     """ removes the CertificateRequest, Certificate and CErtificateVerify """
@@ -432,16 +438,51 @@ class TlsHandshake:
     else: 
       ks_agree = False
     return ks_agree
+   
+  def is_certificate_request( self ):
+    """ returns True is the handshake contains a CertificateRequest message """
+
+    if self.is_certificate_request_state != None:
+      return self.is_certificate_request
+    if 'certificate_request' in self.msg_type_list( ):
+      self.is_certificate_request_state = True
+    else: 
+      self.is_certificate_request_state = False
+    return self.is_certificate_request_state
+
+  def is_certificate( self ):
+    """ return True if self.msgs_list contains a Certifcate message """
+    if 'certificate_request' in msg_type_list( self ):
+      return True
+    return False
+
+  def is_early_data_proposed( self ):
+    """ returns True is the TLS client enable early_data """
+    ch_index = self.latest_client_hello_index()
+    ext_list = []
+    for ext in self.msg_list[ ch_index ][ 'data' ][ 'extensions' ] :
+      ext_list.append( ext[ 'extension_type' ] )
+    if 'early_data' in ext_list :
+      return True
+    return False
     
+
   def sanity_check( self, mtype, session_ticket=None ):
     """ checks if the handshake is compatible with the lurk exchange """
     error_txt = ""
     if mtype == 's_init_cert_verify':
+      ## determine is a client Certificate 
+      ## is expected in the s_new_ticket 
+      self.is_certificate_request( ) 
       if self.is_psk_agreed() == True or self.is_ks_proposed == False or\
          self.is_ks_agreed == False:
         raise LURKError('invalid_handshake', f"expecting ks_agreed and non psk_aghreed {self.msg_list}" ) 
     elif mtype == 's_new_ticket' :
-      pass
+      if self.is_certificate != self.is_certificate_request( ) is False :
+        raise LURKError('invalid_handshake', f"incompatible client "\
+                        f"Certificate / CertificateRequest" ) 
+      if self.resumption_master_secret == None and self.msg_list == []:
+        raise LURKError('invalid_handshake', f"expecting non empty handshake" ) 
     elif mtype == 's_init_early_secret':
       if self.is_psk_proposed() == False :
         raise LURKError('invalid_handshake', f"expecting psk_proposed {self.msg_list}" ) 
@@ -466,7 +507,7 @@ class TlsHandshake:
                 f" expecting value: {session_ticket.selected_identity}" )
       self.cipher_suite = self.msg_list[ 0 ][ 'data' ][ 'cipher_suite' ]
       
-      if type( SigScheme( self.cipher_suite ).get_hash() ) != type( session_ticket.tls_hash ) :
+      if type( CipherSuite( self.cipher_suite ).get_hash() ) != type( session_ticket.tls_hash ) :
         raise LURKError( 'invalid_handshake', f"TLS handshake cipher "\
                 f"suite {self.get_cipher( )} and ticket cipher suites "\
                 f"are not compatible {session_ticket.cipher}" )
@@ -638,7 +679,7 @@ class TlsHandshake:
     """ returns the instance of the hash function used in the TLS exchange 
 
     """
-    return SigScheme( self.get_cipher_suite() ).get_hash() 
+    return CipherSuite( self.get_cipher_suite() ).get_hash() 
        
   def append_transcript( self, upper_msg_index:int=None  ):
     """ provides the transcript of all or up to msg_index (excluded) """
@@ -659,7 +700,6 @@ class TlsHandshake:
     else:
       msg_list = self.msg_list[ : upper_msg_index ]
       del self.msg_list[ : upper_msg_index ]
-    print( f"msg_list {msg_list}" )
     msg_bytes = bytearray()
     for msg in msg_list :  
       msg_bytes.extend( Handshake.build( msg, **ctx_struct ) ) 
@@ -722,9 +762,10 @@ class TlsHandshake:
         raise ImplementationError( f"unexpected handshake {self.msg_type()}" )
     elif transcript_type == 'r' : 
       if self.msg_type_list( ) not in [ \
-        ## 's_new_ticket'
+        ## 's_new_ticket 
         [ 'finished' ], \
-        [ 'certificate', 'certificate_verify', 'finished' ] ] :
+        [ 'certificate', 'certificate_verify', 'finished' ], \
+        []] : ## when mutliple s_new_ticket are sent
         raise ImplementationError( f"unexpected handshake {self.msg_type_list()}" )
     elif transcript_type == 'e' :
       print( self.msg_type_list( ))
@@ -735,8 +776,18 @@ class TlsHandshake:
         raise ImplementationError( f"unexpected handshake {self.msg_type_list()}" )
     else: 
           raise ImplementationError( f"Unexpected {transcript_type}" )
-    print( "starting append_transcript" )
-    return self.append_transcript( upper_msg_index )
+    ## 'r' may be asked multiple times
+    ## in principle, E is expected to send an empty handshake, so that will just work.
+    ## However, to support the case when E re-send the handshake messages.
+    ## r should be stored and returned instead of being recomputed. 
+    if transcript_type == 'r' and self.transcript_r != None:
+      transcript = self.transcript_r
+    else :
+      transcript = self.append_transcript( upper_msg_index )
+      if transcript_type == 'r' :
+        self.transcript_r = transcript
+    return transcript  
+#    return self.append_transcript( upper_msg_index )
 
   def get_ticket( self, selected_identity:int=None ):
     try:
@@ -803,7 +854,7 @@ class SessionTicket:
 
   def new( self, scheduler, cipher ):
     self.cipher = cipher 
-    self.tls_hash = SigScheme( self.cipher ).get_hash() 
+    self.tls_hash = CipherSuite( self.cipher ).get_hash() 
     ticket_nonce = token_bytes( self.conf[ 'ticket_nonce_len' ] )
     self.psk =  scheduler.compute_psk( ticket_nonce )
      
@@ -820,7 +871,7 @@ class SessionTicket:
     ticket =  loads( psk_identity[ 'identity' ] )  
     self.cipher = ticket[ 'cipher' ]
     self.psk = ticket[ 'psk' ]
-    self.tls_hash = SigScheme( self.cipher ).get_hash()
+    self.tls_hash = CipherSuite( self.cipher ).get_hash()
 
   def init_handshake( self, handshake ):
     """initialize handshake from values stored in the ticket. 
@@ -949,9 +1000,7 @@ class SNewTicketReq:
     self.session_id = session_id
     self.session_id.update( self.mtype )
     self.session_id.is_in_session( self.mtype, 'request', req[ 'session_id' ])
-    print( f" - init: {self.handshake.msg_list}")
     self.handshake.msg_list.extend( req[ 'handshake' ] )
-    print( f" - initialized: {self.handshake.msg_list}")
     self.cert = req[ 'certificate' ]
     self.ticket_nbr = self.nbr( req[ 'ticket_nbr' ] )
     self.secret_request = SecretReq(req[ 'secret_request' ], self.mtype, self.conf )
@@ -999,8 +1048,14 @@ class SInitEarlySecretReq:
     self.handshake = TlsHandshake( 'server', self.conf )
     self.handshake.msg_list.extend( req[ 'handshake' ] )
     self.handshake.sanity_check( self.mtype )
+    print( f"checking early_data {req[ 'secret_request' ]}" ) 
+    print( f"checking early_data {self.handshake.is_early_data_proposed( )}" ) 
+    if self.handshake.is_early_data_proposed( ) is False and\
+       'e_c' in req[ 'secret_request' ] :
+      req[ 'secret_request' ].remove( 'e_c' )
+    print( f"checked early_data {req[ 'secret_request' ]}" ) 
     ## the binary format of the ticket 
-    psk_identity=self.handshake.get_ticket( req[ 'selected_identity' ] )
+    psk_identity = self.handshake.get_ticket( req[ 'selected_identity' ] )
     self.session_ticket = SessionTicket( self.conf, psk_identity=psk_identity )
     ## to enable to check the server hello is conformed with the ticket in used. 
     self.session_ticket.selected_identity = req[ 'selected_identity' ] 
