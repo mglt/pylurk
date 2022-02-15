@@ -12,9 +12,6 @@ from struct_tls13 import PskIdentity, Certificate, CompressedCertificate, \
   HSCertificateRequest, HSCertificate, HSCertificateVerify, HSFinished, \
   TLSCiphertext, Handshake
 
-## TODO
-##  * structure for secret list secret_request depending on _type
-##  * handshakeList is does not handle properly the combination of multiple optional messages. 
 
 TLS13Version = Enum( BytesInteger(1), 
   v1 = 1
@@ -28,18 +25,21 @@ TLS13Type = Enum( BytesInteger(1),
   s_init_early_secret = 4,
   s_hand_and_app_secret = 5,
   c_binder_key = 6, 
+  c_init_post_hand_auth = 13,
+  c_cert_verify = 11,
+  c_post_hand_auth = 14,
+
   c_init_early_secret = 7, 
   c_init_hand_secret = 8,
   c_hand_secret = 9,
   c_app_secret = 10,
-  c_cert_verify = 11, 
   c_register_ticket = 12,
-  c_post_hand = 13
 )
 
 TLS13Status = Enum( BytesInteger(1), 
   request = 0,
-  success = 1, 
+  success = 1,
+  invalid_status = 15,
   undefined_error = 2,
   invalid_format = 3,
   invalid_secret_request = 4, 
@@ -49,7 +49,7 @@ TLS13Status = Enum( BytesInteger(1),
   invalid_ephemeral = 8, 
   invalid_psk = 9, 
   invalid_certificate = 10,
-  invalid_cert_type = 10,
+  invalid_cert_type = 12,
   invalid_type = 11,
 )
 
@@ -92,12 +92,16 @@ HandshakeList = Switch( this._type,
       Sequence( HSClientHello, HSServerHello, HSEncryptedExtensions, HSCertificateRequest ),
       Sequence( HSClientHello, HSServerHello, HSEncryptedExtensions )),  
     's_new_ticket' : Select( \
-      Sequence( HSCertificate, HSCertificateVerify, HSFinished ),
+      Sequence( HSCertificateVerify, HSFinished ),
       Sequence( HSFinished ) ),
     's_hand_and_app_secret' : Select(\
       Sequence( HSServerHello, HSEncryptedExtensions, HSCertificateRequest ),
       Sequence( HSServerHello, HSEncryptedExtensions ) ),  
-    'c_init_cert_verify' : Sequence(HSClientHello, HSServerHello, HSEncryptedExtensions, HSCertificateRequest, HSCertificate, HSCertificateVerify, Finished), 
+    'c_init_cert_verify' : Select( \
+       Sequence( HSClientHello, HSServerHello, HSEncryptedExtensions, HSCertificateRequest, HSCertificateVerify, HSFinished), 
+       Sequence( HSClientHello, HSServerHello, HSEncryptedExtensions, HSCertificateRequest, HSCertificateVerify, HSFinished, HSEndOfEarlyData), 
+       Sequence( HSClientHello, HSServerHello, HSClientHello, HSEncryptedExtensions, HSCertificateRequest, HSCertificateVerify, HSFinished), 
+       Sequence( HSClientHello, HSServerHello, HSClientHello, HSEncryptedExtensions, HSCertificateRequest, HSCertificateVerify, HSFinished, HSEndOfEarlyData) ), 
     'c_init_post_hand_auth' : Select(
       ## we are missing ClientHelloRetry
       ## server cert = yes / no
@@ -116,7 +120,10 @@ HandshakeList = Switch( this._type,
       Sequence(
       HSClientHello, HSServerHello, HSEncryptedExtensions, HSFinished, HSFinished, HSCertificateRequest) 
     ),  
-    'c_post_hand_auth' : Sequence( HSCertificateRequest ), 
+    'c_post_hand_auth' : Select( \
+      ## first c_post_hand_auth
+      Sequence( HSCertificateRequest) , 
+     ), 
     'c_init_ephemeral' : Sequence( HSPartialClientHello ),
     'c_init_early_secret' : Sequence( HSPartialClientHello ),
     'c_hand_and_app_secret' : Select( \
@@ -257,32 +264,18 @@ SInitCertVerifyRequest = Struct(
   '_name' / Computed('SInitCertVerifyRequest'),
   '_type' / Computed(this._._type),
   '_status' / Computed('request'),
-#  '_certificate_type' / Computed(this._._certificate_type),
   'tag' / Tag,
-#  Probe(this.tag),
-#  Probe(this._type),
-#  Probe(this._status),
   'session_id' / Switch( this.tag.last_exchange,
     { True : Const( b'' ), 
       False : Bytes( 4 ),
     }  
   ),
-#  Probe(this.session_id),
   'freshness' / Freshness,
-#  Probe(this.freshness),
   'ephemeral' / Ephemeral, 
-#  Probe(this.ephemeral),
   'handshake' / Prefixed( BytesInteger(4), HandshakeList ), 
-#  'handshake' / Prefixed( BytesInteger(4), GreedyRange( Handshake ) ), 
-#  'handshake' / Prefixed( BytesInteger(4), Sequence(
-#      HSClientHello, HSServerHello, HSEncryptedExtensions) ), 
-#  Probe(this.handshake),
-#  'certificate' / LURKTLS13Certificate, 
   'certificate' / Cert, 
-#  Probe(this.certificate),
   'secret_request' / SecretRequest,
   'sig_algo' / SignatureScheme,
-#  Probe(this.sig_algo),
 )
 
 SInitCertVerifyResponse = Struct(
@@ -306,9 +299,12 @@ SHandAndAppRequest = Struct(
   '_type' / Computed(this._._type),
   '_status' / Computed('request'),
   'tag' / Tag,
+   Probe( this.tag ),
 ##  'session_id' / Optional(If(this._._session_id_agreed == True, Bytes(4))), 
-  'session_id' / Bytes( 4 ), 
+  'session_id' / Bytes( 4 ),
+   Probe( this.session_id ),
   'ephemeral' / Ephemeral, 
+   Probe( this.ephemeral ),
   'handshake' / Prefixed( BytesInteger(4), HandshakeList ), 
   'secret_request' / SecretRequest
 )
@@ -348,13 +344,10 @@ SNewTicketResponse = Struct(
 
 ## LURK request / response structures on the TLS client
 
-
-CInitCertVerifyRequest = SInitCertVerifyRequest 
-CInitCertVerifyResponse = SInitCertVerifyResponse
-
-
 CInitPostHandAuthRequest = Struct(
-  '_name' / Computed('PostHandRequest'),
+  '_name' / Computed('CInitPostHandRequest'),
+#  '_type' / Computed(this._._type),
+  '_status' / Computed('request'),
   'tag' / Tag,
   'session_id' / Switch( this.tag.last_exchange,
     { True : Const(b''), 
@@ -369,7 +362,9 @@ CInitPostHandAuthRequest = Struct(
 )
 
 CInitPostHandAuthResponse = Struct(
-  '_name' / Computed('PostHandResponse'),
+  '_name' / Computed('CInitPostHandResponse'),
+  '_type' / Computed(this._._type),
+  '_status' / Computed('success'),
   'tag' / Tag,
   'session_id' / Switch( this.tag.last_exchange,
     { True : Const(b''), 
@@ -380,14 +375,44 @@ CInitPostHandAuthResponse = Struct(
 )
 
 
+CInitCertVerifyRequest = Struct(
+  '_name' / Computed('CInitCertVerifyRequest'),
+  '_type' / Computed(this._._type),
+  '_status' / Computed('request'),
+  'tag' / Tag,
+  'session_id' / Switch( this.tag.last_exchange,
+    { True : Const( b'' ), 
+      False : Bytes( 4 ),
+    }  
+  ),
+  'freshness' / Freshness,
+  'ephemeral' / Ephemeral, 
+  'handshake' / Prefixed( BytesInteger(4), HandshakeList ), 
+  'server_certificate' / Cert, 
+  'client_certificate' / Cert, 
+)
+
+CInitCertVerifyResponse = Struct(
+  '_name' / Computed('CInitCertVerifyResponse'),
+  '_type' / Computed(this._._type),
+  '_status' / Computed('success'),
+  'tag' / Tag,
+  'session_id' / Switch( this.tag.last_exchange,
+    { True : Const(b''), 
+      False : Bytes(4),
+    }  
+  ),
+  'signature' / Prefixed( BytesInteger(2), GreedyBytes )
+)
+
 CPostHandAuthRequest = Struct(
   '_name' / Computed('PostHandRequest'),
+  '_type' / Computed('c_post_hand_auth'),
   'tag' / Tag,
   'session_id' / Bytes(4), 
   'handshake' / Prefixed( BytesInteger(4), HandshakeList ),
-#  'certificate' / LURKTLS13Certificate,
   'certificate' / Cert,
-  'sig_algo' / SignatureScheme,
+  'sig_algo' / SignatureScheme
 )
 
 CPostHandAuthResponse = Struct(
@@ -490,9 +515,17 @@ TLS13Payload = Switch(this._type,
        { 'request' : SNewTicketRequest, 
          'success' : SNewTicketResponse, 
         }, default=ErrorPayload), 
-    'c_binder_key' : Switch( this._status,
-       { 'request' : BinderKeyRequest, 
-         'success' : BinderKeyResponse, 
+    'c_init_post_hand_auth' : Switch( this._status,
+       { 'request' : CInitPostHandAuthRequest, 
+         'success' : CInitPostHandAuthResponse, 
+        }, default=ErrorPayload), 
+    'c_init_cert_verify' : Switch( this._status,
+       { 'request' : CInitCertVerifyRequest, 
+         'success' : CInitCertVerifyResponse, 
+        }, default=ErrorPayload), 
+    'c_post_hand_auth' : Switch( this._status,
+       { 'request' : CPostHandAuthRequest, 
+         'success' : CPostHandAuthResponse, 
         }, default=ErrorPayload), 
     'c_init_early_secret' : Switch( this._status,
        { 'request' : SInitEarlySecretRequest, 
@@ -518,10 +551,6 @@ TLS13Payload = Switch(this._type,
        { 'request' : RegisterTicketRequest, 
          'success' : RegisterTicketResponse, 
         }, default=ErrorPayload), 
-#    'c_post_hand' : Switch( this._status,
-#       { 'request' : PostHandRequest, 
-#         'success' : PostHandResponse, 
-#        }, default=ErrorPayload), 
   }, default=ErrorPayload
 )
 

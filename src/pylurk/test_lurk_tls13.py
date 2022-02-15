@@ -19,7 +19,7 @@ from secrets import randbelow
 from struct_lurk import *
 from struct_lurk_tls13 import *
 from struct_tls13 import *
-from lurk_tls13 import SSession, get_struct_index
+from lurk_tls13 import CSession, SSession, get_struct_index
 from test_utils import *
 from conf import Configuration
 from lurk import CryptoService
@@ -364,9 +364,8 @@ def init_cert_verify_handshake_list( ephemeral_mode:str, role='server') -> list:
     hs_list = [ hs, deepcopy( hs )[:-1] ]
 
   elif role == 'client':
-    hs_list = [ hs_client_hello, lhs_server_hello, hs_encrypted_extensions,\
-                hs_certificate_request, hs_certificate, hs_certificate_verify,\
-                hs_finished ]
+    hs_list = [ [ hs_client_hello, lhs_server_hello, hs_encrypted_extensions,\
+                hs_certificate_request, hs_certificate_verify,  hs_finished ] ]
   return hs_list 
 
 #def init_cert_verify_request_list( sig_algo: str ='ed25519', conf=None, last_exchange=None ):
@@ -416,17 +415,30 @@ def init_cert_verify_request_list( sig_algo: str ='ed25519', role='server', \
         ephemeral_method = ephemeral[ 'ephemeral_method' ]
         for handshake in init_cert_verify_handshake_list( ephemeral_method, role=role ):
           for cert in [ finger_print_cert, uncompressed_cert ]:
-            init_cert_verify_req = {\
-              'tag' : { 'last_exchange' : last_exchange }, 
-              'session_id' : session_id, 
-              'freshness' : 'sha256',
-              'ephemeral' : ephemeral, 
-              'handshake' : handshake, 
-              'certificate' : cert,
-              'secret_request' : \
-                { "b":False, "e_s":False, "e_x":False, "h_c":True,\
-                  "h_s":True, "a_c":True, "a_s":True, "x":True, "r":False },
-              'sig_algo' : sig_algo }
+            if role == 'server':
+              init_cert_verify_req = {\
+                'tag' : { 'last_exchange' : last_exchange }, 
+                'session_id' : session_id, 
+                'freshness' : 'sha256',
+                'ephemeral' : ephemeral, 
+                'handshake' : handshake, 
+                'certificate' : cert,
+                'secret_request' : \
+                  { "b":False, "e_s":False, "e_x":False, "h_c":True,\
+                    "h_s":True, "a_c":True, "a_s":True, "x":True, "r":False },
+                'sig_algo' : sig_algo }
+            elif role == 'client' :
+              init_cert_verify_req = {\
+                'tag' : { 'last_exchange' : last_exchange }, 
+                'session_id' : session_id, 
+                'freshness' : 'sha256',
+                'ephemeral' : ephemeral, 
+                'handshake' : handshake, 
+                'server_certificate' : cert,
+                'client_certificate' : cert,
+                'sig_algo' : sig_algo }
+            else:
+              raise ValueError( f"unknown role {role}" ) 
             list_req.append( init_cert_verify_req )
   return list_req
 
@@ -438,7 +450,10 @@ def init_cert_verify_request_title( req:dict ) -> str:
 
   tag = req[ 'tag' ][ 'last_exchange' ]
   eph = req[ 'ephemeral' ][ 'ephemeral_method' ]
-  cert = req[ 'certificate' ]['cert_type'] 
+  try: 
+    cert = req[ 'certificate' ]['cert_type'] 
+  except KeyError:
+    cert = req[ 'client_certificate' ]['cert_type']
   return "last_exchange [%s] - %s - cert_type [%s]"%( tag, eph, cert )
 
 def init_cert_verify_test( payload, status, role='server' ):
@@ -454,17 +469,17 @@ def init_cert_verify_test( payload, status, role='server' ):
     ext_title = init_cert_verify_response_title( payload )
 #  ctx_struct = { '_type' : _type, '_certificate_type' : 'X509',\
 #                 '_status' : status }
+  print( f"{role} - {status} - {payload}" )
   ctx_struct = { '_type' : _type, '_status' : status }
-#  print( f"payload : {payload}" )
-#  TLS13Payload.build( payload, _type=_type, _status=status )
   test_struct( TLS13Payload, payload, ctx_struct=ctx_struct, \
-               ext_title=ext_title, print_data_struct=False, print_binary=False) 
+               ext_title=ext_title, print_data_struct=True, print_binary=True) 
 
 
 ## testing various configurations of (s/c) init_cert_verify request/responses
-for req in init_cert_verify_request_list( role='server' ):
-#  ext_title = init_cert_verify_request_title( req )
-  init_cert_verify_test( req, 'request' )
+for role in [ 'server', 'client' ]:
+  for req in init_cert_verify_request_list( role=role ):
+ #  ext_title = init_cert_verify_request_title( req )
+    init_cert_verify_test( req, 'request' )
 
 
 ## SInitCertVerifyResponse
@@ -483,16 +498,22 @@ def init_cert_verify_response_list( sig_algo: str ='ed25519', role='server'):
       session_id = token_bytes( 4 )
     else:
       session_id = None
-    for ephemeral in eph_list :
+    if role == 'server':
+      for ephemeral in eph_list :
+        list_resp.append( {\
+          'tag' : { 'last_exchange' : last_exchange }, 
+          'session_id' : session_id, 
+          'ephemeral' : ephemeral, 
+          'secret_list' : [ \
+            {'secret_type': 'h_c', 'secret_data': b'hand_client_secret' }, 
+            {'secret_type': 'h_s', 'secret_data': b'hand_server_secret' },
+            {'secret_type': 'a_c', 'secret_data': b'app_client_secret' },
+            {'secret_type': 'a_s', 'secret_data': b'app_server_secret' } ],
+         'signature' : b'signature' } )
+    elif role == 'client' :
       list_resp.append( {\
         'tag' : { 'last_exchange' : last_exchange }, 
         'session_id' : session_id, 
-        'ephemeral' : ephemeral, 
-        'secret_list' : [ \
-          {'secret_type': 'h_c', 'secret_data': b'hand_client_secret' }, 
-          {'secret_type': 'h_s', 'secret_data': b'hand_server_secret' },
-          {'secret_type': 'a_c', 'secret_data': b'app_client_secret' },
-          {'secret_type': 'a_s', 'secret_data': b'app_server_secret' } ],
        'signature' : b'signature' } )
   return list_resp
 
@@ -500,12 +521,15 @@ def init_cert_verify_response_title( resp:dict ) -> str:
   """ returns request string description """
 
   tag = resp[ 'tag' ][ 'last_exchange' ]
-  eph = resp[ 'ephemeral' ][ 'ephemeral_method' ]
-  return "last_exchange [%s] - %s"%( tag, eph)
+  try: 
+    eph = resp[ 'ephemeral' ][ 'ephemeral_method' ]
+    return "last_exchange [%s] - %s"%( tag, eph)
+  except KeyError:
+    return f"last_exchange [{tag}] "
 
-
-for resp in init_cert_verify_response_list( sig_algo='ed25519', role='server'):
-  init_cert_verify_test( resp, 'success' )
+for role in [ 'server', 'client' ]:
+  for resp in init_cert_verify_response_list( sig_algo='ed25519', role='server'):
+    init_cert_verify_test( resp, 'success' )
 
 
 print( "###################################################" )
@@ -649,14 +673,21 @@ print( "###########################################" )
 def s_new_ticket_handshake_list() -> list:
   """ returns a list of possible handshake messages """
   return [ [ hs_finished ],\
-           [ hs_certificate, hs_certificate_verify, hs_finished ] ]
+           [ hs_certificate_verify, hs_finished ] ]
 
 
 def s_new_ticket_request_list( ):
   list_req = []
   for last_exchange in [ True, False ]:
-    for cert in [ no_cert, finger_print_cert, uncompressed_cert ]:
+    ## finger_Print requires some configuration 
+    ## so we remov ethat case here as we use generic messages
+    for cert in [ no_cert, uncompressed_cert ]:
       for handshake in s_new_ticket_handshake_list():
+        ## no cert is incompatbible certfificate_very
+        if len( handshake ) == 2 and cert == no_cert :
+          continue
+        if len( handshake ) == 1 and cert != no_cert :
+          continue
         list_req.append( {\
           'tag' : { 'last_exchange' : last_exchange }, 
           'session_id'   : token_bytes( 4 ), 
@@ -676,8 +707,6 @@ def s_new_ticket_request_title( req:dict ) -> str:
 
 def s_new_ticket_test( payload, status ):
   if status == 'request':
-#    ctx_struct = { '_type' : 's_new_ticket', '_status' : 'request', \
-#                   '_certificate_type' : 'X509', '_cipher' : 'TLS_AES_128_GCM_SHA256' } 
     ctx_struct = { '_type' : 's_new_ticket', '_status' : 'request', \
                    '_cipher' : 'TLS_AES_128_GCM_SHA256' } 
     ext_title = s_new_ticket_request_title( payload )
@@ -691,10 +720,6 @@ def s_new_ticket_test( payload, status ):
                  ext_title=ext_title, print_data_struct=False, print_binary=False) 
 
 for req in s_new_ticket_request_list( ):
-#  ext_title = s_new_ticket_request_title( req )
-#  ctx_struct = { '_type' : 's_new_ticket', '_certificate_type' : 'X509', \
-#                 '_cipher' : 'TLS_AES_128_GCM_SHA256' }
-#  test_struct( SNewTicketRequest, req, ctx_struct=ctx_struct )
   s_new_ticket_test( req, 'request' )
   
 
@@ -727,6 +752,60 @@ for last_exchange in [ True, False ]:
                ctx_struct=ctx_struct )
   s_new_ticket_test( s_new_ticket_resp, 'success' )
 
+
+print( "##############################################" )
+print( "## III.6 Payload CPostHandAuth Req and Resp ##" )
+print( "##############################################" )
+
+def c_post_hand_auth_request_list( ):
+  req_list = []
+  for last_exchange in [ True, False ]:
+    for cert in [ finger_print_cert, uncompressed_cert ]:
+      req_list.append( {\
+        'tag' : { 'last_exchange' : last_exchange }, 
+        'session_id' : token_bytes( 4 ), 
+        'handshake' : [ hs_certificate_request ], 
+        'certificate' : cert,
+        'sig_algo' : 'ed25519' } )
+  return req_list
+
+def c_post_hand_auth_response_list( ):
+  resp_list = []
+  for last_exchange in [ True, False ]:
+    resp_list.append( { \
+      'tag' : { 'last_exchange' : last_exchange },
+      'session_id' : token_bytes( 4 ),
+      'signature' : b'\x00\x00\x00' } )
+  return resp_list
+
+def c_post_hand_auth_title( req:dict ) -> str:
+  """ returns the title associated to the request """
+  tag = req[ 'tag' ][ 'last_exchange' ]
+  try: 
+    cert = req[ 'certificate' ]['cert_type'] 
+    title = f"last_exchange [{tag}] - cert_type [{cert}]"
+  except KeyError:
+    title = f"last_exchange [{tag}]"
+  return title
+
+def c_post_hand_auth_test( payload, status ):
+    ctx_struct = { '_type' : 'c_post_hand_auth', '_status' : status } 
+    ext_title = c_post_hand_auth_title( payload )
+#    print( f"payload: {payload}" )
+#    CPostHandAuthRequest.build( payload )
+#    test_struct( CPostHandAuthRequest, payload, ctx_struct=ctx_struct,\
+#                 ext_title=ext_title, print_data_struct=False, \
+#                 print_binary=False) 
+    test_struct( TLS13Payload, payload, ctx_struct=ctx_struct,\
+                 ext_title=ext_title, print_data_struct=False, \
+                 print_binary=False) 
+
+
+for payload in c_post_hand_auth_request_list( ):
+  c_post_hand_auth_test( payload, 'request' )
+
+for payload in c_post_hand_auth_response_list( ):
+  c_post_hand_auth_test( payload, 'success' )
 
 
 print( "###############################################" )
@@ -918,8 +997,59 @@ if SERVER_PAYLOAD_SESSION_RESUMPTION_LOOP == True:
                                   s_hand_and_app_secret_req, \
                                   s_new_ticket_session_req2   )
 
+print( "###############################################" )
+print( "## IV.4 Payload Exchange c_init_cert_verify  ##" )
+print( "################################################" )
+
+def c_init_cert_verify_session():
+  """tests init_cert_verify_session exchange """
+  for sig_scheme in sig_scheme_list: 
+    conf = configure( sig_scheme, role= 'client' ) 
+    print( f"c_init_cert_verify_session: conf {conf}" )
+    for req in init_cert_verify_request_list( sig_scheme, role='client', \
+                 tls13_conf=conf, last_exchange=None ):
+      session = CSession( conf ) 
+      init_cert_verify_test( req, 'request', role='client' )
+      resp = session.serve( req, 'c_init_cert_verify', 'request')
+      init_cert_verify_test( resp, 'success', role='client' )
+
+
+if SERVER_PAYLOAD_EXCHANGE == True:
+  c_init_cert_verify_session()
+
+print( "##################################################################" )
+print( "## IV.5 Payload Exchange c_init_cert_verify + c_post_hand_auth  ##" )
+print( "##################################################################" )
+
+def c_post_hand_auth_session():
+  """tests init_cert_verify_session exchange """
+  for sig_scheme in sig_scheme_list: 
+    conf = configure( sig_scheme, role= 'client' ) 
+    print( f"c_init_cert_verify_session: conf {conf}" )
+    for req in init_cert_verify_request_list( sig_scheme, role='client', \
+                 tls13_conf=conf, last_exchange=None ):
+      session = CSession( conf ) 
+      init_cert_verify_test( req, 'request', role='client' )
+      resp = session.serve( req, 'c_init_cert_verify', 'request')
+      init_cert_verify_test( resp, 'success', role='client' )
+      if resp[ 'tag' ][ 'last_exchange' ] == False:
+        session_id = resp[ 'session_id' ]
+        for post_hand_auth_req in c_post_hand_auth_request_list( ):
+          post_hand_auth_req[ 'session_id' ] = session_id
+          post_hand_auth_req[ 'sig_algo' ] = sig_scheme
+          if post_hand_auth_req[ 'certificate' ][ 'cert_type' ] == 'finger_print':
+            print( post_hand_auth_req[ 'certificate' ] )
+            post_hand_auth_req[ 'certificate' ][ 'certificate_list' ] = conf[ '_finger_print_entry_list' ]           
+            continue
+          post_hand_auth_resp = session.serve( post_hand_auth_req, \
+                                               'c_post_hand_auth', 'request') 
+
+if SERVER_PAYLOAD_EXCHANGE == True:
+  c_post_hand_auth_session()
+
+
 print( "#############################################################" )
-print( "## V.1 LURK Exchange Server Session Resumption:         ##" )
+print( "## V.1 LURK Exchange Server Session Resumption:            ##" )
 print( "## s_init_cert_verify - s_new_ticket s_init_early_secret - ##" ) 
 print( "## s_hand_and_app_secret - s_new_ticket                    ##" )
 print( "#############################################################" )
