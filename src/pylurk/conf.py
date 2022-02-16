@@ -59,6 +59,7 @@ conf_template = {
      'ephemeral_method_list' : ['no_secret', 'cs_generated', 'e_generated'],
      'authorized_ecdhe_group' : ['secp256r1', 'secp384r1', 
                                  'secp521r1', 'x25519', 'x448'], 
+     ## only one signature scheme must be selected
      'sig_scheme' : ['rsa_pkcs1_sha256', \
                    'rsa_pkcs1_sha384', \
                    'rsa_pkcs1_sha512',\
@@ -84,8 +85,9 @@ conf_template = {
      's_init_early_secret_session_id' : True,
      'last_exchange' : { 's_init_cert_verify' : False, 
                          's_hand_and_app_secret' : False,
-                         'c_init_cert_verify' : False,
-                         'c_init_post_auth' : False }, 
+                         'c_init_client_finished' : False,
+                         'c_init_post_auth' : False, 
+                         'c_client_finished' : False}, 
      ## ticket related configuration
      'max_tickets' : 6, 
      'ticket_life_time' : 172800, # 2d = 2*24*3600 < 2**32-1

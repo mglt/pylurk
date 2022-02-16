@@ -97,7 +97,7 @@ HandshakeList = Switch( this._type,
     's_hand_and_app_secret' : Select(\
       Sequence( HSServerHello, HSEncryptedExtensions, HSCertificateRequest ),
       Sequence( HSServerHello, HSEncryptedExtensions ) ),  
-    'c_init_cert_verify' : Select( \
+    'c_init_client_finished' : Select( \
        Sequence( HSClientHello, HSServerHello, HSEncryptedExtensions, HSCertificateRequest, HSCertificateVerify, HSFinished), 
        Sequence( HSClientHello, HSServerHello, HSEncryptedExtensions, HSCertificateRequest, HSCertificateVerify, HSFinished, HSEndOfEarlyData), 
        Sequence( HSClientHello, HSServerHello, HSClientHello, HSEncryptedExtensions, HSCertificateRequest, HSCertificateVerify, HSFinished), 
@@ -344,39 +344,31 @@ SNewTicketResponse = Struct(
 
 ## LURK request / response structures on the TLS client
 
-CInitPostHandAuthRequest = Struct(
-  '_name' / Computed('CInitPostHandRequest'),
-#  '_type' / Computed(this._._type),
-  '_status' / Computed('request'),
-  'tag' / Tag,
-  'session_id' / Switch( this.tag.last_exchange,
-    { True : Const(b''), 
-      False : Bytes(4),
-    }  
-  ),
-  'freshness' / Freshness,
-  'handshake' / Prefixed( BytesInteger(4), HandshakeList ),
-#  'certificate' / LURKTLS13Certificate,
-  'certificate' / Cert,
-  'sig_algo' / SignatureScheme,
-)
-
-CInitPostHandAuthResponse = Struct(
-  '_name' / Computed('CInitPostHandResponse'),
-  '_type' / Computed(this._._type),
-  '_status' / Computed('success'),
-  'tag' / Tag,
-  'session_id' / Switch( this.tag.last_exchange,
-    { True : Const(b''), 
-      False : Bytes(4),
-    }  
-  ),
-  'signature' / Prefixed( BytesInteger(2), GreedyBytes )
-)
+#CInitPostHandAuthRequest = Struct(
+#  '_name' / Computed('CInitPostHandRequest'),
+#  '_type' / Computed('c_init_post_hand_auth'),
+#  '_status' / Computed('request'),
+#  'transcript_hash' / Prefixed( BytesInteger(2), GreedyBytes ),
+#  'server_certificate' / Cert,
+#  'client_certificate' / Cert,
+#)
+#
+#CInitPostHandAuthResponse = Struct(
+#  '_name' / Computed('CInitPostHandResponse'),
+#  '_type' / Computed('c_init_post_hand_auth'),
+#  '_status' / Computed('success'),
+#  'tag' / Tag,
+#  'session_id' / Switch( this.tag.last_exchange,
+#    { True : Const(b''), 
+#      False : Bytes(4),
+#    }  
+#  ),
+#  'signature' / Prefixed( BytesInteger(2), GreedyBytes )
+#)
 
 
-CInitCertVerifyRequest = Struct(
-  '_name' / Computed('CInitCertVerifyRequest'),
+CInitClientFinishedRequest = Struct(
+  '_name' / Computed('CInitClientFinishedRequest'),
   '_type' / Computed(this._._type),
   '_status' / Computed('request'),
   'tag' / Tag,
@@ -385,15 +377,16 @@ CInitCertVerifyRequest = Struct(
       False : Bytes( 4 ),
     }  
   ),
-  'freshness' / Freshness,
   'ephemeral' / Ephemeral, 
+  'psk' / Prefixed( BytesInteger(2), GreedyBytes ), 
+  'freshness' / Freshness,
   'handshake' / Prefixed( BytesInteger(4), HandshakeList ), 
   'server_certificate' / Cert, 
   'client_certificate' / Cert, 
 )
 
-CInitCertVerifyResponse = Struct(
-  '_name' / Computed('CInitCertVerifyResponse'),
+CInitClientFinishedResponse = Struct(
+  '_name' / Computed('CInitClientFinishedResponse'),
   '_type' / Computed(this._._type),
   '_status' / Computed('success'),
   'tag' / Tag,
@@ -515,13 +508,13 @@ TLS13Payload = Switch(this._type,
        { 'request' : SNewTicketRequest, 
          'success' : SNewTicketResponse, 
         }, default=ErrorPayload), 
-    'c_init_post_hand_auth' : Switch( this._status,
-       { 'request' : CInitPostHandAuthRequest, 
-         'success' : CInitPostHandAuthResponse, 
-        }, default=ErrorPayload), 
-    'c_init_cert_verify' : Switch( this._status,
-       { 'request' : CInitCertVerifyRequest, 
-         'success' : CInitCertVerifyResponse, 
+#    'c_init_post_hand_auth' : Switch( this._status,
+#       { 'request' : CInitPostHandAuthRequest, 
+#         'success' : CInitPostHandAuthResponse, 
+#        }, default=ErrorPayload), 
+    'c_init_client_finished' : Switch( this._status,
+       { 'request' : CInitClientFinishedRequest, 
+         'success' : CInitClientFinishedResponse, 
         }, default=ErrorPayload), 
     'c_post_hand_auth' : Switch( this._status,
        { 'request' : CPostHandAuthRequest, 

@@ -84,7 +84,7 @@ class Tag:
     elif self.mtype == 's_new_ticket':
       if ctx >= self.conf[ 'max_tickets' ]:
         last_exchange = True
-    elif self.mtype in [ 'c_init_cert_verify' ]:
+    elif self.mtype in [ 'c_init_client_finished' ]:
       ## ctx is the handshake
       last_exchange = self.conf[ 'last_exchange' ][ self.mtype ]
       if ctx.is_post_hand_auth_proposed() == False:
@@ -114,7 +114,7 @@ class Ephemeral:
       raise LURKError( 'invalid_ephemeral', f"method {self.method} expected to be"\
                        "in {self.conf['ephemeral_method_list']}" )
     if ( mtype == 's_init_cert_verify' and self.method == 'no_secret' ) or\
-       ( mtype == 'c_init_cert_verify' and self.method != 'e_generated' ) or\
+       ( mtype == 'c_init_client_finished' and self.method = 'cs_generated' ) or\
        ( mtype == 'c_init_early_secret' and self.method == 'e_generated' ):
       raise LURKError( 'invalid_ephemeral', f"Incompatible {self.method} and {mtype}" )
     elif ( mtype == 's_hand_and_app_secret' and self.method == 'no_secret' ):
@@ -198,13 +198,15 @@ class Ephemeral:
 class SessionID:
   def __init__( self, session_id:bytes, mtype):
     self.outbound =  session_id
-    self.inbound = token_bytes( 4  )
+    if self.outbound = b'':
+      self.inbound = b''
+    else:
+      self.inbound = token_bytes( 4  )
     self.mtype = mtype
 
   def resp ( self, tag_resp=None ):
     ## optional session_id
-    if self.mtype in [ 's_init_cert_verify', 'c_init_cert_verify', \
-                       'c_init_post_hand_auth' ] :
+    if self.mtype in [ 's_init_cert_verify' ] :
       if tag_resp == True: ## tag value in the request
         resp = None
       else:
@@ -569,10 +571,8 @@ class TlsHandshake:
         raise LURKError( 'invalid_handshake', f"TLS handshake cipher "\
                 f"suite {self.get_cipher( )} and ticket cipher suites "\
                 f"are not compatible {session_ticket.cipher}" )
-    elif mtype == 'c_init_cert_verify':
-      msg_type_list = self.msg_type_list ()
-      if self.is_certificate_agreed( ) is False or self.is_certificate_request is False or \
-        'certificate' not in msg_type_list or 'certificate_verify' not in msg_type_list : 
+    elif mtype == 'c_init_client_finished':
+      if self.is_certificate_request is False and self.is_post_hand_auth_proposed() is False : 
         raise LURKError( 'invalid_handshake', "Expecting server certificate authentication" )
     elif mtype in [ 'c_init_post_hand_auth', 'c_post_hand_auth' ]:
       if self.is_post_hand_auth_proposed() == False:
@@ -707,8 +707,9 @@ class TlsHandshake:
                                               f"not foun in {msg_type_list}" )
       self.msg_list.insert( msg_type_list.index( 'certificate_verify' ), hs_cert_msg ) 
 
-  def update_certificate_verify( self, sig_scheme ) :
-    """ update the handshake with the CertificateVerify """ 
+  def update_certificate_verify( self ) :
+    """ update the handshake with the CertificateVerify """
+    sig_scheme = SigScheme( self.conf[ 'sig_scheme' ][ 0 ] )
     string_64 = bytearray()
     for i in range(64):
       string_64.extend(b'\20')
@@ -850,13 +851,13 @@ class TlsHandshake:
         ## 's_init_cert_verify'
         [ 'encrypted_extensions', 'certificate' ],\
         [ 'encrypted_extensions', 'certificate_request', 'certificate' ], \
-        ## c_init_cert_verify  
+        ## c_init_client_finished  
         [ 'encrypted_extensions', 'certificate_request', 'certificate', \
           'certificate_verify',  'finished', 'certificate' ] ]:
         raise LURKError( 'invalid_handshake', f"unexpected handshake {self.msg_type_list()}" )
     elif transcript_type == 'finished' :
       if self.msg_type_list( ) not in [ \
-        ## 's_init_cert_verify', c_init_cert_verify
+        ## 's_init_cert_verify', c_init_client_finished
         [ 'certificate_verify' ], \
         ## 's_hand_and_app_secret'
         [ 'encrypted_extensions' ], \
@@ -1097,7 +1098,7 @@ class SInitCertVerifyReq:
                                    ecdhe=self.ephemeral.shared_secret )
     self.scheduler.process( self.secret_request.of([ 'h_c', 'h_s' ] ), self.handshake )
     self.handshake.update_certificate( self.cert )
-    self.handshake.update_certificate_verify( self.sig_algo )
+    self.handshake.update_certificate_verify( )
     ## get sig from freshly generated certificate_verify 
     sig = self.handshake.msg_list[ 0 ][ 'data' ]['signature' ] 
     self.handshake.update_server_finished( self.scheduler )
@@ -1307,49 +1308,54 @@ class SSession:
 
 
 
-class CInitCertVerifyReq:
+class CInitClientFinishedReq:
 
   def __init__(self, req, tls13_conf ):
     self.conf = tls13_conf
-    self.mtype = 'c_init_cert_verify'
+    self.mtype = 'c_init_client_finished'
+    self.next_mtype = 'c_post_hand_auth'
    
-    self.tag = Tag( req[ 'tag' ], self.mtype, self.conf )
+    tag = Tag( req[ 'tag' ], self.mtype, self.conf )
     self.session_id = SessionID( req[ 'session_id' ], self.mtype )
-    self.freshness = Freshness( req[ 'freshness' ] )
-    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf )
-    self.sig_algo = SigScheme( req[ 'sig_algo' ] )
-    self.server_cert = req[ 'server_certificate' ]
-    self.client_cert = req[ 'client_certificate' ]
+    freshness = Freshness( req[ 'freshness' ] )
+    
+    psk = req[ 'psk' ]
+    if psk in [ None, b'' ]:
+      psk = None
+    ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf )
+    server_cert = req[ 'server_certificate' ]
+    client_cert = req[ 'client_certificate' ]
     self.handshake = TlsHandshake( 'client', self.conf )
     self.handshake.msg_list.extend( req[ 'handshake' ] )
-    self.handshake.update_certificate( self.server_cert, server=True )
-    self.handshake.sanity_check( self.mtype )
+    self.handshake.sanity_check( self.mtype, client_certificate=client_cert, server_certificate=server_cert, ephemeral=ephemeral )
+    if server_cert[ 'cert_type' ] != 'no_certificate' : 
+      self.handshake.update_certificate( server_cert, server=True )
     self.handshake.update_random( self.freshness )
     ## check 
     self.handshake.is_post_hand_auth_proposed() 
     self.scheduler = None
     self.last_exchange = None 
-    self.next_mtype = 'c_post_hand_auth'
 
 
-  def resp( self ):
     tag_resp = self.tag.resp( ctx=self.handshake )
     self.last_exchange = tag_resp[ 'last_exchange' ]  
     self.scheduler = KeyScheduler( self.handshake.get_tls_hash(), \
-                                   ecdhe=self.ephemeral.shared_secret )
+                                   ecdhe=ephemeral.shared_secret, psk=psk )
     ### the current handshake.msg_list is up to early data
     ## we need to make sur we limit ourselves to the ClientHello...ServerHello
     self.scheduler.process( [ 'h_c', 'h_s' ], self.handshake )
     print( f"after h : {self.handshake.msg_type_list()}" ) 
     self.handshake.update_certificate( self.client_cert, server=False )
     print( f"client cert inserted : {self.handshake.msg_type_list()}" ) 
-    self.handshake.update_certificate_verify( self.sig_algo )
+    self.handshake.update_certificate_verify( )
     ## get sig from freshly generated certificate_verify 
     sig = self.handshake.msg_list[ 0 ][ 'data' ]['signature' ]
     ## generating Finished message and generating the transcript of the full handshake
     if self.last_exchange == False:
       self.handshake.update_server_finished( self.scheduler )
       self.scheduler.process( [ 'r' ], self.handshake )
+
+  def resp( self ):
     return { 'tag' : tag_resp,
              'session_id' : self.session_id.resp( tag_resp=tag_resp ),
              'signature' : sig }
@@ -1379,7 +1385,7 @@ class CPostHandAuthReq:
     tag_resp = self.tag.resp( ctx=self.post_hand_auth_counter )
     self.last_exchange  = tag_resp[ 'last_exchange' ]
     ## the signature is performed for a post handshake transcript
-    self.handshake.update_certificate_verify( self.sig_algo )
+    self.handshake.update_certificate_verify( )
     print( self.handshake.msg_list )
     sig = self.handshake.msg_list[ 0 ][ 'data' ]['signature' ]
     del self.handshake.msg_list[ : ] 
@@ -1417,7 +1423,7 @@ class CInitPostHandAuthReq:
 
   def resp( self ):
     self.handshake.update_certificate( self.cert )
-    self.handshake.update_certificate_verify( self.sig_algo )
+    self.handshake.update_certificate_verify( )
     tag_resp = self.tag.resp( )
     self.last_exchange  = tag_resp[ 'last_exchange' ]
     sig = self.handshake.msg( 'certificate_verify', ith=-1 )[ 'signature' ]
@@ -1611,7 +1617,7 @@ class CHandAndAppSecretReq:
       ## why do we have load cert 
 #      self.conf.load_cert( cert_req_ctx=cert_req_ctx )
       self.handshake_update_certificate()
-      self.handshake.update_certificate_verify()
+      self.handshake.update_certificate_verify( )
     self.handshake.update_client_finished( self.scheduler )
     
     self.scheduler.process( self.secret_request.of( [ 'r' ] ), self.handshake )
@@ -1653,7 +1659,7 @@ class register_tickets:
 ##
 ##  def save_session_ctx( self, req ):
 ##    """ saves context for next messages"""
-##    if req.mtype == 'c_init_cert_verify':
+##    if req.mtype == 'c_init_client_finished':
 ##      self.last_exchange = True
 ##    elif req.mtype == 'c_init_post_auth':
 ##      self.handshake = req.handshake
@@ -1714,7 +1720,7 @@ class CSession(SSession) :
 
   def save_session_ctx( self, req ):
     """ saves context for next messages"""
-    if req.mtype == 'c_init_cert_verify':
+    if req.mtype == 'c_init_client_finished':
       self.scheduler = req.scheduler
       self.handshake = req.handshake
       self.session_id = req.session_id
@@ -1735,15 +1741,14 @@ class CSession(SSession) :
   def serve( self, payload, mtype, status ):
     ## check request and next_
     self.is_expected_message( mtype, status )
-    if mtype == 'c_init_cert_verify':
-      req = CInitCertVerifyReq( payload, self.conf )
+    if mtype == 'c_init_client_finished':
+      req = CInitClientFinishedReq( payload, self.conf )
     elif mtype == 'c_post_hand_auth':
       req = CPostHandAuthReq( payload, self.conf, self.handshake, self.scheduler,\
                            self.session_id, self.post_hand_auth_counter )
 
     else: 
-      raise LURKError( 'invalid_request', "unexpected request {mtype}"\
-              f"expecting {self.next_mtype} or initial request" )
+      raise LURKError( 'invalid_request', "unexpected request {mtype}" )
     resp = req.resp()
     self.save_session_ctx( req )
     return resp
