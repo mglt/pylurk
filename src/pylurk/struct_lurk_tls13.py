@@ -163,8 +163,8 @@ SharedSecret = Struct(
 Ephemeral = Struct(
   '_name' / Computed('Ephemeral'),
   '_status' / Computed( this._._status ),
-  'ephemeral_method' / EphemeralMethod, 
-   'key' / Switch(this.ephemeral_method,
+  'method' / EphemeralMethod, 
+  'key' / Switch(this.method,
     { 'e_generated' : Switch(this._status, {
          'request' : Prefixed(BytesInteger(2), SharedSecret),
          'success' : Const(b'')
@@ -369,7 +369,7 @@ SNewTicketResponse = Struct(
 
 CInitClientFinishedRequest = Struct(
   '_name' / Computed('CInitClientFinishedRequest'),
-  '_type' / Computed(this._._type),
+  '_type' / Computed('c_init_client_finished'),
   '_status' / Computed('request'),
   'tag' / Tag,
   'session_id' / Switch( this.tag.last_exchange,
@@ -377,17 +377,17 @@ CInitClientFinishedRequest = Struct(
       False : Bytes( 4 ),
     }  
   ),
-  'ephemeral' / Ephemeral, 
-  'psk' / Prefixed( BytesInteger(2), GreedyBytes ), 
-  'freshness' / Freshness,
   'handshake' / Prefixed( BytesInteger(4), HandshakeList ), 
   'server_certificate' / Cert, 
   'client_certificate' / Cert, 
+  'freshness' / Freshness,
+  'ephemeral' / Ephemeral, 
+  'psk' / Prefixed( BytesInteger(2), GreedyBytes ), 
 )
 
 CInitClientFinishedResponse = Struct(
   '_name' / Computed('CInitClientFinishedResponse'),
-  '_type' / Computed(this._._type),
+  '_type' / Computed('c_init_client_finished'),
   '_status' / Computed('success'),
   'tag' / Tag,
   'session_id' / Switch( this.tag.last_exchange,
