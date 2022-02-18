@@ -31,7 +31,7 @@ data_dir = pkg_resources.resource_filename(__name__, '../data/')
 
 web_profile = { 
     'tls13' : {
-    'role' : [ 'client', 'server' ],
+    'role' : 'server', #'client', 'server' 
     'enable_session_resumption' : True, 
     'trusted_ecdhe' : True,
     'public_key' : [join(data_dir, 'cert-rsa-enc.der')], ## certificate chain
@@ -46,7 +46,7 @@ conf_template = {
      'type_authorized' : [ 'ping',  'capabilities' ]
   },
   ( 'tls13', 'v1' ) : {
-     'role' : [ 'client', 'server' ],
+     'role' : 'server', #[ 'client', 'server' ],
      'type_authorized' : [ 's_init_cert_verify',     ## server ECDHE
                            's_init_early_secret',    ## server PSK
                            's_hand_and_app_secret',  ## server PSK
@@ -214,7 +214,7 @@ class Configuration:
     if isinstance( role, str ):
       if role not in [ 'client', 'server' ]:
         raise ConfigurationError( f"unknown role {role}." )
-      role = [ role ]
+      role = role
     elif isinstance( role, list ):
       for r in role:
         if r not in [ 'client', 'server' ]:

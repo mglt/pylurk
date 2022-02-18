@@ -1041,3 +1041,30 @@ Traceback (most recent call last):
   File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 464, in is_early_data_proposed
     ext_list.append( ext[ 'extension_type' ] )
 NameError: name 'ext_list' is not defined
+[2022-02-17 21:24:11,835 : lurk.py:73 -                serve() ] 'SessionID' object has no attribute 'inbound'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1947, in payload_resp
+    self.session_db.store( session )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1910, in store
+    self.db[ session.session_id.inbound ] = session
+AttributeError: 'SessionID' object has no attribute 'inbound'
+[2022-02-17 21:32:07,246 : lurk.py:73 -                serve() ] 'SessionID' object has no attribute 'inbound'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1947, in payload_resp
+    self.session_db.store( session )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1910, in store
+    self.db[ session.session_id.inbound ] = session
+AttributeError: 'SessionID' object has no attribute 'inbound'
+[2022-02-17 21:47:04,787 : lurk.py:73 -                serve() ] 'SessionID' object has no attribute 'inbound'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1947, in payload_resp
+    self.session_db.store( session )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1910, in store
+    self.db[ session.session_id.inbound ] = session
+AttributeError: 'SessionID' object has no attribute 'inbound'
