@@ -115,10 +115,28 @@ KeyShareEntry = Struct(
   }))
 )
 
+### only for LURK
+EmptyKeyShareEntry = Struct(
+ '_name' / Computed('EmptyKeyShareEntry'),
+  'group' / NamedGroup,
+  'key_exchange' / Prefixed( BytesInteger(2), Const(b'') )
+)
+
 KeyShareClientHello = Struct(
  '_name' / Computed('KeyShareClientHello'),
  'client_shares' / Prefixed(BytesInteger(2), GreedyRange(KeyShareEntry)) 
 )
+
+## only for LURK
+KeyShareClientHelloEmpty = Struct(
+ '_name' / Computed('KeyShareClientHelloEmpty'),
+ 'client_shares' / Prefixed(BytesInteger(2), GreedyRange(EmptyKeyShareEntry)) 
+)
+
+## only for LURK
+#KeyShareClient = Select( 
+#  KeyShareClientHello, KeyShareClientHelloEmpty
+#)
 
 KeyShareHelloRetryRequest = Struct(
  '_name' / Computed('KeyShareHelloRetryRequest'),
@@ -133,17 +151,13 @@ KeyShareServerHello = Struct(
 ## defining the EmptyKeyShareEntry as a potential structure
 ## for KeyShareEntry.
 
-EmptyKeyShareEntry = Struct(
- '_name' / Computed('EmptyKeyShareEntry'),
-  'group' / NamedGroup,
-  'key_exchange' / Prefixed( BytesInteger(2), Const(b'') )
-)
 
 KeyShareServerHelloEmpty = Struct(
  '_name' / Computed('KeyShareServerHelloEmpty'),
   'server_share' / EmptyKeyShareEntry
 )
 
+## LURK and non LURK
 KeyShareServer = Select(
   KeyShareServerHello, KeyShareServerHelloEmpty,
   KeyShareHelloRetryRequest
@@ -163,6 +177,14 @@ OfferedPsks = Struct(
   'identities' / Prefixed(BytesInteger(2), GreedyRange(PskIdentity)), 
   'binders' / Prefixed(BytesInteger(2), GreedyRange(PskBinderEntry))
 )
+
+
+## Only for LURK
+OfferedPsksWithNoBinders = Struct(
+  'identities' / Prefixed(BytesInteger(2), GreedyRange(PskIdentity)) 
+)
+
+
 
 ## server_certificate
 
@@ -250,6 +272,38 @@ Extension = Struct(
   ) 
 )
 
+##LURK only -- we may do the same with ServerHello
+## PartialCHExtension
+
+PartialCHExtension = Struct(
+  '_name' / Computed('PartialCHExtension'),
+  'extension_type' / ExtensionType,
+  'extension_data' /  Prefixed(BytesInteger(2),
+                      Switch(this.extension_type,
+    {
+      'supported_groups' : NamedGroupList,
+      'signature_algorithms' : SignatureSchemeList, 
+      'pre_shared_key' : Switch(this._._msg_type,
+         {
+           'client_hello' : OfferedPsksWithNoBinders, 
+           'server_hello' : BytesInteger( 2 ) 
+         }
+        ),
+      'post_handshake_auth' : PostHandshakeAuth,
+      'psk_key_exchange_modes' : PskKeyExchangeModes, 
+      'key_share': Switch(this._._msg_type, 
+         {
+          'client_hello' : Select( KeyShareClientHelloEmpty, KeyShareClientHello ),
+          'server_hello' : KeyShareServer, 
+         }
+        )
+    }, default=Bytes)
+  ) 
+)
+
+
+
+
 ## ClientHello
 
 CipherSuite = Enum( Bytes(2),
@@ -270,7 +324,20 @@ ClientHello = Struct(
   'extensions' / Prefixed(BytesInteger(2), GreedyRange(Extension))
 )
 
-## ServerHEllo
+
+## LURK only
+PartialClientHello = Struct( 
+  '_name' / Computed('ClientHello'),
+  '_msg_type' / Computed('client_hello'),
+  'legacy_version' / Const(b'\x03\x03'),
+  'random' / Bytes(32), 
+  'cipher_suites' / Prefixed(BytesInteger(2), GreedyRange(CipherSuite)),
+  'legacy_compression_methods' / Prefixed(BytesInteger(1), GreedyBytes),
+  'extensions' / Prefixed(BytesInteger(2), GreedyRange(PartialCHExtension))
+)
+
+
+## ServerHello
 
 ServerHello = Struct(
   '_name' / Computed('ServerHello'),
@@ -447,47 +514,57 @@ Handshake = Struct(
 ## and other associated message specific structures
 
 HSClientHello = Struct( 
+  '_name' / Computed('HSClientHello'),
   'msg_type' / Const('client_hello', HandshakeType),
   'data' / ClientHello
 )
 
+## only for LURK
 HSPartialClientHello = Struct( 
+  '_name' / Computed('HSPartialClientHello'),
   'msg_type' / Const('client_hello', HandshakeType),
-  'data' / GreedyBytes
+  'data' / PartialClientHello
 )
 
 HSServerHello = Struct(
+  '_name' / Computed('HSServerHello'),
   'msg_type' / Const('server_hello', HandshakeType),
   'data' / ServerHello
 )
 
 HSEncryptedExtensions = Struct( 
+  '_name' / Computed('HSEncryptedExtensions'),
   'msg_type' / Const('encrypted_extensions', HandshakeType), 
   'data' / EncryptedExtensions 
 )
 
 HSCertificateRequest = Struct(
+  '_name' / Computed('HSCertificateRequest'),
   'msg_type' / Const('certificate_request', HandshakeType), 
   'data' / CertificateRequest
 )
 
 HSCertificate = Struct( 
 #  '_certificate_type' / Computed(this._._._certificate_type),
+  '_name' / Computed('HSCertificate'),
   'msg_type' / Const('certificate', HandshakeType), 
   'data' / Certificate
 )
 
 HSCertificateVerify = Struct(
+  '_name' / Computed('HSCertificateVerify'),
   'msg_type' / Const('certificate_verify', HandshakeType), 
   'data' / CertificateVerify
 )
 
 HSFinished = Struct(
+  '_name' / Computed('HSFinished'),
   'msg_type' / Const('finished', HandshakeType), 
   'data' / Finished 
 )
 
 HSEndOfEarlyData = Struct( 
+  '_name' / Computed('HSEndOfEarlyData'),
   'msg_type' / Const('end_of_early_data', HandshakeType),
   'data' / EndOfEarlyData
 )

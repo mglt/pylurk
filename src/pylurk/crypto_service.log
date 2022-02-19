@@ -1068,3 +1068,61 @@ Traceback (most recent call last):
   File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1910, in store
     self.db[ session.session_id.inbound ] = session
 AttributeError: 'SessionID' object has no attribute 'inbound'
+[2022-02-18 07:21:55,864 : lurk.py:73 -                serve() ] 'SessionID' object has no attribute 'inbound'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1947, in payload_resp
+    self.session_db.store( session )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1910, in store
+    self.db[ session.session_id.inbound ] = session
+AttributeError: 'SessionID' object has no attribute 'inbound'
+[2022-02-18 07:24:26,699 : lurk.py:73 -                serve() ] 'SessionID' object has no attribute 'inbound'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1947, in payload_resp
+    self.session_db.store( session )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1910, in store
+    self.db[ session.session_id.inbound ] = session
+AttributeError: 'SessionID' object has no attribute 'inbound'
+[2022-02-18 07:28:37,639 : lurk.py:73 -                serve() ] 'SessionID' object has no attribute 'inbound'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1947, in payload_resp
+    self.session_db.store( session )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1910, in store
+    self.db[ session.session_id.inbound ] = session
+AttributeError: 'SessionID' object has no attribute 'inbound'
+[2022-02-18 07:31:26,817 : lurk.py:73 -                serve() ] 'SessionID' object has no attribute 'inbound'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1947, in payload_resp
+    self.session_db.store( session )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1910, in store
+    self.db[ session.session_id.inbound ] = session
+AttributeError: 'SessionID' object has no attribute 'inbound'
+[2022-02-18 07:35:08,622 : lurk.py:73 -                serve() ] 'SessionID' object has no attribute 'inbound'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1947, in payload_resp
+    self.session_db.store( session )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1910, in store
+    self.db[ session.session_id.inbound ] = session
+AttributeError: 'SessionID' object has no attribute 'inbound'
+[2022-02-18 07:41:20,059 : lurk.py:73 -                serve() ] 'NoneType' object has no attribute 'last_exchange'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1945, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1438, in serve
+    req = SInitEarlySecretReq( payload, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1332, in __init__
+    self.session_id = SessionID( req[ 'session_id' ] )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 202, in __init__
+    if tag.last_exchange is False:
+AttributeError: 'NoneType' object has no attribute 'last_exchange'
