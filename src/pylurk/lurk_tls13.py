@@ -220,30 +220,31 @@ class Ephemeral:
       public_key = private_key.public_key() 
       key_exchange = public_key.public_bytes(
         encoding=Encoding.Raw, format=PublicFormat.Raw)
-      ks_entry = { 'group' : group, 
-              'key_exchange' : key_exchange }
+    ks_entry = { 'group' : group, 
+                 'key_exchange' : key_exchange }
     return private_key, ks_entry
 
   def compute_client_shares( self ):
     """ computes client_shares, private_keys and resp """ 
-    client_shares = self.handshake.get_key_share_client_shares( )
+    client_shares = self.get_key_share_client_shares( )
     new_client_shares = []
     private_key_list = []
+    resp = [] 
     for ks in client_shares :
       if ks[ 'key_exchange' ] in [ None, b'' ]: 
-        private_key, ks_entry = proceed_empty_key_share_entry( ks )
-        self.resp.append( { 'method' : 'cs_generated', 
+        private_key, ks_entry = self.proceed_empty_key_share_entry( ks )
+        resp.append( { 'method' : 'cs_generated', 
                             'key' : ks_entry } )
       else: 
         private_key = None
         ks_entry = ks
-        self.resp.append( { 'method' : 'e_generated', 
+        resp.append( { 'method' : 'e_generated', 
                             'key' : b'' } )
       new_client_shares.append( ks_entry )
       private_key_list.append( private_key )
-    resp = []
-    for ks in client_shares:
-      resp.append( { 'method' : self.method, 'key' : ks } )
+#    resp = []
+#    for ks in client_shares:
+#      resp.append( { 'method' : self.method, 'key' : ks } )
       return new_client_shares, private_key_list, resp
 
   def get_key_share_entry_list_from_handshake( self ):
@@ -417,7 +418,7 @@ class Ephemeral:
 
 class SessionID:
   def __init__( self, session_id:bytes, tag=None ):
-    if tag == None :
+    if tag is None :
       self.cs = token_bytes( 4  )
       self.e = session_id
     else:
@@ -851,7 +852,9 @@ class TlsHandshake:
     elif mtype in [ 'c_init_post_hand_auth', 'c_post_hand_auth' ]:
       if self.is_post_hand_auth_proposed() == False:
         raise LURKError( 'invalid_handshake', "Post handshake authentication no enabled" )
-        
+    elif mtype == 'c_init_client_hello':
+      if self.is_psk_proposed() == False and self.is_ks_proposed() == False:
+        raise LURKError( 'invalid_handshake', "psk_proposed or ks_proposed expected." )
     elif mtype == 'c_init_ephemeral':
       if self.has_ext( 'psk', 'proposed' ) == True:
         error_txt = "psk proposed"
@@ -933,7 +936,7 @@ class TlsHandshake:
     self.msg_list[ index ][ 'data' ]\
       [ 'extensions' ][ key_share_index ][ 'extension_data' ]\
       [ ks_designation ] = key_share_entry  
-    print( f" update_key_share : {self.msg_list[ 1] }" )
+#    print( f" update_key_share : {self.msg_list[ 1] }" )
 
   def update_certificate( self, lurk_cert, server=True ):
     """ build the various certificates payloads 
@@ -1633,13 +1636,15 @@ class CInitClientHelloReq:
     self.handshake.msg_list.extend( req[ 'handshake' ] )
     self.handshake.update_random( Freshness( req[ 'freshness' ] ) )
     ## keyshare
-    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf, self.handshake )
+    self.ephemeral = Ephemeral( { 'method' : 'cs_generated' }, self.mtype, self.conf, self.handshake )
     self.handshake.update_key_share( self.ephemeral.client_shares )
     ## pre-shared-key extension
     secret_list = []
+    ## the dictionaries are only filled when PSK are proposed and 
+    ## hosted by the CS.
+    self.session_ticket_dict = {}
+    self.key_schedule_dict = {}
     if self.handshake.is_psk_proposed( ) is True:
-      self.session_ticket_dict = {}
-      self.key_schedule_dict = {}
       offered_psk = self.get_offered_psks( )
       ## provides binder_keys where binders are missing
       for psk_index in psk_index_list :
@@ -1657,7 +1662,7 @@ class CInitClientHelloReq:
          
     self.handshake.sanity_check( self.mtype )
 
-    self.session_id = SessionID( req[ 'session_id' ], self.mtype )
+    self.session_id = SessionID( req[ 'session_id' ] )
     self.resp = { 'session_id' : self.session_id.cs,
                   'ephemeral_list' : self.ephemeral.resp, 
                   'secret_list' : secret_list }
@@ -2033,8 +2038,16 @@ class CSession(SSession) :
                            self.session_id, self.post_hand_auth_counter )
       self.last_exchange = req.last_exchange
       self.post_hand_auth_counter = req.post_hand_auth_counter
+    elif mtype == 'c_init_client_hello':
+      req = CInitClientHelloReq( payload, self.conf )
+      self.key_schedule_dict = req.key_schedule_dict
+      self.session_ticket_dict = req.session_ticket_dict
+      self.handshake = req.handshake
+      self.session_id = req.session_id
+      self.ephemeral = req.ephemeral
     else: 
       raise LURKError( 'invalid_request', "unexpected request {mtype}" )
+    self.next_mtype = req.next_mtype
     return req.resp
 
 class SessionDB:

@@ -1370,9 +1370,9 @@ def c_init_client_finished_session():
 if SERVER_PAYLOAD_EXCHANGE == True:
   c_init_client_finished_session()
 
-print( "##################################################################" )
+print( "######################################################################" )
 print( "## IV.5 Payload Exchange c_init_client_finished + c_post_hand_auth  ##" )
-print( "##################################################################" )
+print( "######################################################################" )
 
 def c_post_hand_auth_session():
   """tests init_cert_verify_session exchange """
@@ -1401,8 +1401,26 @@ def c_post_hand_auth_session():
 if SERVER_PAYLOAD_EXCHANGE == True:
   c_post_hand_auth_session()
 
+print( "################################################" )
+print( "## IV.5 Payload Exchange c_init_client_hello  ##" )
+print( "################################################" )
 
+def c_init_client_hello_session( ):
 
+  for sig_scheme in sig_scheme_list: 
+    conf = configure( sig_scheme, role= 'client' ) 
+    print( f"c_init_client_hello_session: conf {conf}" )
+    for req in c_init_client_hello_request_list( ) :
+      session = CSession( conf ) 
+      c_init_client_hello_test( req, 'request' )
+      resp = session.serve( req, 'c_init_client_hello', 'request')
+      c_init_client_hello_test( resp, 'success' )
+#      if resp[ 'status' ] != 'success' :
+#        raise ValueError( f"Unexpected response. Expecting c_init_client_hello"\
+#          f"response got {resp}" )
+
+if SERVER_PAYLOAD_EXCHANGE == True:
+  c_init_client_hello_session()
 
 print( "#############################################################" )
 print( "## V.1 LURK Exchange Server Session Resumption:            ##" )
