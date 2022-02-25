@@ -391,7 +391,6 @@ CInitClientHelloRequest = Struct(
   'handshake' / Prefixed( BytesInteger(4), HandshakeList), 
   'freshness' / Freshness, 
   'psk_index_list' / Prefixed( BytesInteger(1), GreedyRange( BytesInteger(1) ) ), 
-  'pre_share_key_len' / BytesInteger(2),
 )
 
 

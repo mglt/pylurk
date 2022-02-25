@@ -128,9 +128,9 @@ KeyShareClientHello = Struct(
 )
 
 ## only for LURK
-KeyShareClientHelloEmpty = Struct(
+PartialKeyShareClientHello = Struct(
  '_name' / Computed('KeyShareClientHelloEmpty'),
- 'client_shares' / Prefixed(BytesInteger(2), GreedyRange(EmptyKeyShareEntry)) 
+ 'client_shares' / Prefixed(BytesInteger(2), GreedyRange( Select( KeyShareEntry, EmptyKeyShareEntry ) ) ) 
 )
 
 ## only for LURK
@@ -293,7 +293,7 @@ PartialCHExtension = Struct(
       'psk_key_exchange_modes' : PskKeyExchangeModes, 
       'key_share': Switch(this._._msg_type, 
          {
-          'client_hello' : Select( KeyShareClientHelloEmpty, KeyShareClientHello ),
+          'client_hello' : Select( PartialKeyShareClientHello, KeyShareClientHello ),
           'server_hello' : KeyShareServer, 
          }
         )

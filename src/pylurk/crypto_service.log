@@ -1126,3 +1126,16 @@ Traceback (most recent call last):
   File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 202, in __init__
     if tag.last_exchange is False:
 AttributeError: 'NoneType' object has no attribute 'last_exchange'
+[2022-02-24 21:47:04,999 : lurk.py:73 -                serve() ] 'server_share'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 2090, in payload_resp
+    payload = session.serve( req_payload, req_type, 'request' )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1541, in serve
+    req = SHandAndAppSecretReq( payload, self.conf, self.handshake,\
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1476, in __init__
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf, self.handshake)
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 110, in __init__
+    ks = self.handshake.msg_list[ 1 ][ 'data' ][ 'extensions' ][ 0 ] [ 'extension_data' ] [  'server_share' ] [ 'key_exchange'  ]
+KeyError: 'server_share'

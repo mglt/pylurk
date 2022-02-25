@@ -112,11 +112,11 @@ def test_struct( struct, data_struct, ctx_struct={}, \
                  io_check=True, print_data_struct=False, \
                  print_binary=False, print_data=False ):
   """ compares a data structure ( i.e. a dictionary to the structure itself  """
-  print( f" --- input : {struct} - {data_struct}" )
+#  print( f" --- input : {struct} - {data_struct}" )
   binary = struct.build(data_struct, **ctx_struct)
-  print( f" --- binary  : {binary}" )
+#  print( f" --- binary  : {binary}" )
   data = struct.parse(binary, **ctx_struct)
-  print( f" --- data  : {data}" )
+#  print( f" --- data  : {data}" )
 
   if not no_title:
     try:
