@@ -641,11 +641,12 @@ class TlsHandshake:
 #        'data' :  { 'certificate_request_context': b'',
 #                    'certificate_list' : self.conf[ '_cert_entry_list' ] } }
 #    self.cert_finger_print = self.conf[ '_cert_finger_print' ]
-    self.finger_print_dict = self.conf[ '_finger_print_dict' ]
+    if self.conf != None :
+      self.finger_print_dict = self.conf[ '_finger_print_dict' ]
 #    self.finger_print_entry_list =  self.conf[ '_finger_print_entry_list' ]
 #    self.cert_entry_list = self.conf[ '_cert_entry_list' ]
 #    self.cert_type =  self.conf[ '_cert_type' ]
-    self.private_key = self.conf[ '_private_key' ]
+      self.private_key = self.conf[ '_private_key' ]
     ## list of structures representing the TLS handshake messages
     self.msg_list = []
     self.cipher_suite = None 
@@ -721,6 +722,7 @@ class TlsHandshake:
 #    for ext in self.msg_list[ ch_index ][ 'data' ][ 'extensions' ] :
 #      ext_list.append( ext[ 'extension_type' ] )
     ext_list = self.client_hello_extension_list( )
+    print( f"TlsHandshake : {ext_list}" )
     if 'pre_shared_key' in ext_list  and  'psk_key_exchange_modes' in ext_list :
       return True
     return False
@@ -1642,30 +1644,39 @@ class CInitClientHelloReq:
     secret_list = []
     ## the dictionaries are only filled when PSK are proposed and 
     ## hosted by the CS.
-    self.session_ticket_dict = {}
-    self.key_schedule_dict = {}
+#    self.session_ticket_dict = {}
+    self.scheduler_list = []
+    psk_metadata_list = req[ 'psk_metadata_list' ]
+    print( f"-- CInitClientHelloReq {self.handshake.msg_list}" )
     if self.handshake.is_psk_proposed( ) is True:
       offered_psk = self.get_offered_psks( )
-      ## provides binder_keys where binders are missing
-      for psk_index in psk_index_list :
-        psk_identity = self.handshake.get_ticket( offered_psk[ 'identities' ][ psk_index ] )
-        ## generates ticket from identity 
-        session_ticket = SessionTicket( self.conf, psk_identity=psk_identity )
-        ## store potential ticket, scheduler
-        self.self.session_ticket_dict[ psk_index ] = session_ticket 
-        ks = KeyScheduler( self.session_ticket.tls_hash, psk=self.session_ticket.psk, is_ext=False )
+      for psk in offered_psk[ 'identities' ] :
+        ## not protected by cs
+        if psk_index_list[ offered_psk[ 'identities' ].index( psk ) ] is True :
+          psk_bytes = psk[ 'key' ]
+          tls_hash = psk[ 'h' ]
+        else:
+          psk_identity = self.handshake.get_ticket( offered_psk[ 'identities' ][ psk_index ] )
+          ## generates ticket from identity 
+          session_ticket = SessionTicket( self.conf, psk_identity=psk_identity )
+          ## store potential ticket, scheduler
+#          self.self.session_ticket_dict[ psk_index ] = session_ticket 
+          psk_bytes = self.session_ticket.psk
+          tls_hash = self.session_ticket.tls_hash
+        ks = KeyScheduler( tls_hash, psk=psk_bytes, is_ext=False )
         secret_request = SecretReq({ 'b' : True }, \
                           self.mtype, self.conf, handshake=self.handshake )
-        ks.process( secret_request.of( [ 'b' ] ), self.handshake )
-        secret_list.append( secret_request.resp( ks )[ 0 ] ) 
-        self.key_schedule_dict[ psk_index ] = ks 
-         
+        ks.process( secret_request.of( [ 'b', 'e_s', 'e_x' ] ), self.handshake )
+        self.scheduler_list.append( ks ) 
+      secret_list = secret_request.resp( self.scheduler_list[ 0 ] ) 
+    else: 
+      secret_list = []
     self.handshake.sanity_check( self.mtype )
 
     self.session_id = SessionID( req[ 'session_id' ] )
     self.resp = { 'session_id' : self.session_id.cs,
                   'ephemeral_list' : self.ephemeral.resp, 
-                  'secret_list' : secret_list }
+                  'secret_list' : secret_list  }
 
   def get_offered_psks( self ):
     """ returns the OfferedPSK structure in the ClientHello """
@@ -1677,7 +1688,10 @@ class CInitClientHelloReq:
 
 ##    pre_shared_key = get_struct(client_hello_exts, 'extension_type', 'pre_shared_key' )
     
+class CClientHelloFinishedReq:
 
+  def __init__(self, req, tls13_conf, handshake, scheduler_dict, session_ticket_dict, session_id ):
+    self.conf = tls13_conf
 
 #class CInitPostHandAuthReq:
 # 
@@ -2040,8 +2054,8 @@ class CSession(SSession) :
       self.post_hand_auth_counter = req.post_hand_auth_counter
     elif mtype == 'c_init_client_hello':
       req = CInitClientHelloReq( payload, self.conf )
-      self.key_schedule_dict = req.key_schedule_dict
-      self.session_ticket_dict = req.session_ticket_dict
+      self.scheduler_list = req.scheduler_list
+#      self.session_ticket_dict = req.session_ticket_dict
       self.handshake = req.handshake
       self.session_id = req.session_id
       self.ephemeral = req.ephemeral

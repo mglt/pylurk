@@ -86,6 +86,7 @@ Secret = Struct(
   'secret_data' / Prefixed( BytesInteger(1), GreedyBytes )
 )
 
+
 HandshakeList = Switch( this._type, 
   { 's_init_early_secret' : Sequence( HSClientHello ),
     's_init_cert_verify' : Select( \
@@ -208,6 +209,26 @@ Tag = BitStruct(
   "last_exchange"   / Flag, 
   "reserved" / Const(0,BitsInteger(7))
 )
+
+#PSKMethod = Enum ( BytesInteger(1),
+#  e = 1,
+#  cs = 2
+#)
+
+TLSHash = Enum( BytesInteger(1),
+    sha256 = 0,
+    sha384 = 1,
+    sha512 = 2,
+)
+
+
+PskIdentityMetadata = Struct(
+  '_name' / Computed('PskIdentityMetadata'),
+  'identity_index' / BytesInteger( 2 ),
+  'tls_hash' / TLSHash, 
+  'psk_bytes' / Prefixed( BytesInteger(2), GreedyBytes),
+)
+
 
 
 SInitEarlySecretRequest = Struct(
@@ -385,17 +406,19 @@ CPostHandAuthResponse = Struct(
 
 
 CInitClientHelloRequest = Struct(
-  '_name' / Computed('CInitEphemeralBinderRequest'),
+  '_name' / Computed('CInitClientHelloRequest'),
   '_type' / Computed('c_init_client_hello'),
   'session_id' / Bytes( 4 ),
   'handshake' / Prefixed( BytesInteger(4), HandshakeList), 
   'freshness' / Freshness, 
-  'psk_index_list' / Prefixed( BytesInteger(1), GreedyRange( BytesInteger(1) ) ), 
+#  'psk_metadata_list' / Prefixed( BytesInteger(2), GreedyRange( Select( PskIdentityMetadata, Const(b'' ) ) ) ), 
+  'psk_metadata_list' / Prefixed( BytesInteger(2), GreedyRange( PskIdentityMetadata ) ), 
+  'secret_request' / SecretRequest
 )
 
 
 CInitClientHelloResponse = Struct(
-  '_name' / Computed('CInitEphemeralBinderResponse'),
+  '_name' / Computed('CInitClientHelloResponse'),
   '_status' / Computed('success'),
   'session_id' / Bytes( 4 ), 
   'ephemeral_list' / Prefixed( BytesInteger(2), GreedyRange( Ephemeral ) ),

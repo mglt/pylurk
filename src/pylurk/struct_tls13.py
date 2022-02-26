@@ -180,6 +180,15 @@ OfferedPsks = Struct(
 
 
 ## Only for LURK
+
+#ExtendedPskIdentity = Struct(
+#  '_name' / Computed(''), 
+#  'identity' / Prefixed( BytesInteger(2), GreedyBytes ),
+#  'obfuscated_ticket_age' / Bytes(4)
+#  'tls_hahs' / TLSHash, 
+#  'psk_bytes' / Prefixed( BytesInteger(2), GreedyBytes ),
+#)
+
 OfferedPsksWithNoBinders = Struct(
   'identities' / Prefixed(BytesInteger(2), GreedyRange(PskIdentity)) 
 )

@@ -19,7 +19,7 @@ from secrets import randbelow
 from struct_lurk import *
 from struct_lurk_tls13 import *
 from struct_tls13 import *
-from lurk_tls13 import CSession, SSession, get_struct_index
+from lurk_tls13 import CSession, SSession, get_struct_index, TlsHandshake
 from test_utils import *
 from conf import Configuration
 from lurk import CryptoService
@@ -59,13 +59,13 @@ Test the TLS 1.3 Crypto Engine.
 """
 
 ## indicates Payload exchanges IV.1 and IV.2 are performed
-SERVER_PAYLOAD_EXCHANGE = True
+SERVER_PAYLOAD_EXCHANGE = False
 ## indicates Payload exchanges in IV.3 is performed
 ## as all signature scheme are tested, it takes a lot of time.
 SERVER_PAYLOAD_SESSION_RESUMPTION_LOOP = False
 
 ## session resumption with a Crypto Engine for the signature sheme ed25519
-SERVER_LURK_MESSAGE_RESUMPTION = True 
+SERVER_LURK_MESSAGE_RESUMPTION = False 
 ## session resumption with a Crypto Engine for all signature shemes
 ## takes a lot of time
 SERVER_LURK_MESSAGE_RESUMPTION_LOOP = False
@@ -200,6 +200,7 @@ hs_cert = { 'msg_type' : 'certificate',
 ## psk_id
 psk_id = { 'identity': b'key_id', 'obfuscated_ticket_age': b'\x00\x01\x02\x03'}
 test_struct( PskIdentity, psk_id ) 
+
 
 
 print( "####################################################" )
@@ -501,11 +502,11 @@ def s_init_cert_verify_test( payload, status ):
   test_struct( TLS13Payload, payload, ctx_struct=ctx_struct, \
                ext_title=ext_title, print_data_struct=True, print_binary=True) 
 
-
-## testing various configurations of (s/c) init_cert_verify request/responses
-for req in s_init_cert_verify_request_list( ):
- #  ext_title = s_init_cert_verify_request_title( req )
-  s_init_cert_verify_test( req, 'request' )
+if SERVER_PAYLOAD_EXCHANGE is True :
+  ## testing various configurations of (s/c) init_cert_verify request/responses
+  for req in s_init_cert_verify_request_list( ):
+    #  ext_title = s_init_cert_verify_request_title( req )
+    s_init_cert_verify_test( req, 'request' )
 
 
 ## SInitCertVerifyResponse
@@ -546,8 +547,10 @@ def init_cert_verify_response_title( resp:dict ) -> str:
   except KeyError:
     return f"last_exchange [{tag}] "
 
-for resp in init_cert_verify_response_list( sig_algo='ed25519' ):
-  s_init_cert_verify_test( resp, 'success' )
+
+if SERVER_PAYLOAD_EXCHANGE is True :
+  for resp in init_cert_verify_response_list( sig_algo='ed25519' ):
+    s_init_cert_verify_test( resp, 'success' )
 
 
 
@@ -613,9 +616,9 @@ def s_init_early_secret_test( payload, status ):
   test_struct( TLS13Payload, payload, ctx_struct=ctx_struct,\
                print_data_struct=False, print_binary=False) 
   
-
-for req in s_init_early_secret_request_list( ):
-  s_init_early_secret_test( req, 'request' )
+if SERVER_PAYLOAD_EXCHANGE is True :
+  for req in s_init_early_secret_request_list( ):
+    s_init_early_secret_test( req, 'request' )
 
 ## SInitEarlySecretResponse
 
@@ -628,7 +631,8 @@ ctx_struct = { '_type' : 's_init_early_secret' }
 test_struct( SInitEarlySecretResponse, s_init_early_secret_resp,\
              ctx_struct=ctx_struct )
 
-s_init_early_secret_test( s_init_early_secret_resp, 'success' )
+if SERVER_PAYLOAD_EXCHANGE is True :
+  s_init_early_secret_test( s_init_early_secret_resp, 'success' )
 
 print( "############################################" )
 print( "## III.3 Payload SHandAndApp Req and Resp ##" )
@@ -682,27 +686,25 @@ def s_hand_and_app_secret_test( payload, status ):
   test_struct( TLS13Payload, payload, ctx_struct=ctx_struct, \
                ext_title=ext_title, print_data_struct=False, print_binary=False) 
 
-for req in s_hand_and_app_secret_request_list():
-  s_hand_and_app_secret_test( req, 'request' )
-      
-
+if SERVER_PAYLOAD_EXCHANGE is True :
+  for req in s_hand_and_app_secret_request_list():
+    s_hand_and_app_secret_test( req, 'request' )
 ## SHandAndAppResponse
-
-for last_exchange in [ True, False ]:
-  for ephemeral in [ eph_no, eph_cs_resp ]:
-    s_hand_and_app_resp = {\
-      'tag' : { 'last_exchange' : last_exchange }, 
-      'session_id' : token_bytes (4 ), 
-      'ephemeral' : ephemeral, 
-      'secret_list' : [\
-        { 'secret_type': 'h_c', 'secret_data': b'hand_client_secret' }, 
-        { 'secret_type': 'h_s', 'secret_data': b'hand_server_secret' },
-        { 'secret_type': 'a_c', 'secret_data': b'app_client_secret' },
-        { 'secret_type': 'a_s', 'secret_data': b'app_server_secret' } ] }
-    ctx_struct = { '_type' : 's_hand_and_app_secret', '_status' : 'request' } 
-    test_struct( SHandAndAppResponse, s_hand_and_app_resp,\
-                 ctx_struct=ctx_struct )
-    s_hand_and_app_secret_test( s_hand_and_app_resp, 'success' )
+  for last_exchange in [ True, False ]:
+    for ephemeral in [ eph_no, eph_cs_resp ]:
+      s_hand_and_app_resp = {\
+        'tag' : { 'last_exchange' : last_exchange }, 
+        'session_id' : token_bytes (4 ), 
+        'ephemeral' : ephemeral, 
+        'secret_list' : [\
+          { 'secret_type': 'h_c', 'secret_data': b'hand_client_secret' }, 
+          { 'secret_type': 'h_s', 'secret_data': b'hand_server_secret' },
+          { 'secret_type': 'a_c', 'secret_data': b'app_client_secret' },
+          { 'secret_type': 'a_s', 'secret_data': b'app_server_secret' } ] }
+      ctx_struct = { '_type' : 's_hand_and_app_secret', '_status' : 'request' } 
+      test_struct( SHandAndAppResponse, s_hand_and_app_resp,\
+                   ctx_struct=ctx_struct )
+      s_hand_and_app_secret_test( s_hand_and_app_resp, 'success' )
 
 print( "###########################################" )
 print( "## III.4 Payload SNewTicket Req and Resp ##" )
@@ -762,8 +764,10 @@ def s_new_ticket_test( payload, status ):
                  ext_title=ext_title, print_data_struct=False, print_binary=False) 
   else:
     raise ValueError( f"Unexpected status {status}. Expecting 'request'/'success'" )
-for req in s_new_ticket_request_list( ):
-  s_new_ticket_test( req, 'request' )
+
+if SERVER_PAYLOAD_EXCHANGE is True :
+  for req in s_new_ticket_request_list( ):
+    s_new_ticket_test( req, 'request' )
   
 
 ## SNewTicketResponse
@@ -955,9 +959,9 @@ def c_init_client_finished_test( payload, status ):
   test_struct( TLS13Payload, payload, ctx_struct=ctx_struct, \
                ext_title=ext_title, print_data_struct=True, print_binary=True) 
 
-
-for req in c_init_client_finished_request_list( ):
-  c_init_client_finished_test( req, 'request' )
+if SERVER_PAYLOAD_EXCHANGE is True :
+  for req in c_init_client_finished_request_list( ):
+    c_init_client_finished_test( req, 'request' )
 
 
 ## SInitCertVerifyResponse
@@ -985,8 +989,9 @@ def c_init_client_finished_response_title( resp:dict ) -> str:
   tag = resp[ 'tag' ][ 'last_exchange' ]
   return f"last_exchange [{tag}] "
 
-for resp in c_init_client_finished_response_list( sig_algo='ed25519' ):
-    c_init_client_finished_test( resp, 'success' )
+if SERVER_PAYLOAD_EXCHANGE is True :
+  for resp in c_init_client_finished_response_list( sig_algo='ed25519' ):
+      c_init_client_finished_test( resp, 'success' )
 
 print( "##############################################" )
 print( "## III.6 Payload CPostHandAuth Req and Resp ##" )
@@ -1043,12 +1048,12 @@ def c_post_hand_auth_test( payload, status ):
                  ext_title=ext_title, print_data_struct=False, \
                  print_binary=False) 
 
+if SERVER_PAYLOAD_EXCHANGE is True :
+  for payload in c_post_hand_auth_request_list( ):
+    c_post_hand_auth_test( payload, 'request' )
 
-for payload in c_post_hand_auth_request_list( ):
-  c_post_hand_auth_test( payload, 'request' )
-
-for payload in c_post_hand_auth_response_list( ):
-  c_post_hand_auth_test( payload, 'success' )
+  for payload in c_post_hand_auth_response_list( ):
+    c_post_hand_auth_test( payload, 'success' )
 
 
 print( "##################################################" )
@@ -1064,39 +1069,74 @@ def c_init_client_hello_handshake_list( ):
   ## only ecdhe
   lhs_client_hello = deepcopy( hs_client_hello )
   lhs_client_hello[ 'data' ][ 'extensions' ] = [ ext51_ch_empty ]
+
+  h = TlsHandshake( 'client' ) 
+  h.msg_list = [ lhs_client_hello ]
+  if h.is_psk_proposed() is True:
+    raise ValueError( f"Expecting Non PSK handshake {h.msg_list}" )
+  if h.is_ks_proposed() is False:
+    raise ValueError( f"Expecting KS handshake {h.msg_list}" )
+
   h_list.append( [ lhs_client_hello ] )
   ## psk with ecdhe 
   lhs2_client_hello = deepcopy( hs_client_hello )
   lhs2_client_hello[ 'data' ][ 'extensions' ] = [ ext45, ext51_ch_empty, ext41_ch_no_binders ]
+
+  h.msg_list = [ lhs2_client_hello ] 
+  if h.is_psk_proposed() is False:
+    raise ValueError( f"Expecting PSK handshake {h.msg_list}" )
+  if h.is_ks_proposed() is False:
+    raise ValueError( f"Expecting KS handshake {h.msg_list}" )
+
   h_list.append( [ lhs2_client_hello ] )
   ## psk no ecdhe 
   lhs3_client_hello = deepcopy( hs_client_hello )
   lhs3_client_hello[ 'data' ][ 'extensions' ] = [ ext45, ext41_ch_no_binders ]
+
+  h.msg_list = [ lhs3_client_hello ]
+  if h.is_psk_proposed() is False:
+    raise ValueError( f"Expecting PSK handshake {h.msg_list}" )
+  if h.is_ks_proposed() is True:
+    raise ValueError( f"Expecting KS handshake {h.msg_list}" )
+
   h_list.append( [ lhs3_client_hello ] )
   return h_list 
 
+#if SERVER_PAYLOAD_EXCHANGE is True :
 for partial_ch_list in c_init_client_hello_handshake_list( ):
   test_struct( HSPartialClientHello, partial_ch_list[ 0 ], ctx_struct={}, \
+             ext_title="", print_data_struct=False, print_binary=False) 
+  test_struct( HandshakeList, partial_ch_list, ctx_struct={ '_type' : 'c_init_client_hello' }, \
              ext_title="", print_data_struct=False, print_binary=False) 
   
 
 def c_init_client_hello_request_list( ):
- req_list = []
- for handshake in c_init_client_hello_handshake_list( ):
-   ## Extension is used for Lurk and TLS  
-   ## pre_share_key_len = len( Extension.build( ext41_ch ) )
-   #pre_share_key_len = len( OfferedPsks.build( ext41_ch[ 'extension_data' ] ) ) + 2
-   ext_list = [ e[ 'extension_type' ] for e in handshake[0][ 'data' ][ 'extensions' ] ]
-   if 'pre_shared_key' in ext_list: 
-     psk_index_list = list( range( len( ext41_ch_no_binder[ 'identities' ] ) ) )
-   else:
-     psk_index_list = []
-   req_list.append( { 'session_id' : token_bytes( 4 ),
-                      'handshake' : handshake, 
-                      'freshness' : 'sha256',
-                      'psk_index_list' : psk_index_list, 
-} )
-   return req_list 
+  req_list = []
+  for handshake in c_init_client_hello_handshake_list( ):
+    ## Extension is used for Lurk and TLS  
+    ## pre_share_key_len = len( Extension.build( ext41_ch ) )
+    #pre_share_key_len = len( OfferedPsks.build( ext41_ch[ 'extension_data' ] ) ) + 2
+##   ext_list = [ e[ 'extension_type' ] for e in handshake[0][ 'data' ][ 'extensions' ] ]
+    h = TlsHandshake( 'client' ) 
+    h.msg_list = handshake
+    print( h.msg_list )
+    if h.is_psk_proposed() is True :
+      psk_method_list = []
+      psk_id_list = h.msg_list[ 0 ][ 'data' ][ 'extensions' ][ -1 ][ 'extension_data' ][ 'identities' ]
+      psk_metadata_list = [{ 'identity_index' : 1,\
+                       'tls_hash' : 'sha256',\
+                       'psk_bytes' : b'psk_bytes' } ]
+      PskIdentityMetadata.build( psk_metadata_list[ 0 ] ) 
+    else:
+      psk_metadata_list = [ ]
+    req_list.append(\
+      { 'session_id' : token_bytes( 4 ),
+        'handshake' : handshake, 
+        'freshness' : 'sha256',
+        'psk_metadata_list' : psk_metadata_list, 
+        'secret_request' : { 'b' : True, 'e_s' : True, 'e_x' : True , 'h_c' : False, 'h_s' : False, 'a_c' : False, 'a_s' : False, 'x' : False, 'r' : False }
+      } )
+  return req_list 
 
 
 def c_init_client_hello_request_title( req:dict ) -> str:
@@ -1107,6 +1147,8 @@ def c_init_client_hello_request_title( req:dict ) -> str:
   return ""  
   return f"psk_index_list [{req[ 'psk_index_list' ]}]"
 
+
+
 def c_init_client_hello_test( payload, status ):
   """ tests if payload format matches  (s/c) c_init_client_finished request/response """
   _type = 'c_init_client_finished'
@@ -1115,7 +1157,8 @@ def c_init_client_hello_test( payload, status ):
   if status == 'request':
     print( f"--- req: {payload}" )
     ext_title = c_init_client_hello_request_title( payload )
-#    CInitClientHelloRequest.build( payload  )
+    HandshakeList.build( payload[ 'handshake' ], _type= 'c_init_client_hello' )
+    CInitClientHelloRequest.build( payload )
     test_struct( CInitClientHelloRequest, payload, ctx_struct={}, \
                ext_title=ext_title, print_data_struct=False, print_binary=False) 
     test_struct( TLS13Payload, payload, ctx_struct=ctx_struct, \
@@ -1415,12 +1458,14 @@ def c_init_client_hello_session( ):
       c_init_client_hello_test( req, 'request' )
       resp = session.serve( req, 'c_init_client_hello', 'request')
       c_init_client_hello_test( resp, 'success' )
-#      if resp[ 'status' ] != 'success' :
-#        raise ValueError( f"Unexpected response. Expecting c_init_client_hello"\
-#          f"response got {resp}" )
 
-if SERVER_PAYLOAD_EXCHANGE == True:
-  c_init_client_hello_session()
+#if SERVER_PAYLOAD_EXCHANGE == True:
+c_init_client_hello_session()
+
+
+
+
+
 
 print( "#############################################################" )
 print( "## V.1 LURK Exchange Server Session Resumption:            ##" )
