@@ -1061,6 +1061,8 @@ print( "## III.7 Payload  CInitClientHello Req and Resp ##" )
 print( "##################################################" )
 
 def c_init_client_hello_handshake_list( ):
+  ext41_ch_no_binders = { 'extension_type': 'pre_shared_key', \
+                          'extension_data' : { 'identities' : [psk_id, psk_id] } }
   # 49: 'post_handshake_auth'
   # 41: 'pre_shared_key'
   # 45: 'psk_key_exchange_modes'
@@ -1119,13 +1121,21 @@ def c_init_client_hello_request_list( ):
 ##   ext_list = [ e[ 'extension_type' ] for e in handshake[0][ 'data' ][ 'extensions' ] ]
     h = TlsHandshake( 'client' ) 
     h.msg_list = handshake
+    if 'binders' in h.msg_list[ 0 ][ 'data' ][ 'extensions' ][ -1 ]\
+                 [ 'extension_data' ].keys() :
+      raise ValueError( f"unexpected binders {h}" )
     print( h.msg_list )
     if h.is_psk_proposed() is True :
-      psk_method_list = []
-      psk_id_list = h.msg_list[ 0 ][ 'data' ][ 'extensions' ][ -1 ][ 'extension_data' ][ 'identities' ]
-      psk_metadata_list = [{ 'identity_index' : 1,\
-                       'tls_hash' : 'sha256',\
-                       'psk_bytes' : b'psk_bytes' } ]
+      psk_id_list = h.msg_list[ 0 ][ 'data' ][ 'extensions' ][ -1 ]\
+                              [ 'extension_data' ][ 'identities' ]
+      ## only psk provided "explicitly" that is with metadata are provided
+      ## If no metadata is provided, than CS will look for a ticket.
+      psk_metadata_list = []
+      for psk in psk_id_list:
+        psk_metadata_list.append( { 'identity_index' : psk_id_list.index( psk ),\
+                               'tls_hash' : 'sha256',\
+                               'psk_type' : 'resumption', \
+                               'psk_bytes' : b'psk_bytes' } )
       PskIdentityMetadata.build( psk_metadata_list[ 0 ] ) 
     else:
       psk_metadata_list = [ ]
@@ -1134,7 +1144,9 @@ def c_init_client_hello_request_list( ):
         'handshake' : handshake, 
         'freshness' : 'sha256',
         'psk_metadata_list' : psk_metadata_list, 
-        'secret_request' : { 'b' : True, 'e_s' : True, 'e_x' : True , 'h_c' : False, 'h_s' : False, 'a_c' : False, 'a_s' : False, 'x' : False, 'r' : False }
+        'secret_request' : { 'b' : True, 'e_s' : True, 'e_x' : True , \
+                             'h_c' : False, 'h_s' : False, 'a_c' : False, \
+                             'a_s' : False, 'x' : False, 'r' : False }
       } )
   return req_list 
 
@@ -1165,6 +1177,7 @@ def c_init_client_hello_test( payload, status ):
                ext_title=ext_title, print_data_struct=False, print_binary=False) 
     
   elif status == 'success':
+    print( f"+++ {payload}" )
     ext_title = c_init_client_hello_response_title( payload )
     test_struct( CInitClientHelloResponse, payload, ctx_struct=ctx_struct, \
                ext_title=ext_title, print_data_struct=False, print_binary=False) 
@@ -1184,18 +1197,60 @@ for req in c_init_client_hello_request_list( ):
 
 def c_init_client_hello_response_list( ):
   binder_key = {  'secret_type' : 'b',  'secret_data' : b'\x00\x00' }
+  e_x = {  'secret_type' : 'e_x',  'secret_data' : b'\x00\x00' }
   return [ { 'session_id' : token_bytes( 4 ), 
-             'ephemeral_list' : [ eph_cs_resp, eph_cs_resp ], 
-             'secret_list' : [ binder_key, binder_key ] } ]
+             'ephemeral_list' : [ eph_cs_resp, eph_cs_resp ],
+             'binder_key_list' : [ binder_key ]
+             'secret_list' : [ e_x ] } ]
 
 def c_init_client_hello_response_title( req:dict ) -> str:
   print( req)
   eph_list_len = len( req[ 'ephemeral_list' ] )
-  secret_list_len = len( req[ 'secret_list' ] )
+  try: 
+    secret_list_len = len( req[ 'secret_list' ] )
+  except TypeError :
+    secret_list_len = 0 # secret_list is None
   return f"eph_list_len {eph_list_len} - secret_list_len {secret_list_len}" 
 
 for req in c_init_client_hello_response_list( ):
+  print( f"ooo - {req}" )
   c_init_client_hello_test( req, 'success' )
+
+
+print( "##################################################" )
+print( "## III.8 Payload  CServerHello  Req and Resp ##" )
+print( "##################################################" )
+
+def c_server_hello_handshake_list( ):
+  # 49: 'post_handshake_auth'
+  # 41: 'pre_shared_key'
+  # 45: 'psk_key_exchange_modes'
+  # 51 : 'key share'
+  sh_list = []
+  for client_hello in  c_init_client_hello_handshake_list( ):
+    ch_ext_list = [ e[ 'extension_type' ] for e in client_hello[ 'data' ][ 'extensions' ] ]
+    sh_ext_list = []
+    if 'key_share' in ext_list :
+      sh_ext_list.append( {'extension_type': 'key_share', \
+                           'extension_data' : {'server_share' : ke_entry_x448 } } ) 
+    if 'pre_shared_key' in ext_list :
+      sh_ext_list.append( { 'extension_type': 'pre_shared_key', \
+                            'extension_data' : 0 } )
+      sh_list.append( { 'msg_type': 'server_hello', 
+                        'data' : {
+                          'legacy_version' : b'\x03\x03',
+                          'random' : token_bytes( 32 ),
+                          'cipher_suite' :'TLS_AES_128_GCM_SHA256',
+                          'legacy_compression_method' : b'\x00',
+                          'extensions' : sh_ext_list } } 
+  return sh_list
+
+def c_server_hello_request_list( ):
+
+  for handshake in c_server_hello_handshake_list( )
+    
+
+
 
 print( "###############################################" )
 print( "## IV.1 Payload Exchange s_init_cert_verify  ##" )
@@ -1454,9 +1509,17 @@ def c_init_client_hello_session( ):
     conf = configure( sig_scheme, role= 'client' ) 
     print( f"c_init_client_hello_session: conf {conf}" )
     for req in c_init_client_hello_request_list( ) :
+      ## I do no get why we do have binders.
+      if 'binders' in req[ 'handshake'][ 0 ][ 'data' ][ 'extensions' ][ -1 ]\
+                   [ 'extension_data' ].keys() :
+        del req[ 'handshake'][ 0 ][ 'data' ][ 'extensions' ][ -1 ]\
+                    [ 'extension_data' ][ 'binders' ]
+##        raise ValueError( f"unexpected binders {req}" )
       session = CSession( conf ) 
+      print( f"ooo - {req}" )
       c_init_client_hello_test( req, 'request' )
       resp = session.serve( req, 'c_init_client_hello', 'request')
+      print( f"ooo - {resp}" )
       c_init_client_hello_test( resp, 'success' )
 
 #if SERVER_PAYLOAD_EXCHANGE == True:

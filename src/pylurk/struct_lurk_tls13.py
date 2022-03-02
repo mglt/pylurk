@@ -221,11 +221,17 @@ TLSHash = Enum( BytesInteger(1),
     sha512 = 2,
 )
 
+PSKType = Enum( BytesInteger(1),
+    external = 0,
+    resumption = 1,
+)
+
 
 PskIdentityMetadata = Struct(
   '_name' / Computed('PskIdentityMetadata'),
   'identity_index' / BytesInteger( 2 ),
-  'tls_hash' / TLSHash, 
+  'tls_hash' / TLSHash,
+  'psk_type' / PSKType, 
   'psk_bytes' / Prefixed( BytesInteger(2), GreedyBytes),
 )
 
@@ -422,8 +428,53 @@ CInitClientHelloResponse = Struct(
   '_status' / Computed('success'),
   'session_id' / Bytes( 4 ), 
   'ephemeral_list' / Prefixed( BytesInteger(2), GreedyRange( Ephemeral ) ),
+  'binder_key_list' / Prefixed( BytesInteger(2), GreedyRange( Secret ) ),
   'secret_list' / Prefixed( BytesInteger(2), GreedyRange( Secret ) )
 ) 
+
+
+CServerHelloRequest = Struct(
+  '_name' / Computed('CServerHelloRequest'),
+  '_type' / Computed('c_server_hello'),
+  'session_id' / Bytes( 4 ),
+  'handshake' / Prefixed( BytesInteger(4), HandshakeList), 
+  'ephemeral' / Ephemeral, 
+)
+
+CServerHelloResponse = Struct(
+  '_name' / Computed('CServerHelloResponse'),
+  '_type' / Computed('c_server_hello'),
+  'session_id' / Bytes( 4 ),
+  'secret_list' / Prefixed( BytesInteger(2), GreedyRange( Secret ) )
+)
+
+CClientFinishedRequest = Struct(
+  '_name' / Computed('CClientFinishedRequest'),
+  '_type' / Computed('c_client_finished'),
+  '_status' / Computed('request'),
+  'tag' / Tag,
+  'session_id' / Switch( this.tag.last_exchange,
+    { True : Const( b'' ), 
+      False : Bytes( 4 ),
+    }  
+  ),
+  'handshake' / Prefixed( BytesInteger(4), HandshakeList ), 
+  'server_certificate' / Cert, 
+  'client_certificate' / Cert, 
+)
+
+CClientFinishedResponse = Struct(
+  '_name' / Computed('CClientFinishedResponse'),
+  '_type' / Computed('c_client_finished'),
+  '_status' / Computed('success'),
+  'tag' / Tag,
+  'session_id' / Switch( this.tag.last_exchange,
+    { True : Const(b''), 
+      False : Bytes(4),
+    }  
+  ),
+  'signature' / Prefixed( BytesInteger(2), GreedyBytes )
+)
 
 
 ##BinderKeyRequest = Struct(
