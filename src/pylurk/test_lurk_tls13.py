@@ -1063,6 +1063,13 @@ print( "##################################################" )
 def c_init_client_hello_handshake_list( ):
   ext41_ch_no_binders = { 'extension_type': 'pre_shared_key', \
                           'extension_data' : { 'identities' : [psk_id, psk_id] } }
+  empty_ke_entries = []
+  for entry in ke_entries :
+    empty_entry = { 'group': entry[ 'group' ] , 'key_exchange' : b''}
+    empty_ke_entries.append( empty_entry ) 
+    test_struct( EmptyKeyShareEntry, empty_entry ) 
+  ext51_ch_empty = { 'extension_type': 'key_share', \
+                   'extension_data' : { 'client_shares' : empty_ke_entries } }
   # 49: 'post_handshake_auth'
   # 41: 'pre_shared_key'
   # 45: 'psk_key_exchange_modes'
@@ -1148,7 +1155,7 @@ def c_init_client_hello_request_list( ):
                              'h_c' : False, 'h_s' : False, 'a_c' : False, \
                              'a_s' : False, 'x' : False, 'r' : False }
       } )
-  return req_list 
+  return deepcopy( req_list )
 
 
 def c_init_client_hello_request_title( req:dict ) -> str:
@@ -1191,7 +1198,6 @@ def c_init_client_hello_test( payload, status ):
   test_struct( TLS13Payload, payload, ctx_struct=ctx_struct, \
                ext_title=ext_title, print_data_struct=True, print_binary=True) 
 
-
 for req in c_init_client_hello_request_list( ):
   c_init_client_hello_test( req, 'request' )
 
@@ -1200,7 +1206,7 @@ def c_init_client_hello_response_list( ):
   e_x = {  'secret_type' : 'e_x',  'secret_data' : b'\x00\x00' }
   return [ { 'session_id' : token_bytes( 4 ), 
              'ephemeral_list' : [ eph_cs_resp, eph_cs_resp ],
-             'binder_key_list' : [ binder_key ]
+             'binder_key_list' : [ binder_key ],
              'secret_list' : [ e_x ] } ]
 
 def c_init_client_hello_response_title( req:dict ) -> str:
@@ -1217,37 +1223,6 @@ for req in c_init_client_hello_response_list( ):
   c_init_client_hello_test( req, 'success' )
 
 
-print( "##################################################" )
-print( "## III.8 Payload  CServerHello  Req and Resp ##" )
-print( "##################################################" )
-
-def c_server_hello_handshake_list( ):
-  # 49: 'post_handshake_auth'
-  # 41: 'pre_shared_key'
-  # 45: 'psk_key_exchange_modes'
-  # 51 : 'key share'
-  sh_list = []
-  for client_hello in  c_init_client_hello_handshake_list( ):
-    ch_ext_list = [ e[ 'extension_type' ] for e in client_hello[ 'data' ][ 'extensions' ] ]
-    sh_ext_list = []
-    if 'key_share' in ext_list :
-      sh_ext_list.append( {'extension_type': 'key_share', \
-                           'extension_data' : {'server_share' : ke_entry_x448 } } ) 
-    if 'pre_shared_key' in ext_list :
-      sh_ext_list.append( { 'extension_type': 'pre_shared_key', \
-                            'extension_data' : 0 } )
-      sh_list.append( { 'msg_type': 'server_hello', 
-                        'data' : {
-                          'legacy_version' : b'\x03\x03',
-                          'random' : token_bytes( 32 ),
-                          'cipher_suite' :'TLS_AES_128_GCM_SHA256',
-                          'legacy_compression_method' : b'\x00',
-                          'extensions' : sh_ext_list } } 
-  return sh_list
-
-def c_server_hello_request_list( ):
-
-  for handshake in c_server_hello_handshake_list( )
     
 
 
@@ -1503,30 +1478,166 @@ print( "################################################" )
 print( "## IV.5 Payload Exchange c_init_client_hello  ##" )
 print( "################################################" )
 
-def c_init_client_hello_session( ):
+def c_init_client_hello_session( conf, req ):
 
-  for sig_scheme in sig_scheme_list: 
-    conf = configure( sig_scheme, role= 'client' ) 
-    print( f"c_init_client_hello_session: conf {conf}" )
-    for req in c_init_client_hello_request_list( ) :
-      ## I do no get why we do have binders.
-      if 'binders' in req[ 'handshake'][ 0 ][ 'data' ][ 'extensions' ][ -1 ]\
-                   [ 'extension_data' ].keys() :
-        del req[ 'handshake'][ 0 ][ 'data' ][ 'extensions' ][ -1 ]\
-                    [ 'extension_data' ][ 'binders' ]
-##        raise ValueError( f"unexpected binders {req}" )
-      session = CSession( conf ) 
-      print( f"ooo - {req}" )
-      c_init_client_hello_test( req, 'request' )
-      resp = session.serve( req, 'c_init_client_hello', 'request')
-      print( f"ooo - {resp}" )
-      c_init_client_hello_test( resp, 'success' )
+  ## I do no get why we do have binders.
+  if 'binders' in req[ 'handshake'][ 0 ][ 'data' ][ 'extensions' ][ -1 ]\
+               [ 'extension_data' ].keys() :
+    del req[ 'handshake'][ 0 ][ 'data' ][ 'extensions' ][ -1 ]\
+                [ 'extension_data' ][ 'binders' ]
+##    raise ValueError( f"unexpected binders {req}" )
+  session = CSession( conf ) 
+  print( f"ooo - {req}" )
+  c_init_client_hello_test( req, 'request' )
+  resp = session.serve( req, 'c_init_client_hello', 'request')
+  print( f"ooo - {resp}" )
+  c_init_client_hello_test( resp, 'success' )
+  return session, resp
 
 #if SERVER_PAYLOAD_EXCHANGE == True:
-c_init_client_hello_session()
+for sig_scheme in sig_scheme_list: 
+  conf = configure( sig_scheme, role= 'client' ) 
+  print( f"c_init_client_hello_session: conf {conf}" )
+  for req in c_init_client_hello_request_list( ) :
+    c_init_client_hello_session( conf, req )
 
 
+print( "#################################################################" )
+print( "## IV.6 Payload  Exchange c_init_client_hello - c_server_hello ##" )
+print( "##                                    - c_client_finished      ##" )
+print( "#################################################################" )
 
+def c_server_hello_handshake( client_hello ):
+  """ returns the serverhello message corresponding to the clienthello """
+  # 49: 'post_handshake_auth'
+  # 41: 'pre_shared_key'
+  # 45: 'psk_key_exchange_modes'
+  # 51 : 'key share'
+  ch_ext_list = [ e[ 'extension_type' ] for e in client_hello[ 'data' ][ 'extensions' ] ]
+  sh_ext_list = []
+  if 'key_share' in ch_ext_list :
+    sh_ext_list.append( {'extension_type': 'key_share', \
+                         'extension_data' : {'server_share' : ke_entry_x448 } } ) 
+  if 'pre_shared_key' in ch_ext_list :
+    sh_ext_list.append( { 'extension_type': 'pre_shared_key', \
+                          'extension_data' : 0 } )
+  sh = { 'msg_type': 'server_hello', 
+         'data' : {
+           'legacy_version' : b'\x03\x03',
+           'random' : token_bytes( 32 ),
+           'cipher_suite' :'TLS_AES_128_GCM_SHA256',
+           'legacy_compression_method' : b'\x00',
+           'extensions' : sh_ext_list } }
+  return sh
+
+def c_handshake( conf, c_init_client_hello_request ):
+
+  ## I do no get why we do have binders.
+  if 'binders' in req[ 'handshake'][ 0 ][ 'data' ][ 'extensions' ][ -1 ]\
+               [ 'extension_data' ].keys() :
+    del req[ 'handshake'][ 0 ][ 'data' ][ 'extensions' ][ -1 ]\
+                [ 'extension_data' ][ 'binders' ]
+  c_init_client_hello_test( c_init_client_hello_request, 'request' )
+  session, resp = c_init_client_hello_session( conf, c_init_client_hello_request )
+  print( f"-- session.ephemeral.resp: {session.ephemeral.resp}" ) 
+  print( f"-- session.ephemeral.private_key_list: {session.ephemeral.private_key_list}" )
+  ## we do not keep track of the keys generated by E, so we skip that case
+  if None in session.ephemeral.private_key_list :
+    return None 
+  ## building server_hello ( expected to be on the server side)
+  ch = c_init_client_hello_request[ 'handshake' ][ 0 ]
+  sh = c_server_hello_handshake( ch )
+  ## determining the ephemeral
+  sh_ext_list = [ e[ 'extension_type' ] for e in sh[ 'data' ][ 'extensions' ] ]
+  ## From configuration determine the ephemeral
+  ## when key share is present it is always generated by the CS
+  ## so ephemeral is of mode cs_generated when key_share is present 
+  ## and no_secret otherwise
+  if 'key_share' in sh_ext_list :
+    eph = eph_cs_req
+  else:
+    eph = eph_no 
+  session_id = resp[ 'session_id' ]
+  c_server_hello_request = \
+    { 'session_id' : session_id,
+      'handshake' : [ sh ], 
+      'ephemeral' : eph }
+  ## in our case PSK are never hosted by the CS
+  ## so when eph i sset to eph_no we directly go to 
+  ## c_client_finished
+  psk_in_cs = False
+  print( f"eph : {eph} ")
+  if eph[ 'method' ] in [ 'cs_generated' ] or psk_in_cs is True :
+    ## checking the format of the request
+    ext_title = "CServerHelloRequest"
+    test_struct( CServerHelloRequest, c_server_hello_request, \
+                 ctx_struct={}, ext_title=ext_title, \
+                 print_data_struct=False, print_binary=False) 
+    ctx_struct = { '_type' : 'c_server_hello', '_status' : 'request' }
+    test_struct( TLS13Payload, c_server_hello_request,\
+                 ctx_struct=ctx_struct, ext_title=ext_title, \
+                 print_data_struct=False, print_binary=False)
+    ## getting the response
+    resp = session.serve( c_server_hello_request, 'c_server_hello', 'request')
+    
+    ## checking the format of the response
+    test_struct( CServerHelloResponse, resp, ctx_struct={}, \
+                 ext_title=ext_title, print_data_struct=False,\
+                 print_binary=False) 
+    ctx_struct = { '_type' : 'c_server_hello', '_status' : 'success' }
+    test_struct( TLS13Payload, resp, ctx_struct=ctx_struct, \
+                 ext_title=ext_title, print_data_struct=False, \
+                 print_binary=False)
+    handshake = []
+  else :
+    handshake = [ sh ]
+  ## a - deriving keys with handshake secrets
+  ## b - decryptiong the encrypted messages
+  ## c.1 - application secrets for the application data.
+  ## c.2 - when authentication is requested the CS authenticates the client
+
+  ## Possible choices of handshakes
+  ## handshake.extend( [ hs_encrypted_extensions, hs_finished ] )  
+  handshake.extend( [ hs_encrypted_extensions, hs_certificate_request, hs_certificate_verify, hs_finished ] )  
+  ## uncompressed
+  certificate_entry = {'cert' : b'certificate_entry', 'extensions':[] }
+  certificate = { 'certificate_request_context': b'',
+                  'certificate_list' : [certificate_entry, certificate_entry] }
+  uncompressed_cert = { 'cert_type' : 'uncompressed',\
+                        'certificate' : certificate }
+  server_cert = uncompressed_cert
+  client_cert = uncompressed_cert
+  c_client_finished_request = \
+    { 'tag' : { 'last_exchange' : False }, 
+      'session_id' : session_id, 
+      'handshake' : handshake, 
+      'server_certificate' : server_cert,
+      'client_certificate' : client_cert }
+  ## checking the format of the request
+  ext_title = "CClientFinishedRequest"
+  test_struct( CClientFinishedRequest, c_client_finished_request, \
+               ctx_struct={}, ext_title=ext_title, \
+               print_data_struct=False, print_binary=False) 
+  ctx_struct = { '_type' : 'c_client_finished', '_status' : 'request' }
+  test_struct( TLS13Payload, c_client_finished_request,\
+               ctx_struct=ctx_struct, ext_title=ext_title, \
+               print_data_struct=False, print_binary=False)
+  resp = session.serve( c_client_finished_request, 'c_client_finished', 'request')
+  test_struct( CClientFinishedResponse, resp, \
+               ctx_struct={}, ext_title=ext_title, \
+               print_data_struct=False, print_binary=False) 
+  ctx_struct = { '_type' : 'c_client_finished', '_status' : 'success' }
+  test_struct( TLS13Payload, resp,\
+               ctx_struct=ctx_struct, ext_title=ext_title, \
+               print_data_struct=False, print_binary=False)
+
+
+print( f"-- c_init_client_hello_request_list( ) [{len(c_init_client_hello_request_list( ))}]:  {c_init_client_hello_request_list( ) }" )
+for sig_scheme in sig_scheme_list: 
+  conf = configure( sig_scheme, role= 'client' ) 
+  print( f"c_init_client_hello_session: conf {conf}" )
+  for req in c_init_client_hello_request_list( ) :
+    c_handshake( conf, req )
 
 
 
