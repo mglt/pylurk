@@ -474,7 +474,7 @@ CClientFinishedResponse = Struct(
 
 CRegisterTicketsRequest = Struct(
   '_name' / Computed('CRegisterTicketRequest'),
-  '_type' / Computed('c_register_ticket'),
+  '_type' / Computed('c_register_tickets'),
   '_status' / Computed('request'),
   'tag' / Tag,
   'session_id' / Bytes( 4 ),
@@ -483,7 +483,7 @@ CRegisterTicketsRequest = Struct(
 
 CRegisterTicketsResponse = Struct(
   '_name' / Computed('CRegisterTicketRequest'),
-  '_type' / Computed('c_register_ticket'),
+  '_type' / Computed('c_register_tickets'),
   '_status' / Computed('success'),
   'tag' / Tag,
   'session_id' / Bytes( 4 ),
@@ -537,10 +537,10 @@ TLS13Payload = Switch(this._type,
        { 'request' : CClientFinishedRequest, 
          'success' : CClientFinishedResponse, 
         }, default=ErrorPayload), 
-##    'c_register_ticket' : Switch( this._status,
-##       { 'request' : RegisterTicketRequest, 
-##         'success' : RegisterTicketResponse, 
-##        }, default=ErrorPayload), 
+    'c_register_tickets' : Switch( this._status,
+       { 'request' : CRegisterTicketsRequest, 
+         'success' : CRegisterTicketsResponse, 
+        }, default=ErrorPayload), 
   }, default=ErrorPayload
 )
 

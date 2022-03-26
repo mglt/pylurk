@@ -50,7 +50,13 @@ conf_template = {
      'type_authorized' : [ 's_init_cert_verify',     ## server ECDHE
                            's_init_early_secret',    ## server PSK
                            's_hand_and_app_secret',  ## server PSK
-                           's_new_ticket' ],           ## session resumption
+                           's_new_ticket',           ## session resumption
+                           'c_init_client_finished', ## only signature 
+                           'c_post_hand_auth',       ## post hand
+                           'c_init_client_hello',    ## client hello
+                           'c_server_hello',
+                           'c_client_finished',
+                           'c_register_tickets' ],
      ## echde authentication parameter
        ## certificate chain, the public key of the TLS client or server
        ## is expected to be the last one

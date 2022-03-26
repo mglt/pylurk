@@ -1139,3 +1139,50 @@ Traceback (most recent call last):
   File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 110, in __init__
     ks = self.handshake.msg_list[ 1 ][ 'data' ][ 'extensions' ][ 0 ] [ 'extension_data' ] [  'server_share' ] [ 'key_exchange'  ]
 KeyError: 'server_share'
+[2022-03-24 20:39:22,203 : cs.py:73 -                serve() ] 'Ephemeral' object has no attribute 'get_key_share_server_share'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/cs.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 2433, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1629, in serve
+    req = SInitCertVerifyReq( payload, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1456, in __init__
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf, self.handshake )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 122, in __init__
+    self.shared_secret, self.resp = self.compute_server_share( )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 400, in compute_server_share
+    print( f"{self.get_key_share_server_share()}" )
+AttributeError: 'Ephemeral' object has no attribute 'get_key_share_server_share'
+[2022-03-24 20:43:52,045 : cs.py:73 -                serve() ] 'Ephemeral' object has no attribute 'get_key_share_server_share'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/cs.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 2433, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1629, in serve
+    req = SInitCertVerifyReq( payload, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1456, in __init__
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf, self.handshake )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 122, in __init__
+    self.shared_secret, self.resp = self.compute_server_share( )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 400, in compute_server_share
+    print( f"{self.get_key_share_server_share()}" )
+AttributeError: 'Ephemeral' object has no attribute 'get_key_share_server_share'
+[2022-03-24 20:45:23,436 : cs.py:73 -                serve() ] 'Ephemeral' object has no attribute 'get_key_share_server_share'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/cs.py", line 59, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 2433, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1629, in serve
+    req = SInitCertVerifyReq( payload, self.conf )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 1456, in __init__
+    self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf, self.handshake )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 122, in __init__
+    self.shared_secret, self.resp = self.compute_server_share( )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 400, in compute_server_share
+    print( f"{self.get_key_share_server_share()}" )
+AttributeError: 'Ephemeral' object has no attribute 'get_key_share_server_share'
+[2022-03-25 20:27:25,984 : cs.py:69 -                serve() ] ('invalid_request', 'unexpected request {mtype}expecting None or initial request')
+[2022-03-25 20:30:51,574 : cs.py:69 -                serve() ] ('invalid_request', 'unexpected request {mtype}expecting None or initial request') - unexpected request {mtype}expecting None or initial request
