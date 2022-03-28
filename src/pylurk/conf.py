@@ -24,8 +24,8 @@ from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives.asymmetric import padding
 import datetime
 
-from lurk_lurk import LURKError, ImplementationError, ConfigurationError
-from struct_tls13 import SignatureScheme, Handshake
+from pylurk.lurk.lurk_lurk import LURKError, ImplementationError, ConfigurationError
+from pylurk.tls13.struct_tls13 import SignatureScheme, Handshake
 
 data_dir = pkg_resources.resource_filename(__name__, '../data/')
 

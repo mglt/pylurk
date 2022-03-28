@@ -8,8 +8,8 @@ from construct.lib import *
 ## This is not fully achieved as LURKCapabilitiesResponse 
 ## is defined here as it needs the knowledge of all existing 
 ## extensions.
-from struct_lurk_lurk import LURKVersion, LURKType, LURKStatus, ErrorPayload, EmptyPayload
-from struct_lurk_tls13 import TLS13Version, TLS13Type, TLS13Status, TLS13Payload
+from pylurk.lurk.struct_lurk_lurk import LURKVersion, LURKType, LURKStatus, ErrorPayload, EmptyPayload
+from pylurk.tls13.struct_lurk_tls13 import TLS13Version, TLS13Type, TLS13Status, TLS13Payload
 
 
 ## list the supported extensions
