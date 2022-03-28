@@ -2016,6 +2016,9 @@ class CClientFinishedReq:
                     False, self.handshake )
     if server_cert.cert_type != 'no_certificate' : 
       self.handshake.update_certificate( server_cert, server=True )
+    ## scheduler is initialized in CServerHello and CServerHello
+    ## may be skipped when the client knows PSK and ECDHE secrets
+    ## In this situation, the sheduler is not needed.
     if self.scheduler is None: ## we need to initialize transcript
       print( f"-- {self.handshake.msg_type_list()}" )
       self.handshake.transcript = Hash( self.handshake.get_tls_hash() )
@@ -2440,12 +2443,17 @@ class CSession(SSession) :
       ## saving context for the register_tickets
       self.transcript_r = req.handshake.transcript_r
       self.cipher_suite = req.handshake.cipher_suite
+      ## the scheduler is set to None when the TLS client knwos both PSK and 
+      ## ECDHE shared secret. In that case, last_exchange MUST be set to True
       if req.scheduler is not None:
         self.tls_hash = req.scheduler.tls_hash
+#      else:
+#        self.tls_hash = None
       self.last_exchange = req.tag.last_exchange
+      print( f"--- last_exchange: {self.last_exchange}, scheduler: {req.scheduler}" )
       self.ticket_counter = 0
-      print( f" --- self.cipher: {self.cipher}" )
-      print( f" --- self.tls_hash: {self.tls_hash}" )
+      print( f" --- self.cipher: {self.cipher_suite}" )
+#      print( f" --- self.tls_hash: {self.tls_hash}" )
     elif mtype == 'c_register_tickets' :
       req = CRegisterTicketsReq( payload, self.conf, self.ticket_db,\
               self.transcript_r, self.cipher_suite, self.tls_hash,\
@@ -2534,6 +2542,7 @@ class Tls13Ext:
 #        payload  = session.serve( req_payload, req_type, 'request')
 #      else:
 #        raise LURKError( 'invalid_type', f"{req_type}" )
+#      print( f" o-o-o last_exchange: {session.last_exchange } : session_db {self.session_db.db}" )
       if session.last_exchange is True:
         self.session_db.delete( session )          
       return payload

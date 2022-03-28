@@ -1186,3 +1186,10 @@ Traceback (most recent call last):
 AttributeError: 'Ephemeral' object has no attribute 'get_key_share_server_share'
 [2022-03-25 20:27:25,984 : cs.py:69 -                serve() ] ('invalid_request', 'unexpected request {mtype}expecting None or initial request')
 [2022-03-25 20:30:51,574 : cs.py:69 -                serve() ] ('invalid_request', 'unexpected request {mtype}expecting None or initial request') - unexpected request {mtype}expecting None or initial request
+[2022-03-28 10:20:45,971 : cs.py:77 -                serve() ] 
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/cs.py", line 62, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/lurk_tls13.py", line 2545, in payload_resp
+    raise ValueError()
+ValueError
