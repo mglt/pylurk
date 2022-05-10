@@ -327,7 +327,8 @@ ClientHello = Struct(
   '_name' / Computed('ClientHello'),
   '_msg_type' / Computed('client_hello'),
   'legacy_version' / Const(b'\x03\x03'),
-  'random' / Bytes(32), 
+  'random' / Bytes(32),
+  'legacy_session_id' / Prefixed(BytesInteger(1), GreedyBytes ),
   'cipher_suites' / Prefixed(BytesInteger(2), GreedyRange(CipherSuite)),
   'legacy_compression_methods' / Prefixed(BytesInteger(1), GreedyBytes),
   'extensions' / Prefixed(BytesInteger(2), GreedyRange(Extension))
@@ -340,6 +341,7 @@ PartialClientHello = Struct(
   '_msg_type' / Computed('client_hello'),
   'legacy_version' / Const(b'\x03\x03'),
   'random' / Bytes(32), 
+  'legacy_session_id' / Prefixed(BytesInteger(1), GreedyBytes ),
   'cipher_suites' / Prefixed(BytesInteger(2), GreedyRange(CipherSuite)),
   'legacy_compression_methods' / Prefixed(BytesInteger(1), GreedyBytes),
   'extensions' / Prefixed(BytesInteger(2), GreedyRange(PartialCHExtension))
@@ -514,6 +516,10 @@ Handshake = Struct(
   )
 )
 
+HandshakeStream = Struct( 
+  GreedyRange( Handshake )
+)
+
 ## Designation of specific handshake messages
 ## These structures have been designed to designate Sequences. 
 ## As Sequences are nesting structures and initializing the 
@@ -586,6 +592,17 @@ ContentType = Enum( BytesInteger(1),
   alert = 21,
   handshake = 22, 
   application_data = 23
+)
+
+TLSPlaintext = Struct(
+  'type' / ContentType, 
+  'legacy_record_version' /  Const( b'\x03\x03' ),
+  'fragment' / Prefixed( BytesInteger(2), Switch( this.type, 
+     { 'invalid' : GreedyBytes, 
+       'change_cipher_spec' : GreedyBytes, 
+       'alert' : GreedyBytes, 
+       'handshake' : Handshake, 
+       'application_data' : GreedyBytes } ) )
 )
 
 TLSCiphertext = Struct(

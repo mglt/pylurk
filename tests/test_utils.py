@@ -110,7 +110,7 @@ def obj2json( data:dict ) -> dict:
 def test_struct( struct, data_struct, ctx_struct={}, \
                  ext_title='', no_title=False, \
                  io_check=True, print_data_struct=False, \
-                 print_binary=False, print_data=False ):
+                 print_binary=False, print_data=True ):
   """ compares a data structure ( i.e. a dictionary to the structure itself  """
 #  print( f" --- input : {struct} - {data_struct}" )
   binary = struct.build(data_struct, **ctx_struct)
@@ -133,7 +133,7 @@ def test_struct( struct, data_struct, ctx_struct={}, \
     print("struct: %s"%data)
   if io_check:
     try:
-      print( f"{data_struct} - {data}" )
+      #print( f"{data_struct} - {data}" )
       compare( data_struct, data )
     except AssertionError as e:
       _, _, tb = sys.exc_info()

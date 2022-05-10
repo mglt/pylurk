@@ -342,6 +342,7 @@ hs_client_hello = {\
   'data' : {\
     'legacy_version' : b'\x03\x03',
     'random' : token_bytes( 32 ),
+    'legacy_session_id' : token_bytes( 32 ),
     'cipher_suites' : ['TLS_AES_128_GCM_SHA256', 'TLS_CHACHA20_POLY1305_SHA256'],
     'legacy_compression_methods' : b'\x00',
     'extensions' : [ ext13, ext45, ext49, ext10, ext51_ch ] } }
@@ -400,6 +401,7 @@ def s_init_cert_verify_handshake_list( ephemeral_mode:str ) -> list:
   'data' : {\
     'legacy_version' : b'\x03\x03',
     'random' : token_bytes( 32 ),
+    'legacy_session_id' : token_bytes( 32 ),
     'cipher_suites' : ['TLS_AES_128_GCM_SHA256', 'TLS_CHACHA20_POLY1305_SHA256'],
     'legacy_compression_methods' : b'\x00',
     'extensions' : [ ext13, ext45, ext49, ext10, ext51_ch ] } }
@@ -1168,6 +1170,7 @@ def c_init_client_hello_handshake_list( ):
   'data' : {\
     'legacy_version' : b'\x03\x03',
     'random' : token_bytes( 32 ),
+    'legacy_session_id' : token_bytes( 32 ),
     'cipher_suites' : ['TLS_AES_128_GCM_SHA256', 'TLS_CHACHA20_POLY1305_SHA256'],
     'legacy_compression_methods' : b'\x00',
     'extensions' : [ ] } }

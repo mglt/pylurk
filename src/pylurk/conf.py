@@ -230,7 +230,7 @@ class Configuration:
     self.conf[ ( 'tls13', 'v1' ) ] [ 'role' ] = role
 
   def set_ecdhe_authentication( self, tls_sig_scheme:str, key_format='X509', conf_dir='./' ) :
-    """generates, stores and configures self.conf
+    """generates, stores and configures self.conf for certificate based authentication
 
     Args:
       - sig_algo (str) : the Signature Scheme as defined fro TLS 1.3
@@ -501,7 +501,7 @@ class Configuration:
 #                                   _certificate_type=self.cert_type ))
 #    self.cert_finger_print = digest.finalize()[:4]
 
-  
+### Left only   
 
 """
 Structure that provides the various configuration parameters:
