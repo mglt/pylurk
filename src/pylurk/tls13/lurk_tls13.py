@@ -25,7 +25,7 @@ from cryptography.x509.oid import NameOID
 
 from cryptography.hazmat.primitives.asymmetric import padding
 import datetime
-
+import hashlib
 
 from construct.core import *
 from construct.lib import *

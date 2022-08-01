@@ -222,6 +222,27 @@ CertificateType = Enum( BytesInteger(1),
 ##   } ServerCertTypeExtension;
 
 
+# supported_versions
+
+##ProtocolVersion = Bytes( 2 )
+##
+##SupportedVersions = Struct( Switch( this.extension_type, 
+##  {
+##    'client_hello' : Prefixed( BytesInteger(1), GreedyRange( ProtocolVersion ))
+##    'server_hello' : ProtocolVersion
+##
+##  }, default=Bytes )
+##)
+##
+##struct {
+##          select (Handshake.msg_type) {
+##              case client_hello:
+##                   ProtocolVersion versions<2..254>;
+##
+##              case server_hello: /* and HelloRetryRequest */
+##                   ProtocolVersion selected_version;
+##          };
+##      } SupportedVersions
 
 ## Extension structure
 
@@ -354,7 +375,8 @@ ServerHello = Struct(
   '_name' / Computed('ServerHello'),
   '_msg_type' / Computed('server_hello'),
   'legacy_version' / Const(b'\x03\x03'),
-  'random' / Bytes(32), 
+  'random' / Bytes(32),
+  'legacy_session_id_echo' / Prefixed(BytesInteger(1), GreedyBytes),
   'cipher_suite' / CipherSuite,
   'legacy_compression_method' / Const(b'\x00'),
   'extensions' / Prefixed(BytesInteger(2), GreedyRange(Extension))
