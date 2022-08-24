@@ -1,7 +1,9 @@
 import hmac
 import hkdf
 import hashlib
+import binascii
 
+TRACE_MODE = True
 
 class TlsHash:
     def __init__(self, hashmod=hashlib.sha256):
@@ -104,7 +106,13 @@ class KeyScheduler:
         self.tls_hash = tls_hash
         self.ecdhe = ecdhe
 
-        self.early_secret = self.tls_hash.hkdf_extract(None, psk)
+         
+#        self.early_secret = self.tls_hash.hkdf_extract(None, psk)
+#        init_salt = b'\x00' * tls_hash.hash_len
+        init_salt = b'\x00'
+        if psk is None :
+          psk = b'\x00' * tls_hash.hash_len
+        self.early_secret = self.tls_hash.hkdf_extract(init_salt, psk)
         self.first_salt = self.tls_hash.derive_secret(
             self.early_secret, b"derived", b""
         )
@@ -115,9 +123,17 @@ class KeyScheduler:
         self.master_secret = self.tls_hash.hkdf_extract(self.second_salt, None)
 
     def client_handshake_traffic_secret(self, messages) -> bytes:
-        return self.tls_hash.derive_secret(
+        secret = self.tls_hash.derive_secret(
             self.handshake_secret, b"c hs traffic", messages
         )
+        if TRACE_MODE is True: 
+          print( f"--- Computing Client Handshake Traffic")
+          print( f"  - shared_secret [{len(self.ecdhe) } bytes]: {binascii.hexlify( self.ecdhe, sep=' ')}" )
+          print( f"  - handshake_secret [{len(self.handshake_secret) } bytes]: {binascii.hexlify( self.handshake_secret, sep=' ' )}" ) 
+          print( f"  - transcript hash [{len(messages) } bytes]: {binascii.hexlify( messages, sep=' ')}" )
+          print( f"  - secret [{len(secret) } bytes]: {binascii.hexlify( secret, sep=' ')}" )
+          
+        return secret
 
     def server_handshake_traffic_secret(self, messages) -> bytes:
         return self.tls_hash.derive_secret(

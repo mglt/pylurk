@@ -1,6 +1,8 @@
 import logging
 from pylurk.struct_lurk import LURKMessage, LURKHeader 
 from pylurk.lurk.lurk_lurk   import LURKError, ImplementationError, ConfigurationError, LurkExt 
+import sys
+sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src/')
 import pylurk.tls13.lurk_tls13  
 #from pylurk.tls13.lurk_tls13  import Tls13Ext, TicketDB, SessionDB 
 
@@ -57,6 +59,8 @@ class CryptoService:
       if header[ 'status' ] != 'request' :
         raise LURKError( 'invalid_status' , f"{header[ 'status' ]}" )
       req = LURKMessage.parse( req_bytes )
+      print( f"--- CS: Received Request by the CS:" )
+      print( f"  - {LURKMessage.parse( LURKMessage.build( req ) )}")
       if ext == ( 'lurk', 'v1' ):
         payload = self.lurk.payload_resp( req ) 
       elif ext == ( 'tls13', 'v1' ):
@@ -66,6 +70,7 @@ class CryptoService:
 #      resp[ 'payload' ] = { 'lurk_state' : self.lurk_state }
       resp[ 'payload' ] = payload
       resp[ 'status' ] = 'success'
+      print( f" --- resp: {resp}" ) 
       return LURKMessage.build( resp )
     except Exception as e :
       if isinstance( e, LURKError ):
@@ -78,6 +83,8 @@ class CryptoService:
           self.logger.exception( str( e ) )  
         resp[ 'status' ] = 'undefined_error' 
       resp[ 'payload' ] = { 'lurk_state' : self.lurk_state }
-      print( f"--- resp : {resp}")
+      print( f"--- CS: Returned Response by the CS:" )
+      print( f"  - {LURKMessage.parse( LURKMessage.build( resp ) )}")
+#      print( f"--- crypto service: resp : {resp}")
       return LURKMessage.build( resp )
 

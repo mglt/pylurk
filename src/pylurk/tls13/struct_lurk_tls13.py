@@ -1,16 +1,21 @@
 from construct.core import *
 from construct.lib import *
 from construct.debug import *
+import sys
+sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/')
+import pytls13.struct_tls13 as tls
+sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
+import pylurk.tls13.struct_tls13 as lurk
 
-from pylurk.tls13.struct_tls13 import PskIdentity, Certificate, CompressedCertificate, \
-  SignatureScheme, KeyShareEntry, NamedGroup, ExtensionType,\
-  HandshakeType, Extension, \
-  NewSessionTicket, ClientHello, ServerHello, EndOfEarlyData,\
-  EncryptedExtensions, CertificateRequest, Certificate, CertificateVerify,\
-  Finished, KeyUpdate,\
-  HSClientHello, HSPartialClientHello, HSServerHello, HSEndOfEarlyData, HSEncryptedExtensions,\
-  HSCertificateRequest, HSCertificate, HSCertificateVerify, HSFinished, \
-  TLSCiphertext, Handshake
+#import PskIdentity, Certificate, CompressedCertificate, \
+#  SignatureScheme, KeyShareEntry, NamedGroup, ExtensionType,\
+#  HandshakeType, Extension, \
+#  NewSessionTicket, ClientHello, ServerHello, EndOfEarlyData,\
+#  EncryptedExtensions, CertificateRequest, Certificate, CertificateVerify,\
+#  Finished, KeyUpdate,\
+#  HSClientHello, HSPartialClientHello, HSServerHello, HSEndOfEarlyData, HSEncryptedExtensions,\
+#  HSCertificateRequest, HSCertificate, HSCertificateVerify, HSFinished, \
+#  TLSCiphertext, Handshake
 
 
 TLS13Version = Enum( BytesInteger(1), 
@@ -85,16 +90,24 @@ Secret = Struct(
 
 
 HandshakeList = Switch( this._type, 
-  { 's_init_early_secret' : Sequence( HSClientHello ),
+  { 's_init_early_secret' : Sequence( lurk.HSClientHello ),
     's_init_cert_verify' : Select( \
-      Sequence( HSClientHello, HSServerHello, HSEncryptedExtensions, HSCertificateRequest ),
-      Sequence( HSClientHello, HSServerHello, HSEncryptedExtensions )),  
+      Sequence( tls.HSClientHello,
+                lurk.HSServerHello, 
+                tls.HSEncryptedExtensions, 
+                tls.HSCertificateRequest ),
+      Sequence( lurk.HSClientHello, 
+                lurk.HSServerHello, 
+                tls.HSEncryptedExtensions )),  
     's_new_ticket' : Select( \
-      Sequence( HSCertificateVerify, HSFinished ),
-      Sequence( HSFinished ) ),
+      Sequence( tls.HSCertificateVerify, 
+                tls.HSFinished ),
+      Sequence( tls.HSFinished ) ),
     's_hand_and_app_secret' : Select(\
-      Sequence( HSServerHello, HSEncryptedExtensions, HSCertificateRequest ),
-      Sequence( HSServerHello, HSEncryptedExtensions ) ),  
+      Sequence( lurk.HSServerHello, 
+                tls.HSEncryptedExtensions, 
+                tls.HSCertificateRequest ),
+      Sequence( lurk.HSServerHello, tls.HSEncryptedExtensions ) ),  
     'c_init_client_finished' : Select( \
        ## if cert_request + server certificate + cert_verify ):
        ##   -> client cert 
@@ -102,25 +115,72 @@ HandshakeList = Switch( this._type,
        ##  -> nothing 
        ## elif no cert, no cert_verify, no cert request
        ##  -> end of earlydata yes / no
-       Sequence( HSClientHello, HSServerHello, HSEncryptedExtensions, HSCertificateRequest, HSCertificateVerify, HSFinished), 
-       Sequence( HSClientHello, HSServerHello, HSClientHello, HSEncryptedExtensions, HSCertificateRequest, HSCertificateVerify, HSFinished),
-       Sequence( HSClientHello, HSServerHello, HSEncryptedExtensions, HSCertificateVerify, HSFinished), 
-       Sequence( HSClientHello, HSServerHello, HSClientHello, HSEncryptedExtensions, HSCertificateVerify, HSFinished),
-       Sequence( HSClientHello, HSServerHello, HSEncryptedExtensions, HSFinished, HSEndOfEarlyData),  
-       Sequence( HSClientHello, HSServerHello, HSEncryptedExtensions, HSFinished) ), 
-    'c_post_hand_auth' : Sequence( HSCertificateRequest), 
-    'c_init_client_hello' : Sequence( HSPartialClientHello ),
-    'c_server_hello' : Sequence( HSServerHello ),
+       Sequence( tls.HSClientHello, 
+                 tls.HSServerHello, 
+                 tls.HSEncryptedExtensions, 
+                 tls.HSCertificateRequest, 
+                 tls.HSCertificateVerify, 
+                 tls.HSFinished), 
+       Sequence( tls.HSClientHello, 
+                 tls.HSServerHello, 
+                 lurk.HSClientHello, 
+                 tls.HSEncryptedExtensions, 
+                 tls.HSCertificateRequest, 
+                 tls.HSCertificateVerify, 
+                 tls.HSFinished),
+       Sequence( tls.HSClientHello, 
+                 tls.HSServerHello, 
+                 tls.HSEncryptedExtensions, 
+                 tls.HSCertificateVerify, 
+                 tls.HSFinished), 
+       Sequence( tls.HSClientHello, 
+                 tls.HSServerHello, 
+                 lurk.HSClientHello, 
+                 tls.HSEncryptedExtensions, 
+                 tls.HSCertificateVerify, 
+                 tls.HSFinished),
+       Sequence( tls.HSClientHello, 
+                 tls.HSServerHello, 
+                 tls.HSEncryptedExtensions, 
+                 tls.HSFinished, 
+                 tls.HSEndOfEarlyData),  
+       Sequence( tls.HSClientHello, 
+                 tls.HSServerHello, 
+                 tls.HSEncryptedExtensions, 
+                 tls.HSFinished) ), 
+    'c_post_hand_auth' : Sequence( tls.HSCertificateRequest), 
+    'c_init_client_hello' : Sequence( lurk.HSClientHello ),
+    'c_server_hello' : Sequence( lurk.HSServerHello ),
     'c_client_finished' : Select( \
       ## case when serverhello is provided ( there is no c_server_hello exchange)
-      Sequence( HSServerHello, HSEncryptedExtensions, HSCertificateRequest, HSCertificateVerify, HSFinished ),
-      Sequence( HSServerHello, HSEncryptedExtensions, HSCertificateVerify, HSFinished ),
-      Sequence( HSServerHello, HSEncryptedExtensions, HSFinished, HSEndOfEarlyData),
-      Sequence( HSServerHello, HSEncryptedExtensions, HSFinished ),
-      Sequence( HSEncryptedExtensions, HSCertificateRequest, HSCertificateVerify, HSFinished ),
-      Sequence( HSEncryptedExtensions, HSCertificateVerify, HSFinished ),
-      Sequence( HSEncryptedExtensions, HSFinished, HSEndOfEarlyData),
-      Sequence( HSEncryptedExtensions, HSFinished ) ),
+      Sequence( tls.HSServerHello, 
+                tls.HSEncryptedExtensions, 
+                tls.HSCertificateRequest, 
+                tls.HSCertificateVerify, 
+                tls.HSFinished ),
+      Sequence( tls.HSServerHello, 
+                tls.HSEncryptedExtensions, 
+                tls.HSCertificateVerify, 
+                tls.HSFinished ),
+      Sequence( tls.HSServerHello, 
+                tls.HSEncryptedExtensions, 
+                tls.HSFinished, 
+                tls.HSEndOfEarlyData),
+      Sequence( tls.HSServerHello, 
+                tls.HSEncryptedExtensions, 
+                tls.HSFinished ),
+      Sequence( tls.HSEncryptedExtensions, 
+                tls.HSCertificateRequest, 
+                tls.HSCertificateVerify, 
+                tls.HSFinished ),
+      Sequence( tls.HSEncryptedExtensions, 
+                tls.HSCertificateVerify, 
+                tls.HSFinished ),
+      Sequence( tls.HSEncryptedExtensions, 
+                tls.HSFinished, 
+                tls.HSEndOfEarlyData),
+      Sequence( tls.HSEncryptedExtensions, 
+                tls.HSFinished ) ),
   }, default=Error
 )
 
@@ -140,7 +200,7 @@ EphemeralMethod = Enum ( BytesInteger(1),
 
 SharedSecret = Struct(
   '_name' / Computed('SharedSecret'),
-  'group' / NamedGroup, 
+  'group' / tls.NamedGroup, 
   'shared_secret' / Switch(this.group, 
   { 'secp256r1' : Bytes(32),
     'secp384r1' : Bytes(48),
@@ -161,7 +221,7 @@ Ephemeral = Struct(
         }, Error),
       'cs_generated' : Switch(this._status, {
          'request' : Const( b'' ), 
-         'success' : Prefixed(BytesInteger(2), KeyShareEntry),
+         'success' : Prefixed(BytesInteger(2), tls.KeyShareEntry),
         }, Error),
       'no_secret' : Switch(this._status, {
          'request' : Const( b'' ), 
@@ -183,7 +243,7 @@ CertType = Enum ( BytesInteger(2),
 FingerPrintCertificateEntry = Struct(
   '_name' / Computed('FingerPrintCertificateEntry'),
   'finger_print' / Bytes( 4 ),
-  'extensions' / Prefixed( BytesInteger(2), GreedyRange( Extension ) )
+  'extensions' / Prefixed( BytesInteger(2), GreedyRange( tls.Extension ) )
 )
 
 FingerPrintCertificate = Struct(
@@ -197,12 +257,12 @@ Cert = Struct(
   'cert_type' /  CertType,
   Probe( this.cert_type ),
   'certificate' / Switch( this.cert_type, {
-    'zlib' : CompressedCertificate, 
-    'brotli' : CompressedCertificate,
-    'zstd' : CompressedCertificate,
+    'zlib' : tls.CompressedCertificate, 
+    'brotli' : tls.CompressedCertificate,
+    'zstd' : tls.CompressedCertificate,
     'no_certificate' : Const( b'' ), 
     'finger_print' : FingerPrintCertificate,
-    'uncompressed' : Certificate
+    'uncompressed' : tls.Certificate
     }
   )
 )
@@ -273,7 +333,7 @@ SInitCertVerifyRequest = Struct(
   'handshake' / Prefixed( BytesInteger(4), HandshakeList ), 
   'certificate' / Cert, 
   'secret_request' / SecretRequest,
-  'sig_algo' / SignatureScheme,
+  'sig_algo' / tls.SignatureScheme,
 )
 
 SInitCertVerifyResponse = Struct(
@@ -336,7 +396,7 @@ SNewTicketResponse = Struct(
   'tag' / Tag,
   'session_id' / Bytes(4),
   'secret_list' / Prefixed( BytesInteger(2), GreedyRange( Secret ) ),
-  'ticket_list' / Prefixed( BytesInteger( 2 ), GreedyRange( NewSessionTicket ) )
+  'ticket_list' / Prefixed( BytesInteger( 2 ), GreedyRange( tls.NewSessionTicket ) )
 )
 
 
@@ -419,7 +479,7 @@ CInitClientHelloRequest = Struct(
   'session_id' / Bytes( 4 ),
   'handshake' / Prefixed( BytesInteger(4), HandshakeList), 
   'freshness' / Freshness, 
-#  'psk_metadata_list' / Prefixed( BytesInteger(2), GreedyRange( Select( PskIdentityMetadata, Const(b'' ) ) ) ), 
+###  'psk_metadata_list' / Prefixed( BytesInteger(2), GreedyRange( Select( PskIdentityMetadata, Const(b'' ) ) ) ), 
   'psk_metadata_list' / Prefixed( BytesInteger(2), GreedyRange( PskIdentityMetadata ) ), 
   'secret_request' / SecretRequest
 )
@@ -460,7 +520,9 @@ CClientFinishedRequest = Struct(
   'session_id' / Bytes( 4 ),
   'handshake' / Prefixed( BytesInteger(4), HandshakeList ), 
   'server_certificate' / Cert, 
-  'client_certificate' / Cert, 
+  'client_certificate' / Cert,
+  ## to add secret_Req
+  'secret_request' / SecretRequest
 )
 
 CClientFinishedResponse = Struct(
@@ -469,7 +531,9 @@ CClientFinishedResponse = Struct(
   '_status' / Computed('success'),
   'tag' / Tag,
   'session_id' / Bytes( 4 ),
-  'signature' / Prefixed( BytesInteger(2), GreedyBytes )
+  'signature' / Prefixed( BytesInteger(2), GreedyBytes ),
+  ## to add secret list
+  'secret_list' / Prefixed( BytesInteger(2), GreedyRange( Secret ) )
 )
 
 CRegisterTicketsRequest = Struct(
@@ -478,7 +542,7 @@ CRegisterTicketsRequest = Struct(
   '_status' / Computed('request'),
   'tag' / Tag,
   'session_id' / Bytes( 4 ),
-  'ticket_list' / Prefixed( BytesInteger(2), GreedyRange( NewSessionTicket ) ), 
+  'ticket_list' / Prefixed( BytesInteger(2), GreedyRange( tls.NewSessionTicket ) ), 
 )
 
 CRegisterTicketsResponse = Struct(

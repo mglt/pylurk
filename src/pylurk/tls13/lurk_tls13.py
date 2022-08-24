@@ -24,19 +24,39 @@ from cryptography import x509
 from cryptography.x509.oid import NameOID
 
 from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import serialization
+
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF, HKDFExpand
+from cryptography.hazmat.primitives.hmac import HMAC
+
 import datetime
 import hashlib
 
 from construct.core import *
 from construct.lib import *
-from pylurk.tls13.struct_tls13 import PskIdentity, Certificate, SignatureScheme, Handshake, OfferedPsks
+
+import sys
+sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/')
+import pytls13.struct_tls13 as tls
+sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
+import pylurk.tls13.struct_tls13 as lurk
+
+##from pylurk.tls13.struct_tls13 import PskIdentity, Certificate, SignatureScheme, Handshake, OfferedPsks
 from pylurk.tls13.key_schedule import TlsHash, PSKWrapper
 from pylurk.conf import default_conf, SigScheme, CipherSuite
 from pylurk.lurk.lurk_lurk import LURKError, ImplementationError, ConfigurationError
-
+import pylurk.utils
 
 from pickle import dumps, loads
 
+
+ILLUSTRATED_TLS13 = True
+MODE_TRACE = True
+
+
+#def print_bin( description:str, bit_string:bytes ):
+#  if MODE_TRACE is True:
+#    print( f"  - {description} [{len(bit_string)} bytes]: {binascii.hexlify(bit_string, sep=' ')}" )
 
 def get_struct(l: list, key:str, value) -> dict :
   """ return the first element of the list that contains  key:value """
@@ -159,7 +179,7 @@ class Ephemeral:
     """
     ch_index = self.handshake.latest_client_hello_index( )
     client_hello_exts = self.handshake.msg_list[ ch_index][ 'data' ][ 'extensions' ]
-    print( f" --- client_hello_exts : {client_hello_exts}" )
+## print( f" --- get_key_share_client_shares: client_hello_exts : {client_hello_exts}" )
     e_list = [ e[ 'extension_type' ] for e in client_hello_exts ] 
     if 'key_share' in e_list: 
       return  client_hello_exts[ e_list.index( 'key_share' ) ][ 'extension_data' ][ 'client_shares' ]
@@ -182,7 +202,7 @@ class Ephemeral:
                      key_exchange[ 'y' ], curve ) 
     elif group  in [ 'x25519', 'x448' ]:
       if group == 'x25519':
-        public_key = X25519PublicKey.from_public_bytes( key_exchange ) 
+        public_key = X25519PublicKey.from_public_bytes( key_exchange )
       elif group == 'x448':
         public_key = X448PublicKey.from_public_bytes( key_exchange ) 
     else: 
@@ -217,7 +237,20 @@ class Ephemeral:
                        'y' : public_numbers.y }    
     elif group  in [ 'x25519', 'x448' ]:
       if group == 'x25519':
-        private_key = X25519PrivateKey.generate()
+        if ILLUSTRATED_TLS13 is True:
+          ### >>> private_bytes = p.private_bytes(
+          ### ...     encoding=serialization.Encoding.PEM,
+          ### ...     format=serialization.PrivateFormat.PKCS8,
+          ### ...     encryption_algorithm=serialization.NoEncryption() )
+          ### >>> private_bytes
+          ### b'-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VuBCIEILjmTHYa6mNQws5KS8CTbp8i9u3HC29V7iVclV3RN3dG\n-----END PRIVATE KEY-----\n'
+          ###>>> serialization.load_pem_private_key( private_bytes, None )
+          ### <cryptography.hazmat.backends.openssl.x25519._X25519PrivateKey object at 0x7feca3f46820>
+
+          private_key = serialization.load_pem_private_key(\
+b'-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VuBCIEICAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/\n-----END PRIVATE KEY-----', None)
+        else:
+          private_key = X25519PrivateKey.generate()
       elif group == 'x448':
         private_key = X448PrivateKey.generate()
       public_key = private_key.public_key() 
@@ -233,9 +266,9 @@ class Ephemeral:
     new_client_shares = []
     private_key_list = []
     resp = []
-    print( f"-- client_shares: {client_shares}" )
+    print( f"  - client_shares: {client_shares}" )
     for ks in client_shares :
-      print( f" ks : {ks} " )
+##      print( f"-- compute_client_shares: ks : {ks} " )
       if ks[ 'key_exchange' ] in [ None, b'' ]: 
         private_key, ks_entry = self.proceed_empty_key_share_entry( ks )
         resp.append( { 'method' : 'cs_generated', 
@@ -247,6 +280,20 @@ class Ephemeral:
                             'key' : b'' } )
       new_client_shares.append( ks_entry )
       private_key_list.append( private_key )
+
+    if MODE_TRACE is True :
+      print( f"--- CS: Generating Clients Key Shares" )
+      for private_key in private_key_list :
+        print( f" - class: {private_key.__class__.__name__}" )
+        private_key_bytes = private_key.private_bytes(
+          encoding=Encoding.Raw,
+          format=PrivateFormat.Raw,
+          encryption_algorithm=NoEncryption() )
+        pylurk.utils.print_bin( "private_key", private_key_bytes ) 
+        public_key = private_key.public_key()
+        public_key_bytes = public_key.public_bytes( encoding=Encoding.Raw, format=PublicFormat.Raw )
+        print( "public_key", public_key_bytes ) 
+
     return new_client_shares, private_key_list, resp
 
   def get_key_share_entry_list_from_handshake( self, client_shares=None ):
@@ -304,16 +351,23 @@ class Ephemeral:
     c_init_client_hello exchange. 
     This latest ephemeral is used as th einput. 
     """
+    if MODE_TRACE is True :
+      print( f"--- CS: Computing Client Share Secret ({self.method})" )
+
     if self.method == 'e_generated':
       shared_secret = self.ephemeral[ 'key' ][ 'shared_secret' ]
     elif self.method == 'cs_generated':
       client_ks, server_ks = self.get_key_share_entry_list_from_handshake( client_shares=c_init_client_hello_ephemeral.client_shares )
-      print( f"client_ks: {client_ks} / server_ks: {server_ks}" )
+
+      if MODE_TRACE is True :
+        print( f"  - client_ks : {client_ks}" )
+        print( f"  - server_ks : {server_ks}" )
+
       client_ks_index = c_init_client_hello_ephemeral.client_shares.index( client_ks )
-      print( f"client_ks_index: {client_ks_index}" ) 
+      ##print( f"client_ks_index: {client_ks_index}" ) 
       client_private_key = c_init_client_hello_ephemeral.private_key_list[ client_ks_index ]
-      print( f"c_init_client_hello_ephemeral.private_key_list: {c_init_client_hello_ephemeral.private_key_list}" )
-      print( f"client_private_key: {client_private_key}" ) 
+      ##print( f"c_init_client_hello_ephemeral.private_key_list: {c_init_client_hello_ephemeral.private_key_list}" )
+##      print( f"client_private_key: {client_private_key}" ) 
       if client_private_key is None:
         raise LURKError( 'invalid_ephemeral', f"Unable to find corresponding\
                           private key in {client_shares}" )
@@ -324,6 +378,9 @@ class Ephemeral:
       shared_secret = None
     else: 
       raise LURKError( 'invalid_ephemeral', f"Unexpected method {self.method}" )
+
+    if MODE_TRACE is True :
+      pylurk.utils.print_bin( "shared_secret", shared_secret )           
     self.shared_secret = shared_secret
 
 
@@ -400,6 +457,8 @@ class Freshness:
       self.freshness_funct = freshness
   
   def update_random( self, role, random:bytes ):
+    if self.freshness_funct == 'null' :
+      return random
     if role == 'server':
       ctx = "tls13 pfs srv"
     elif role == 'client':
@@ -513,21 +572,25 @@ class SecretReq:
 
     self.conf = tls13_conf
     if mtype in [ 's_init_early_secret', 'c_init_client_hello' ]:
-      mandatory = ['b']
-      forbiden = [ 'h_c', 'h_s', 'a_c', 'a_s', 'x', 'r'] 
+      mandatory = ['b' ]
+      forbiden = [ 'h_c', 'h_s', 'a_c', 'a_s', 'x', 'r' ] 
       optional = [ 'e_s', 'e_x' ]
     elif mtype in [ 's_init_cert_verify', 's_hand_and_app_secret' ]:
-      mandatory = [ 'h_c', 'h_s']
-      forbiden = [ 'b', 'e_s', 'e_x', 'r']
+      mandatory = [ 'h_c', 'h_s' ]
+      forbiden = [ 'b', 'e_s', 'e_x', 'r' ]
       optional = [ 'a_c', 'a_s', 'x' ]
     elif mtype in [ 's_new_ticket', 'c_register_ticket' ]:
       mandatory = []
-      forbiden = [ 'b', 'e_s', 'e_x', 'h_c', 'h_s', 'a_c', 'a_s', 'x']
+      forbiden = [ 'b', 'e_s', 'e_x', 'h_c', 'h_s', 'a_c', 'a_s', 'x' ]
       optional = ['r'] 
     elif mtype in [ 'c_server_hello' ]:
       mandatory = [ 'h_c', 'h_s' ]
-      forbiden = [ 'b', 'e_s', 'e_x', 'a_c', 'a_s', 'x', 'r']
+      forbiden = [ 'b', 'e_s', 'e_x', 'a_c', 'a_s', 'x', 'r' ]
       optional = [] 
+    elif mtype in [ 'c_client_finished' ]:
+      mandatory = [ 'a_c', 'a_s' ]
+      forbiden = [ 'b', 'e_s', 'e_x', 'a_c', 'a_s', 'x', 'r' ]
+      optional = [ 'x', 'r' ] 
     else:
       raise ImplementationError( f"unknown {mtype}" )
     
@@ -616,7 +679,7 @@ class TlsHandshake:
 
     This is usefull to check a messgage is present in the handshake
     """
-    return [ msg[ 'msg_type' ]for msg in self.msg_list ]  
+    return [ msg[ 'msg_type' ] for msg in self.msg_list ]  
 
   def latest_client_hello_index( self ):
     """ return the index of the latest client hello 
@@ -672,13 +735,13 @@ class TlsHandshake:
       return self.psk_proposed
 
     ext_list = self.client_hello_extension_list( )
-    print( f"TlsHandshake : {ext_list}" )
-    print( f"--- self.psk_proposed : {self.psk_proposed} {self.client_hello_extension_list( )}" )
+#    print( f"TlsHandshake : {ext_list}" )
+#    print( f"--- self.psk_proposed : {self.psk_proposed} {self.client_hello_extension_list( )}" )
     if 'pre_shared_key' in ext_list  and  'psk_key_exchange_modes' in ext_list :
       self.psk_proposed = True
     else:
       self.psk_proposed = False
-    print( f"--- self.psk_proposed : {self.psk_proposed} {self.client_hello_extension_list( )}" )
+#    print( f"--- self.psk_proposed : {self.psk_proposed} {self.client_hello_extension_list( )}" )
     return self.psk_proposed
 
   def is_psk_agreed( self ) -> bool :
@@ -696,13 +759,13 @@ class TlsHandshake:
     if self.ks_proposed != None:
       return self.ks_proposed
     
-    print( f"--- self.ks_proposed : {self.ks_proposed} {self.client_hello_extension_list( )}" )
+#    print( f"--- self.ks_proposed : {self.ks_proposed} {self.client_hello_extension_list( )}" )
     ext_list = self.client_hello_extension_list( )
     if 'key_share' in ext_list :
       self.ks_proposed = True
     else:
       self.ks_proposed = False
-    print( f"--- self.ks_proposed : {self.ks_proposed} {self.client_hello_extension_list( )}" )
+#    print( f"--- self.ks_proposed : {self.ks_proposed} {self.client_hello_extension_list( )}" )
     return self.ks_proposed
 
   def is_ks_agreed( self ) -> bool :
@@ -851,7 +914,7 @@ class TlsHandshake:
     On the server side, the key_share is the server key_share entry. 
     On the client side, the key_share is a list of key_share entries (client_shares)
     """
-    print( f" update_key_share : {key_share_entry}" )
+##    print( f" update_key_share : {key_share_entry}" )
     if self.role == 'server':
       # update occurs in the server_hello
       if self.msg_list[ 0 ][ 'msg_type' ] == 'client_hello' :
@@ -874,7 +937,22 @@ class TlsHandshake:
       
       self.msg_list[ index ][ 'data' ]\
         [ 'extensions' ][ key_share_index ][ 'extension_data' ]\
-        [ ks_designation ] = key_share_entry  
+        [ ks_designation ] = key_share_entry 
+#      print( f"DEBUG: key_share_entry (len {len( key_share_entry[ 0 ])}): {key_share_entry}" )  
+      if MODE_TRACE is True:
+        print( "--- CS Updating key_share extension" )
+#      if MODE_TRACE is True:
+#        bytes_msg = tls.Handshake.build( self.msg_list[ index ] )
+#        msg = tls.Handshake.parse( bytes_msg )
+        key_share_ext = self.msg_list[ index ][ 'data' ][ 'extensions' ][ key_share_index ]
+        print( f"  - (dict) {key_share_ext } " ) 
+        if self.role == 'client' :
+          key_exchange_len_list = []
+          for k in key_share_ext[ 'extension_data' ][ 'client_shares' ]:
+            key_exchange_len_list.append( len( k[ 'key_exchange' ] ) )
+          print( f"  - key_exchange_list {key_exchange_len_list}" )
+#        print( f"  - (bytes) {binascii.hexlify( bytes_msg, sep=' ' ) } " )
+#        print( f"  - (struct) {msg} " )
 
   def update_certificate( self, lurk_cert, server=True ):
     """ build the various certificates payloads 
@@ -888,7 +966,7 @@ class TlsHandshake:
       server (bool) indicates if the lurk_cert is a server (True) 
         or a client (False) certificate. 
     """
-    print( f" role : {self.role} - server : {server}" ) 
+##    print( f" role : {self.role} - server : {server}" ) 
     if self.role == 'server' and server == True or\
        ( self.role == 'client' and server is False ):
       self.msg_list.append( lurk_cert.hs_cert_msg )
@@ -920,7 +998,7 @@ class TlsHandshake:
         raise ImplementationError( f"unknown role {self.role}" )
     content = bytes( string_64 + ctx_string + b'\x00' + transcript_h )
 
-    print( f"{type( self.private_key )}" )
+##    print( f"{type( self.private_key )}" )
     if sig_scheme.algo in [ 'ed25519', 'ed448' ]:
       signature = self.private_key.sign( content )
     ## ecdsa
@@ -937,9 +1015,36 @@ class TlsHandshake:
                             'data' : { 'algorithm' : sig_scheme.name,
                                        'signature' : signature } } )
     
+  def get_verify_data( self, scheduler, role, transcript_mode ):
+    finished_key = scheduler.finished_key( role ) 
+    hmac = HMAC( finished_key, scheduler.tls_hash )
+    hmac.update( self.transcript_hash( transcript_mode ) )
+    return hmac.finalize()
+#    verify_data = scheduler.tls_hash.verify_data( secret, self.transcript_hash( 'finished' ) )
+#    self.msg_list.append( { 'msg_type' : 'finished',
+#                            'data' : { 'verify_data' : verify_data } } )
+
   def update_server_finished( self , scheduler):
-    secret = scheduler.secrets[ 'h_s' ]
-    verify_data = scheduler.tls_hash.verify_data( secret, self.transcript_hash( 'finished' ) )
+#    finished_key = scheduler.finished_key( role ) 
+#    hmac = HMAC( finished_key, self.tls_hash )
+#    hmac.update( self.transcript_hash( 'finished' ) )
+#    return hmac.finalize()
+#    self.update_finished( scheduler )
+#    secret = scheduler.secrets[ 'h_s' ]
+#    finished_key = scheduler.hkdf_expand_label( secret=secret, label=b'finished', context=b'', self.tls_hash.digest_size )
+#    hmac = HMAC( finished_key, self.tls_hash )
+#    hmac.update( self.transcript_hash( 'finished' ) )
+#    verify_data = hmac.finalize()
+#    verify_data = scheduler.tls_hash.verify_data( secret, self.transcript_hash( 'finished' ) )
+    self.update_finished( scheduler )
+
+  def update_finished( self, scheduler ):
+    if self.role == 'server':
+      transcript_mode = 'finished'
+    else:
+      transcript_mode = 'r'
+    verify_data = self.get_verify_data( scheduler, \
+                    role=self.role, transcript_mode=transcript_mode )  
     self.msg_list.append( { 'msg_type' : 'finished',
                             'data' : { 'verify_data' : verify_data } } )
 
@@ -974,21 +1079,42 @@ class TlsHandshake:
     if 'server_hello' in self.msg_type_list() :
       ctx_struct[ '_cipher' ] = self.get_cipher_suite()
 
+#    if MODE_TRACE is True:
+#      print( f"--- CS: Generating the Transcript" ) 
+##      print( f"--- append_transcript : msg_list : {self.msg_list}" )
+
     if upper_msg_index is None:
       msg_list = self.msg_list[ : ]
       del self.msg_list[ : ]
     else:
       msg_list = self.msg_list[ : upper_msg_index ]
       del self.msg_list[ : upper_msg_index ]
-    print( f"{[ m[ 'msg_type' ] for m in msg_list ]}" )
+##    print( f"--- append_transcript: {[ m[ 'msg_type' ] for m in msg_list ]}" )
     msg_bytes = bytearray()
-    for msg in msg_list : 
-      print( f"--- {msg}" )
-      msg_bytes.extend( Handshake.build( msg, **ctx_struct ) )
-      print( "--- construct: ok" )
+    for msg in msg_list :
+#      if MODE_TRACE is True:
+#        single_msg_bytes = tls.Handshake.build( msg )
+##        print( f"  - (dict) {msg} " ) 
+#        print( f"  - (bytes) [len {len( single_msg_bytes ) }] : {binascii.hexlify( single_msg_bytes, sep=' ' ) } " )
+#        print( f"  - (struct) {tls.Handshake.parse( single_msg_bytes )} " )
+      msg_bytes.extend( tls.Handshake.build( msg, **ctx_struct ) )
+
+
+#      print( f"--- append_transcript : msg (dict): {msg}" )
+#      bytes_test_msg = tls.Handshake.build( msg )
+#      print( f"--- append_transcript : msg (bytes) (len {len(bytes_test_msg)}) : {binascii.hexlify( bytes_test_msg, sep=' ' )}" )
+#      print( f"--- append_transcript : msg (containers): {tls.Handshake.parse( bytes_test_msg )}" )
+      
+
     self.transcript.update( msg_bytes )
     transcript = self.transcript.copy()
-    return transcript.finalize()
+    h = transcript.finalize()
+#    if MODE_TRACE is True:
+#      print( f"  - Appending : (len {len(msg_bytes) }): {binascii.hexlify( msg_bytes, sep=' ' ) }" )
+#      print( f"  - Resulting Hash ({self.transcript.__class__.__name__}): h (len {len(h) }): {binascii.hexlify( h, sep=' ' ) }" )
+    
+    return h
+##    return transcript.finalize()
 
   def post_hand_auth_transcript( self ):
     """ post handshake authentication transcript is derived from the transcript 
@@ -1004,7 +1130,7 @@ class TlsHandshake:
     transcript = self.transcript.copy() 
     msg_bytes = bytearray()
     for msg in self.msg_list :  
-      msg_bytes.extend( Handshake.build( msg ) ) 
+      msg_bytes.extend( tls.Handshake.build( msg ) ) 
     transcript.update( msg_bytes )
     del self.msg_list[ : ]
     return transcript.finalize()
@@ -1016,10 +1142,10 @@ class TlsHandshake:
     Performing the hash in the handshake class prevent the 
     handshake class to keep all exchanges.       
     """
-    print( f"begining transcript_hash: {transcript_type} - {self.msg_type_list( )}")
+#    print( f"begining transcript_hash: {transcript_type} - {self.msg_type_list( )}")
     if self.transcript == None:
       self.transcript = Hash( self.get_tls_hash() )
-    print( "self.transcript initialized" )     
+#    print( "self.transcript initialized" )     
     upper_msg_index = None 
 
     if transcript_type == 'h' : 
@@ -1079,6 +1205,7 @@ class TlsHandshake:
         ]:
         raise LURKError( 'invalid_handshake', f"unexpected handshake {self.msg_type_list()}" )
     elif transcript_type == 'r' : 
+      print( f" --- self.msg_type_list( ): {self.msg_list}" )
       if self.msg_type_list( ) not in [ \
         ## 's_new_ticket 
         [ 'finished' ], \
@@ -1086,7 +1213,7 @@ class TlsHandshake:
         []] : ## when mutliple s_new_ticket are sent
         raise LURKError( 'invalid_handshake', f"unexpected handshake {self.msg_type_list()}" )
     elif transcript_type == 'e' :
-      print( self.msg_type_list( ))
+#      print( self.msg_type_list( ))
       if self.msg_type_list( ) not in [ \
         ## 's_init_early_secret'
         [ 'client_hello' ], \
@@ -1111,6 +1238,8 @@ class TlsHandshake:
       transcript = self.append_transcript( upper_msg_index )
       if transcript_type == 'r' :
         self.transcript_r = transcript
+    if MODE_TRACE is True:
+      pylurk.utils.print_bin( f"Transcript Hash [mode {transcript_type}]", transcript ) 
     return transcript 
 
   def get_ticket( self, selected_identity:int=None ):
@@ -1177,66 +1306,331 @@ class SessionTicket:
     """
     handshake.cipher_suite = self.cipher
 
+
+
 class KeyScheduler:
 
-  def __init__( self, tls_hash, ecdhe:bytes=None, psk:bytes=None, is_ext=False): 
+  def __init__( self, tls_hash, shared_secret:bytes=None, psk:bytes=None, is_ext=False): 
     self.secrets = { 'b' : None, 'e_s' : None, 'e_x' : None,\
                     'h_c' : None, 'h_s' : None, 'a_c' : None,\
                     'a_s' : None, 'x' : None, 'r' : None }
     self.tickets = []
-    self.ecdhe = ecdhe
+#    self.ecdhe = ecdhe
+## change ecdhe to shared secret
     self.psk = psk
+    self.is_ext = is_ext 
+    self.tls_hash = tls_hash
+    self.shared_secret = shared_secret
+    
+    ## initializaton of secret
+    self.early_secret = None
+    self.handshake_secret = None
+    self.master_secret = None
 
-    if isinstance( tls_hash, SHA256 ) :
-      self.tls_hash = TlsHash( hashmod=hashlib.sha256 )
-    elif isinstance( tls_hash, SHA384 ) :
-      self.tls_hash = TlsHash( hashmod=hashlib.sha384 )
-    elif isinstance( tls_hash, SHA512 ) :
-      self.tls_hash = TlsHash( hashmod=hashlib.sha512 )
-    else: 
-      raise ImplementationError( f"unknown tls_hash {tls_hash} (SHA256 or SHA384)" )
-    self.psk_wrapper = PSKWrapper( self.psk, self.tls_hash, is_ext = is_ext )
-        
-    self.scheduler = self.tls_hash.scheduler( self.ecdhe, self.psk )
+#    if isinstance( self.tls_hash, SHA256 ) :
+#      self.tls_hash = TlsHash( hashmod=hashlib.sha256 )
+#      self.hash_len = 32
+#    elif isinstance( self.tls_hash, SHA384 ) :
+#      self.tls_hash = TlsHash( hashmod=hashlib.sha384 )
+#      self.hash_len = 48
+#    elif isinstance( self.tls_hash, SHA512 ) :
+#      self.tls_hash = TlsHash( hashmod=hashlib.sha512 )
+#      self.hash_len = 64
+#    else: 
+#      raise ImplementationError( f"unknown tls_hash {tls_hash} (SHA256 or SHA384)" )
+#   if psk is None :
+#      psk = b"\x00" * hash_len
+
+
+#    self.psk_wrapper = PSKWrapper( self.psk, self.tls_hash, is_ext = is_ext )
+   
+
+#    self.scheduler = self.tls_hash.scheduler( self.ecdhe, self.psk )
+
+    
+  # check if backend is needed
+  # check with struct
+  def hkdf_expand_label( self, secret,\
+                         label, \
+                         context, \
+                         length, \
+                         backend=default_backend() ): #, \
+#                         algorithm=hashes.SHA256() ):
+#      tmp_label = b"tls13 " + label.encode()
+#      tmp_label = b"tls13 " + label
+#      hkdf_label = (
+#          struct.pack(">h", length)
+#          + struct.pack("b", len(tmp_label))
+#          + tmp_label
+#          + struct.pack("b", len(context))
+#          + context
+#      )
+      hkdf_label = lurk.HkdfLabel.build( \
+        { 'length' : length, 
+          'label' : b"tls13 " + label, \
+          'context' : context } )
+      return HKDFExpand( algorithm=self.tls_hash,\
+                         length=length,\
+                         info=hkdf_label,\
+                         backend=backend ).derive( secret )
+
+  def derive_secret( self, secret, label, transcript_h ):
+    """ derive secret function 
+
+    Args:
+      secret : the secret
+      label: the label
+      transcript_h : the transcript hash associated to the messages. Note that this is a main difference with Derive-Secret as described in RFC4664. Derive-Secret takes the messages and performs the Transcript-Hash of the messages.
+    """ 
+    return self.hkdf_expand_label( secret=secret, \
+                                   label=label, \
+                                   context=transcript_h, \
+                                   length=self.tls_hash.digest_size )
+#                                   algorithm=self.tls_hash )
+
+  def process_early_secret( self ):
+
+    if self.psk is None:
+      self.psk = b"\x00" * self.tls_hash.digest_size
+
+    self.early_secret = HKDF(
+            algorithm=self.tls_hash,
+            length=self.tls_hash.digest_size,
+            info=None, # None or \x00 zero length string 
+            salt=b"\x00",
+#            backend=backend,
+        )._extract( self.psk )
+    if MODE_TRACE is True:
+      pylurk.utils.print_bin( "psk", self.psk )
+      pylurk.utils.print_bin( "early_secret",  self.early_secret )
+    
+
+  def empty_transcript_h( self ):
+    h = Hash( self.tls_hash )
+    h.update( b'' )
+    return h.finalize()
+
+
+  def process_handshake_and_master_secret( self, shared_secret=None ):
+
+    if shared_secret != None:
+      self.shared_secret = shared_secret
+    empty_transcript = self.empty_transcript_h( )
+    
+    if self.shared_secret is None:
+      self.shared_secret = b"\x00" * self.tls_hash.digest_size
+
+    handshake_secret_salt = self.derive_secret(\
+      self.early_secret,\
+      b'derived',\
+      empty_transcript )
+    
+    self.handshake_secret = HKDF(
+      algorithm=self.tls_hash,
+      salt=handshake_secret_salt,
+      info=None,
+#      backend=backend,
+      length=self.tls_hash.digest_size )._extract( self.shared_secret )
+
+    master_secret_salt = self.derive_secret(\
+      self.handshake_secret,\
+      b'derived',\
+      empty_transcript )
+     
+    self.master_secret = HKDF(
+      algorithm=self.tls_hash,
+      salt=master_secret_salt,
+      info=None,
+#      backend=backend,
+#      length=self.tls_hash.digest_size )._extract( self.handshake_secret )
+      length=self.tls_hash.digest_size )._extract( b"\x00" * self.tls_hash.digest_size )
+    if MODE_TRACE is True:
+      pylurk.utils.print_bin( "empty_transcript", empty_transcript )
+      pylurk.utils.print_bin( "handshake_secret", self.handshake_secret )
+      pylurk.utils.print_bin( "master_secret", self.master_secret )
+
 
   def process( self, secret_list:list, handshake:TlsHandshake ) -> None: 
-  
-    if 'b' in secret_list:
-      self.secrets[ 'b' ] = self.psk_wrapper.binder_key()
-    if 'e_s' in secret_list or  'e_x' in secret_list:
-        
-      transcript_h = handshake.transcript_hash( 'e' )
-      if 'e_s' in secret_list:
-        self.secrets[ 'e_s' ] = \
-          self.psk_wrapper.client_early_traffic_secret( transcript_h )
-      if 'e_x' in secret_list:
-        self.secrets[ 'e_x' ] = \
-          self.psk_wrapper.early_exporter_master_secret( transcript_h )
-    elif 'h_c' in secret_list or  'h_c' in secret_list:
-      transcript_h = handshake.transcript_hash( 'h' )
-      if 'h_c' in secret_list:
-        self.secrets[ 'h_c' ] = \
-          self.scheduler.client_handshake_traffic_secret( transcript_h )
-        self.secrets[ 'h_s' ] = \
-          self.scheduler.server_handshake_traffic_secret( transcript_h )
-    elif 'a_c' in secret_list or  'a_c' in secret_list or\
-       'x' in secret_list:
-      transcript_h = handshake.transcript_hash( 'a' )
-      if 'a_c' in secret_list: 
-        self.secrets[ 'a_c' ] =\
-          self.scheduler.client_application_traffic_secret_0( transcript_h )
-      if 'a_s' in secret_list: 
-        self.secrets[ 'a_s' ] =\
-          self.scheduler.server_application_traffic_secret_0( transcript_h )
-      if 'x' in secret_list: 
-        self.secrets[ 'x' ] = self.scheduler.exporter_master_secret( transcript_h )
-    elif 'r' in secret_list:
-      transcript_h = handshake.transcript_hash( 'r' )
-      self.secrets[ 'r' ] = self.scheduler.resumption_master_secret( transcript_h )
+
+    ## early secrets
+    if 'b' in secret_list or 'e_s' in secret_list or  'e_x' in secret_list:
+      if self.early_secret is None :
+        self.process_early_secret( )
+      s = self.early_secret
+      ## generating traffic secrets are derived 
+      if 'b' in secret_list :
+        t = self.empty_transcript_h() 
+        if self.is_ext is True:
+          label = "ext binder"
+        else:
+          label = "res binder"
+        self.secrets[ 'b' ] = self.derive_secret( s, label, t )
+        if MODE_TRACE is True:
+          pylurk.utils.print_bin( f"transcript h ['b']", t )
+          pylurk.utils.print_bin( "binder_key", self.secrets[ 'b' ] )
+      if 'e_s' in secret_list or 'e_x' in secret_list:
+        t = handshake.transcript_hash( 'e' )
+        if MODE_TRACE is True:
+          pylurk.utils.print_bin( f"transcript h ['e_s', 'e_x']", t )
+        if 'e_s' in secret_list:
+          self.secrets[ 'e_s' ] = self.derive_secret( s, b'c e traffic', t )
+          if MODE_TRACE is True:
+            pylurk.utils.print_bin( "client_early_traffic_secret", self.secrets[ 'e_s' ] )
+        if 'e_x' in secret_list:
+          self.secrets[ 'e_x' ] = self.derive_secret( s, b'e exp master', t )
+          if MODE_TRACE is True:
+            pylurk.utils.print_bin( "early_exporter_master_secret", self.secrets[ 'e_x' ] )
+    # handshake and other secrets  
+    if 'h_c' in secret_list or  'h_s' in secret_list or \
+       'a_c' in secret_list or  'a_s' in secret_list or \
+       'r' in secret_list:
+      if self.early_secret is None :
+        self.process_early_secret( )
+      if self.handshake_secret is None:
+        self.process_handshake_and_master_secret( )
+       
+#      self.secrets[ 'b' ] = self.psk_wrapper.binder_key()
+#    if 'e_s' in secret_list or  'e_x' in secret_list:
+#      transcript_h = handshake.transcript_hash( 'e' )
+#      if 'e_s' in secret_list:
+#        self.secrets[ 'e_s' ] = \
+#          self.psk_wrapper.client_early_traffic_secret( transcript_h )
+#      if 'e_x' in secret_list:
+#        self.secrets[ 'e_x' ] = \
+#          self.psk_wrapper.early_exporter_master_secret( transcript_h )
+      if 'h_c' in secret_list or  'h_s' in secret_list:
+        t = handshake.transcript_hash( 'h' )
+        s = self.handshake_secret
+        self.secrets[ 'h_c' ] = self.derive_secret( s, b'c hs traffic', t )
+        self.secrets[ 'h_s' ] = self.derive_secret( s, b's hs traffic', t )
+        if MODE_TRACE is True:
+          pylurk.utils.print_bin( f"transcript h ['h_c', 'h_s']", t )
+          pylurk.utils.print_bin( "client_handshake_traffic_secret", self.secrets[ 'h_c' ] )
+          pylurk.utils.print_bin( "server_handshake_traffic_secret", self.secrets[ 'h_s' ] )
+
+#      if 'h_c' in secret_list:
+#        self.secrets[ 'h_c' ] = \
+#          self.scheduler.client_handshake_traffic_secret( transcript_h )
+#        self.secrets[ 'h_s' ] = \
+#          self.scheduler.server_handshake_traffic_secret( transcript_h )
+      if 'a_c' in secret_list or  'a_s' in secret_list or 'x' in secret_list:
+        print( f" -- process secrets {secret_list}" )
+        t = handshake.transcript_hash( 'a' )
+        print( f" -- transcript_h" )
+        s = self.master_secret
+        self.secrets[ 'a_c' ] = self.derive_secret( s, b'c ap traffic', t )
+        self.secrets[ 'a_s' ] = self.derive_secret( s, b's ap traffic', t )
+        print( f" -- processed secrets {self.secrets}" )
+        if MODE_TRACE is True:
+          pylurk.utils.print_bin( f"transcript h ['a_c', 'a_s']", t )
+          pylurk.utils.print_bin( "client_application_traffic_secret_0", self.secrets[ 'a_c' ] )
+          pylurk.utils.print_bin( "server_application_traffic_secret_0", self.secrets[ 'a_s' ] )
+        if 'x' in secret_list:
+          self.secrets[ 'x' ] = self.derive_secret( s, b'exp master', t )
+          if MODE_TRACE is True:
+            pylurk.utils.print_bin( "exporter_master_secret", self.secrets[ 'x' ] )
+      
+#
+#
+#      if 'a_c' in secret_list or 'a_s' in secret_list : 
+#        self.secrets[ 'a_c' ] =\
+#          self.scheduler.client_application_traffic_secret_0( transcript_h )
+#      if 'a_s' in secret_list: 
+#        self.secrets[ 'a_s' ] =\
+#          self.scheduler.server_application_traffic_secret_0( transcript_h )
+#      if 'x' in secret_list: 
+#        self.secrets[ 'x' ] = self.scheduler.exporter_master_secret( transcript_h )
+      if 'r' in secret_list:
+        t = handshake.transcript_hash( 'r' )
+        s = self.master_secret
+        self.secrets[ 'r' ] = self.derive_secret( s, b'res master', t )
+        if MODE_TRACE is True:
+          pylurk.utils.print_bin( f"transcript h ['r']", t )
+          pylurk.utils.print_bin( "resumption_master_secret", self.secrets[ 'r' ] )
+#      self.secrets[ 'r' ] = self.scheduler.resumption_master_secret( transcript_h )
+
+  def finished_key( self, role ):
+    if role == 'server' :
+      secret = self.secrets[ 'h_s' ]
+    elif role == 'client' :
+      secret = self.secrets[ 'h_c' ]
+    else:
+      raise ImplementationError( f"unknown role {self.role}" )
+   
+    return self.hkdf_expand_label( secret=secret, 
+                     label=b'finished', context=b'',\
+                     length=self.tls_hash.digest_size )
 
   def compute_psk( self, ticket_nonce ) -> bytes: ## or None
-    return self.tls_hash.hkdf_expand_label( self.secrets[ 'r' ] , b"resumption",\
-             ticket_nonce, self.tls_hash.hash_len )
+#    return self.tls_hash.hkdf_expand_label( self.secrets[ 'r' ] , b"resumption",\
+#             ticket_nonce, self.tls_hash.hash_len )
+    return self.hkdf_expand_label( secret=self.secrets[ 'r' ],\
+                         label=b"resumption", \
+                         context=ticket_nonce, \
+                         length=self.tls_hash.digest_size, \
+                         backend=default_backend() ) #, \
+
+  def next_generation_application_traffic_secret( self, secret ):
+    return self.hkdf_expand_label( secret=secret, label=b'traffic upd', \
+             context=b'', length=self.tls_hash.digest_size )
+
+
+#  def traffic_key( self, cipher_suite, secret ):
+#    cipher_suite = CipherSuite( cipher_suite )
+#   
+#    write_key = self.hkdf_expand_label( secret=secret, label=b'key', \
+#            context=b'', length=cipher_suite.key_len )
+#    write_iv = self.hkdf_expand_label( secret=secret, label=b'iv', \
+#            context=b'', length=cipher_suite.nonce_len )
+#    return write_key, write_iv
+     
+     
+##
+##  def handshake_keys( self, ):
+##  
+##    client_handshake_key = HKDF_Expand_Label(
+##      algorithm=hashes.SHA256(),
+##      length=16,
+##      context=b"",
+##      label="key",
+##      backend=backend,
+##      key=client_handshake_traffic_secret,
+##  )
+##  server_handshake_key = HKDF_Expand_Label(
+##      algorithm=hashes.SHA256(),
+##      length=16,
+##      context=b"",
+##      label="key",
+##      backend=backend,
+##      key=server_handshake_traffic_secret,
+####  )
+####  client_handshake_iv = HKDF_Expand_Label(
+####      algorithm=hashes.SHA256(),
+##      length=12,
+##      context=b"",
+##      label="iv",
+##      backend=backend,
+##      key=client_handshake_traffic_secret,
+##  )
+##  server_handshake_iv = HKDF_Expand_Label(
+##      algorithm=hashes.SHA256(),
+##      length=12,
+##      context=b"",
+##      label="iv",
+##      backend=backend,
+##      key=server_handshake_traffic_secret,
+##  )
+##
+##  return HandshakeKeys(
+##      client_key=client_handshake_key,
+##      client_iv=client_handshake_iv,
+##      client_handshake_traffic_secret=client_handshake_traffic_secret,
+##      server_key=server_handshake_key,
+##      server_iv=server_handshake_iv,
+##      server_handshake_traffic_secret=server_handshake_traffic_secret,
+##      handshake_secret=handshake_secret,
+##  )
+
 
 class SInitCertVerifyReq:
 
@@ -1260,7 +1654,7 @@ class SInitCertVerifyReq:
     if self.ephemeral.method == 'cs_generated':
       self.handshake.update_key_share( self.ephemeral.server_share )
     self.scheduler = KeyScheduler( self.handshake.get_tls_hash(), \
-                                   ecdhe=self.ephemeral.shared_secret )
+                                   shared_secret=self.ephemeral.shared_secret )
     self.scheduler.process( self.secret_request.of([ 'h_c', 'h_s' ] ), self.handshake )
     self.handshake.update_certificate( self.cert )
     self.handshake.update_certificate_verify( )
@@ -1383,7 +1777,7 @@ class SHandAndAppSecretReq:
 #    self.ephemeral.compute_server_key_exchange( self.handshake ) 
     if self.ephemeral.method == 'cs_generated':
       self.handshake.update_key_share( self.ephemeral.server_share )
-    self.scheduler.ecdhe = self.ephemeral.shared_secret 
+    self.scheduler.shared_secret = self.ephemeral.shared_secret 
     self.scheduler.process( self.secret_request.of( [ 'h_c', 'h_s'] ), self.handshake )
     self.handshake.update_server_finished( self.scheduler )
     self.scheduler.process( self.secret_request.of( [ 'a_c', 'a_s', 'x' ] ), self.handshake )
@@ -1490,7 +1884,7 @@ class CInitClientFinishedReq:
     ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf, self.handshake )
 
     self.scheduler = KeyScheduler( self.handshake.get_tls_hash(), \
-                                   ecdhe=ephemeral.shared_secret, psk=psk )
+                                   shared_secret=ephemeral.shared_secret, psk=psk )
     ### the current handshake.msg_list is up to early data
     ## we need to make sur we limit ourselves to the ClientHello...ServerHello
     self.scheduler.process( [ 'h_c', 'h_s' ], self.handshake )
@@ -1547,7 +1941,7 @@ class CInitClientHelloReq:
     ## keyshare
     self.ephemeral = Ephemeral( { 'method' : 'cs_generated' }, self.mtype, \
       self.conf, self.handshake )
-    print( f"client_shares {self.ephemeral.client_shares} " )
+#    print( f"client_shares {self.ephemeral.client_shares} " )
     self.handshake.update_key_share( self.ephemeral.client_shares )
     ## pre-shared-key extension
     secret_list = []
@@ -1557,8 +1951,8 @@ class CInitClientHelloReq:
 #    self.session_ticket_dict = {}
     self.scheduler_list = []
     psk_metadata_list = req[ 'psk_metadata_list' ]
-    print( f"-- CInitClientHelloReq {self.handshake.msg_list}" )
-    print( f"-- psk_metadata_list {psk_metadata_list}" )
+#    print( f"-- CInitClientHelloReq {self.handshake.msg_list}" )
+#    print( f"-- psk_metadata_list {psk_metadata_list}" )
     self.handshake.is_post_hand_auth_proposed( )
     if self.handshake.is_psk_proposed( ) is True:
       self.scheduler_list = self.update_binders( psk_metadata_list )
@@ -1663,7 +2057,7 @@ class CInitClientHelloReq:
     partial_client_hello_bytes = b''
     for msg in self.handshake.msg_list:
       last_ext = msg[ 'data' ][ 'extensions' ][ -1 ]
-      partial_client_hello_bytes += Handshake.build( msg )
+      partial_client_hello_bytes += lurk.Handshake.build( msg )
     partial_client_hello_bytes = partial_client_hello_bytes[ : -binder_len ]
     binder_list = []
     ## building all binder_key and binders
@@ -1704,18 +2098,18 @@ class CServerHelloReq:
     ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, \
                                 self.conf, self.handshake )
     ephemeral.compute_client_share_secret( client_hello_ephemeral )
-    print("-- ephemeral.shared_secret {ephemeral.shared_secret}" )
+#    print("-- ephemeral.shared_secret {ephemeral.shared_secret}" )
     if self.handshake.is_psk_agreed( ):
       pre_shared_key = self.handshake.msg_list[ 0 ][ 'data' ][ 'extensions' ][ -1 ]
       if pre_shared_key[ 'extension_type' ] != 'pre_shared_key' :
         raise LURKError( 'invalid_handshake', f"Expecting pre_shared_key "\
                          f"extention {pre_shared_key}" )
-      print( f"--- pre_shared_key: {pre_shared_key}" )
+#      print( f"--- pre_shared_key: {pre_shared_key}" )
       selected_identity = pre_shared_key[ 'extension_data' ]
       self.scheduler = scheduler_list[ selected_identity ] 
     else: 
       self.scheduler = KeyScheduler( self.handshake.get_tls_hash(), \
-                                     ecdhe=ephemeral.shared_secret )
+                                     shared_secret=ephemeral.shared_secret )
     self.scheduler.process( [ 'h_c', 'h_s' ], self.handshake )
     self.session_id = session_id
 
@@ -1734,39 +2128,52 @@ class CClientFinishedReq:
     self.handshake = handshake
     self.handshake.msg_list.extend( req[ 'handshake' ] )
     self.handshake.sanity_check( self.mtype )
+    is_cert_req = self.handshake.is_certificate_request() 
+
     self.tag = Tag( req[ 'tag' ], self.mtype, self.conf, ctx=self.handshake )
     server_cert = LurkCert( req[ 'server_certificate' ], self.mtype, self.conf, \
                     True, self.handshake )
     client_cert = LurkCert( req[ 'client_certificate' ], self.mtype, self.conf, \
                     False, self.handshake )
-    if server_cert.cert_type != 'no_certificate' : 
+    if server_cert.cert_type != 'no_certificate' :
       self.handshake.update_certificate( server_cert, server=True )
     ## scheduler is initialized in CServerHello and CServerHello
     ## may be skipped when the client knows PSK and ECDHE secrets
     ## In this situation, the sheduler is not needed.
     if self.scheduler is None: ## we need to initialize transcript
-      print( f"-- {self.handshake.msg_type_list()}" )
+#      print( f"-- {self.handshake.msg_type_list()}" )
       self.handshake.transcript = Hash( self.handshake.get_tls_hash() )
     else:  
       self.scheduler.process( [ 'a_c', 'a_s' ], self.handshake )
-    self.handshake.update_certificate( client_cert, server=False )
-    print( f"client cert inserted : {self.handshake.msg_type_list()}" ) 
-    self.handshake.update_certificate_verify( )
-    ## get sig from freshly generated certificate_verify 
-    sig = self.handshake.msg_list[ 0 ][ 'data' ]['signature' ]
+    if is_cert_req:
+      self.handshake.update_certificate( client_cert, server=False )
+#     print( f"client cert inserted : {self.handshake.msg_type_list()}" )
+      self.handshake.update_certificate_verify( )
+      ## get sig from freshly generated certificate_verify 
+      sig = self.handshake.msg_list[ 0 ][ 'data' ]['signature' ]
+    else:
+      sig = b''
     ## generating Finished message and generating the transcript of the full handshake
     if self.tag.last_exchange == False:
       self.handshake.update_server_finished( self.scheduler )
       self.scheduler.process( [ 'r' ], self.handshake )
+    secret_request = SecretReq(req[ 'secret_request' ], self.mtype, self.conf )
+###
+#    secret_request = SecretReq( secret_req, self.mtype, self.conf, \
+#                                handshake=self.handshake )
+###
     self.resp = { 'tag' : self.tag.resp,
                   'session_id' : session_id.cs,
-                  'signature' : sig }
+                  'signature' : sig,
+                  'secret_list' : secret_request.resp( self.scheduler ) }
 
 
 class CRegisterTicketsReq:
 
-  def __init__( self, req, tls13_conf, ticket_db, transcript_r:bytes,\
-                cipher_suite:str, tls_hash, ticket_counter, session_id ):
+#  def __init__( self, req, tls13_conf, ticket_db, transcript_r:bytes,\
+#                cipher_suite:str, tls_hash, ticket_counter, session_id ):
+  def __init__( self, req, tls13_conf, ticket_db, scheduler,\
+                cipher_suite:str, ticket_counter, session_id ):
     self.conf = tls13_conf
     self.mtype = 'c_register_tickets'
     self.next_mtype = [ 'c_post_hand_auth', 'c_register_ticket' ]
@@ -1777,9 +2184,14 @@ class CRegisterTicketsReq:
       self.ticket_counter += 1
       if self.ticket_counter > self.conf[ 'max_tickets' ]:
         raise LURKError( 'max_tickets_reached' )
-      psk = tls_hash.hkdf_expand_label( transcript_r, b"resumption", \
-                                        new_session_ticket[ 'ticket_nonce' ],\
-                                        tls_hash.hash_len )
+#      psk = tls_hash.hkdf_expand_label( transcript_r, b"resumption", \
+#                                        new_session_ticket[ 'ticket_nonce' ],\
+#                                        tls_hash.hash_len )
+      psk = scheduler.compute_psk( new_session_ticket[ 'ticket_nonce' ] )
+#      psk = ks.hkdf_expand_label( secret=ks.secrets[ 'r' ], \
+#                                  label=b"resumption", \
+#                                  context=new_session_ticket[ 'ticket_nonce' ], \
+#                                  length=ks.tls_hash.)
       ticket = new_session_ticket[ 'ticket' ]
       
       ticket_db.register( ticket, { 'new_session_ticket' : new_session_ticket, 
@@ -1815,6 +2227,7 @@ class CSession(SSession) :
     elif mtype == 'c_server_hello' :
       req = CServerHelloReq( payload, self.conf, self.handshake, self.ephemeral,\
                              self.scheduler_list, self.session_id )
+      ## maybe we can remove these two lines
       self.handshake = req.handshake
       self.scheduler = req.scheduler
     elif mtype == 'c_client_finished' :
@@ -1831,8 +2244,11 @@ class CSession(SSession) :
       self.ticket_counter = 0
     elif mtype == 'c_register_tickets' :
       req = CRegisterTicketsReq( payload, self.conf, self.ticket_db,\
-              self.transcript_r, self.cipher_suite, self.tls_hash,\
+              self.scheduler, self.cipher_suite,\
               self.ticket_counter, self.session_id )
+#      req = CRegisterTicketsReq( payload, self.conf, self.ticket_db,\
+#              self.transcript_r, self.cipher_suite, self.tls_hash,\
+#              self.ticket_counter, self.session_id )
       self.ticket_counter = req.ticket_counter
     else: 
       raise LURKError( 'invalid_request', "unexpected request {mtype}" )
@@ -1888,13 +2304,16 @@ class Tls13Ext:
                               ticket_db=self.ticket_db  )
         else:
           raise LURKError( 'invalid_type', f"{req_type}" )
-        print( f" --- reqq: {req}" )
+        ##print( f" --- reqq: {req}" )
         payload  = session.serve( req_payload, req_type, 'request')
         if session.session_id != None :
           self.session_db.store( session ) 
 #      elif req_type in [ 's_hand_and_app_secret', 's_new_ticket' ]:
       else :
         try:
+#          print( f" --- cs session_id: {req_payload[ 'session_id' ] }" )
+#          print( f" --- cs sessionDB: {self.session_db.db }" )
+         
           session = self.session_db.unstore( req_payload[ 'session_id' ] )
         except KeyError:
           raise LURKError( 'invalid_session_id', f"{req} session_id not found in DB" )
