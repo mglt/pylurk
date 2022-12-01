@@ -7,17 +7,6 @@ import pytls13.struct_tls13 as tls
 sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
 import pylurk.tls13.struct_tls13 as lurk
 
-#import PskIdentity, Certificate, CompressedCertificate, \
-#  SignatureScheme, KeyShareEntry, NamedGroup, ExtensionType,\
-#  HandshakeType, Extension, \
-#  NewSessionTicket, ClientHello, ServerHello, EndOfEarlyData,\
-#  EncryptedExtensions, CertificateRequest, Certificate, CertificateVerify,\
-#  Finished, KeyUpdate,\
-#  HSClientHello, HSPartialClientHello, HSServerHello, HSEndOfEarlyData, HSEncryptedExtensions,\
-#  HSCertificateRequest, HSCertificate, HSCertificateVerify, HSFinished, \
-#  TLSCiphertext, Handshake
-
-
 TLS13Version = Enum( BytesInteger(1), 
   v1 = 1
 )
@@ -213,7 +202,8 @@ SharedSecret = Struct(
 Ephemeral = Struct(
   '_name' / Computed('Ephemeral'),
   '_status' / Computed( this._._status ),
-  'method' / EphemeralMethod, 
+  'method' / EphemeralMethod,
+#  Probe(),
   'key' / Switch(this.method,
     { 'e_generated' : Switch(this._status, {
          'request' : Prefixed(BytesInteger(2), SharedSecret),
@@ -255,7 +245,7 @@ FingerPrintCertificate = Struct(
 Cert = Struct(
   '_name' / Computed('Cert'),
   'cert_type' /  CertType,
-  Probe( this.cert_type ),
+#  Probe( this.cert_type ),
   'certificate' / Switch( this.cert_type, {
     'zlib' : tls.CompressedCertificate, 
     'brotli' : tls.CompressedCertificate,
@@ -357,12 +347,8 @@ SHandAndAppRequest = Struct(
   '_type' / Computed(this._._type),
   '_status' / Computed('request'),
   'tag' / Tag,
-   Probe( this.tag ),
-##  'session_id' / Optional(If(this._._session_id_agreed == True, Bytes(4))), 
   'session_id' / Bytes( 4 ),
-   Probe( this.session_id ),
   'ephemeral' / Ephemeral, 
-   Probe( this.ephemeral ),
   'handshake' / Prefixed( BytesInteger(4), HandshakeList ), 
   'secret_request' / SecretRequest
 )
@@ -380,12 +366,9 @@ SHandAndAppResponse = Struct(
 SNewTicketRequest = Struct(
   '_name' / Computed('SNewTicketRequest'),
   '_type' / Computed(this._._type),
-#  '_certificate_type' / Computed(this._._certificate_type),
-#  '_cipher' / Computed(this._._cipher),
   'tag' / Tag,
   'session_id' / Bytes(4), 
   'handshake' / Prefixed( BytesInteger(4), HandshakeList),
-#  'certificate' / LURKTLS13Certificate, 
   'certificate' / Cert, 
   'ticket_nbr' / BytesInteger(1), 
   'secret_request' / SecretRequest,
@@ -401,29 +384,6 @@ SNewTicketResponse = Struct(
 
 
 ## LURK request / response structures on the TLS client
-
-#CInitPostHandAuthRequest = Struct(
-#  '_name' / Computed('CInitPostHandRequest'),
-#  '_type' / Computed('c_init_post_hand_auth'),
-#  '_status' / Computed('request'),
-#  'transcript_hash' / Prefixed( BytesInteger(2), GreedyBytes ),
-#  'server_certificate' / Cert,
-#  'client_certificate' / Cert,
-#)
-#
-#CInitPostHandAuthResponse = Struct(
-#  '_name' / Computed('CInitPostHandResponse'),
-#  '_type' / Computed('c_init_post_hand_auth'),
-#  '_status' / Computed('success'),
-#  'tag' / Tag,
-#  'session_id' / Switch( this.tag.last_exchange,
-#    { True : Const(b''), 
-#      False : Bytes(4),
-#    }  
-#  ),
-#  'signature' / Prefixed( BytesInteger(2), GreedyBytes )
-#)
-
 
 CInitClientFinishedRequest = Struct(
   '_name' / Computed('CInitClientFinishedRequest'),
@@ -479,7 +439,6 @@ CInitClientHelloRequest = Struct(
   'session_id' / Bytes( 4 ),
   'handshake' / Prefixed( BytesInteger(4), HandshakeList), 
   'freshness' / Freshness, 
-###  'psk_metadata_list' / Prefixed( BytesInteger(2), GreedyRange( Select( PskIdentityMetadata, Const(b'' ) ) ) ), 
   'psk_metadata_list' / Prefixed( BytesInteger(2), GreedyRange( PskIdentityMetadata ) ), 
   'secret_request' / SecretRequest
 )
@@ -521,7 +480,6 @@ CClientFinishedRequest = Struct(
   'handshake' / Prefixed( BytesInteger(4), HandshakeList ), 
   'server_certificate' / Cert, 
   'client_certificate' / Cert,
-  ## to add secret_Req
   'secret_request' / SecretRequest
 )
 
@@ -532,7 +490,6 @@ CClientFinishedResponse = Struct(
   'tag' / Tag,
   'session_id' / Bytes( 4 ),
   'signature' / Prefixed( BytesInteger(2), GreedyBytes ),
-  ## to add secret list
   'secret_list' / Prefixed( BytesInteger(2), GreedyRange( Secret ) )
 )
 
@@ -577,10 +534,6 @@ TLS13Payload = Switch(this._type,
        { 'request' : SNewTicketRequest, 
          'success' : SNewTicketResponse, 
         }, default=ErrorPayload), 
-#    'c_init_post_hand_auth' : Switch( this._status,
-#       { 'request' : CInitPostHandAuthRequest, 
-#         'success' : CInitPostHandAuthResponse, 
-#        }, default=ErrorPayload), 
     'c_init_client_finished' : Switch( this._status,
        { 'request' : CInitClientFinishedRequest, 
          'success' : CInitClientFinishedResponse, 

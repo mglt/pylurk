@@ -21,7 +21,7 @@ def logger( conf, __name__ ):
   return logger
 
 class CryptoService:
-  def __init__( self, conf, ):
+  def __init__( self, conf ):
     self.conf = conf
     
     for ext in self.conf[ 'enabled_extensions' ]:
@@ -30,8 +30,19 @@ class CryptoService:
       elif ext == ( 'tls13', 'v1' ):
         self.ticket_db = pylurk.tls13.lurk_tls13.TicketDB()
         self.session_db = pylurk.tls13.lurk_tls13.SessionDB()
-        self.tls13 = pylurk.tls13.lurk_tls13.Tls13Ext( self.conf[ ext ], ticket_db=self.ticket_db,\
-                               session_db=self.session_db  )
+
+        self.test_vector = None
+        test_vector_conf = self.conf[ ext ][ 'debug' ]
+        if test_vector_conf[ 'test_vector' ] is True or\
+           test_vector_conf[ 'trace' ] is True :
+          self.test_vector = pylurk.utils.Tls13TestVector( test_vector_conf ) 
+
+        self.tls13 = pylurk.tls13.lurk_tls13.Tls13Ext( self.conf[ ext ],\
+                       ticket_db=self.ticket_db,\
+                       session_db=self.session_db,\
+                       test_vector=self.test_vector )
+
+#        raise ValueError( )
     try: 
       self.lurk_state = self.lurk.lurk_state 
     except NameError:
@@ -59,8 +70,8 @@ class CryptoService:
       if header[ 'status' ] != 'request' :
         raise LURKError( 'invalid_status' , f"{header[ 'status' ]}" )
       req = LURKMessage.parse( req_bytes )
-      print( f"--- CS: Received Request by the CS:" )
-      print( f"  - {LURKMessage.parse( LURKMessage.build( req ) )}")
+      if self.test_vector is not None:
+        self.test_vector.handle_lurk_msg( req )
       if ext == ( 'lurk', 'v1' ):
         payload = self.lurk.payload_resp( req ) 
       elif ext == ( 'tls13', 'v1' ):
@@ -70,7 +81,11 @@ class CryptoService:
 #      resp[ 'payload' ] = { 'lurk_state' : self.lurk_state }
       resp[ 'payload' ] = payload
       resp[ 'status' ] = 'success'
-      print( f" --- resp: {resp}" ) 
+      if self.test_vector is not None:
+#        self.test_vector.handle_lurk_msg( req )
+        self.test_vector.handle_lurk_msg( resp)
+#      print( f"--- resp: {resp}" )
+#
       return LURKMessage.build( resp )
     except Exception as e :
       if isinstance( e, LURKError ):
@@ -83,8 +98,8 @@ class CryptoService:
           self.logger.exception( str( e ) )  
         resp[ 'status' ] = 'undefined_error' 
       resp[ 'payload' ] = { 'lurk_state' : self.lurk_state }
-      print( f"--- CS: Returned Response by the CS:" )
-      print( f"  - {LURKMessage.parse( LURKMessage.build( resp ) )}")
+#      print( f"--- CS: Returned Response by the CS:" )
+#      print( f"  - {LURKMessage.parse( LURKMessage.build( resp ) )}")
 #      print( f"--- crypto service: resp : {resp}")
       return LURKMessage.build( resp )
 

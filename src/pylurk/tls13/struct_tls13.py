@@ -359,6 +359,7 @@ PartialCHExtension = Struct(
   '_name' / Computed('PartialCHExtension'),
 ##  'extension_type' / PartialCHExtensionType,
   'extension_type' / tls.ExtensionType,
+#  Probe( this.extension_type ),
   'extension_data' /  Prefixed(BytesInteger(2),
                       Switch(this.extension_type,
     {

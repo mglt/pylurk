@@ -32,14 +32,17 @@ import datetime
 import sys
 sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/')
 import pytls13.struct_tls13 as tls
+#import pytls13.test_vector
 
 sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
 #import pylurk.tls13.struct_tls13 as lurk
 from pylurk.lurk.lurk_lurk import LURKError, ImplementationError, ConfigurationError
 #import pylurk.tls13.lurk_tls13
 
+
 import pylurk.tls13.struct_tls13 as lurk
 import pylurk.utils
+import pylurk.tls13.crypto_suites
 import binascii
 
 data_dir = pkg_resources.resource_filename(__name__, '../data/')
@@ -59,12 +62,19 @@ web_profile = {
 
 conf_template = {
   'profile' : 'explicit configuration',
-  'mode' : 'debug', 
+#  'mode' : 'debug',
   'enabled_extensions' : [ ( 'lurk', 'v1' ) , ( 'tls13', 'v1' ) ],
   ( 'lurk', 'v1' ) : {
      'type_authorized' : [ 'ping',  'capabilities' ]
   },
   ( 'tls13', 'v1' ) : {
+    'debug' : {
+      'test_vector' : True,
+      'trace' : True,  # prints multiple useful information
+      'test_vector_file' : './illustrated_tls13.json',
+      'test_vector_mode' : 'check', # check / record
+      'test_vector_tls_traffic' : True, #'local' # / remote 
+      },
      'role' : 'server', #[ 'client', 'server' ],
      'type_authorized' : [ 's_init_cert_verify',     ## server ECDHE
                            's_init_early_secret',    ## server PSK
@@ -127,247 +137,6 @@ conf_template = {
         },
 }
 
-### we may need to change this to SigScheme
-# class SigAlgo
-class SigScheme:
-  def __init__( self, name:str) :
-    """ used to pars ethe signature scheme
-
-    The function also extract the hash for cipher suites
-    """
-    self.name = name
-    self.algo = self.get_algo()
-    self.hash = self.get_hash()
-    self.pad = self.get_pad()
-    self.curve = self.get_curve()
-
-
-  def get_algo( self ):
-    return self.name.split('_')[0]
-
-  def get_hash( self ):
-    ## returns None in case of ed25519 or ed448 sig scheme
-    ## TLS cipher suite are expected to pass.
-    ## we use hashlib to remain compatible with key_schedule
-    if self.algo in [ 'ed25519', 'ed448' ]:
-      return None
-    hash_algo = self.name.split( '_' )[-1].lower()
-    if hash_algo == 'sha256':
-      h = SHA256()
-#      h = hashlib.sha256
-    elif hash_algo == 'sha384':
-      h = SHA384()
-#      h = hashlib.sha384
-    elif hash_algo == 'sha512':
-      h = SHA512()
-#      h = hashlib.sha512
-    else:
-      raise LURKError( 'invalid_signature_scheme', f"{hash_algo} is not implemented" )
-    return h
-
-  def get_curve( self ): # -> Union[ SECP256R1, SECP384R1, SECP521R1 ] :
-    if self.algo != 'ecdsa':
-      return None
-    curve_name = self.name.split( '_' )[1]
-    if  curve_name == 'secp256r1':
-      curve = SECP256R1()
-    elif curve_name == 'secp384r1':
-      curve = SECP384R1()
-    elif curve_name == 'secp521r1':
-      curve = SECP521R1()
-    else:
-      raise LURKError( 'invalid_signature_scheme', f"{curve_name} is not implemented" )
-    return curve
-
-  def get_pad( self ):
-    if self.algo != 'rsa':
-      return None
-    pad_name = self.name.split( '_' )[1]
-    if pad_name == 'pkcs1':
-      pad = padding.PKCS1v15()
-    elif pad_name == 'pss':
-      pad = padding.PSS(
-        mgf=padding.MGF1(self.hash),
-       salt_length=padding.PSS.MAX_LENGTH)
-    else:
-      raise LURKError( 'invalid_signature_scheme', f"{pad_name} is not implemented" )
-    return pad
-
-  def matches( self, key):
-    if ( self.algo == 'ed25519' and not \
-         isinstance( key, Ed25519PrivateKey ) ) or\
-       ( self.algo == 'ed448' and not \
-         isinstance( key, Ed448PrivateKey ) ) or\
-       ( self.algo == 'ecdsa' and not \
-          isinstance( key, EllipticCurvePrivateKey ) ) or\
-       ( self.algo == 'rsa' and not \
-          isinstance( key, RSAPrivateKey ) ):
-      raise LURKError( 'invalid_signature_scheme', \
-              f"{self.name}, {type( private_key)} ,"\
-              f"incompatible private key and signature algorithm" )
-    if isinstance( key, EllipticCurvePrivateKey ):
-      if isinstance( key.curve, type( self.curve ) ) == False:
-        raise LURKError( 'invalid_signature_scheme', \
-              f"{self.name}, {self.curve}, {key.curve} ,"\
-              f"incompatible curve and signature algorithm" )
-
-class CipherSuite:
-  def __init__( self, name:str, secret=None ) :
-    """ Handle the cipher suite string  
-    """
-    self.name = name
-    self.hash = self.get_hash()
-    self.tag_len = self.tag_length( )
-    self.key_len = self.key_length( )
-    self.nonce_len = self.nonce_length( )
-
-    if secret is not None:
-     self.traffic_key( secret )
-       
-
-  def get_hash( self ):
-    return SigScheme( self.name ).get_hash( )
-
-  def nonce_length( self ):
-    return 12
-
-  def tag_length( self ):
-    if self.name == 'TLS_CHACHA20_POLY1305_SHA256':
-      tag_length = 16
-    elif self.name == 'TLS_AES_128_GCM_SHA256':
-      tag_length = 16
-    elif self.name == 'TLS_AES_256_GCM_SHA384':
-      tag_length = 16
-    elif self.name == 'TLS_AES_128_CCM_SHA256':
-      tag_length = 16
-    elif self.name == 'TLS_AES_128_CCM_8_SHA256':
-      tag_length = 8
-    else:
-      raise LURKError( 'invalid_cipher_suite', f"{self.name} is not implemented" )
-    return tag_length     
-
-  def key_length( self ):
-    if self.name == 'TLS_CHACHA20_POLY1305_SHA256':
-      key_length = 32
-    elif self.name == 'TLS_AES_128_GCM_SHA256':
-      key_length = 16
-    elif self.name == 'TLS_AES_256_GCM_SHA384':
-      key_length = 32
-    elif self.name == 'TLS_AES_128_CCM_SHA256':
-      key_length = 16
-    elif self.name == 'TLS_AES_128_CCM_8_SHA256':
-      key_length = 16
-    else:
-      raise LURKError( 'invalid_cipher_suite', f"{self.name} is not implemented" )
-    return key_length
-
-  def compute_nonce( self, sequence_number, iv ):
-    sn = (b'\x00' * 4) + int(sequence_number).to_bytes( 8, byteorder='big' )
-    xor = bytearray()
-    for sn, iv in zip( sn, iv ):
-      xor.append( sn ^ iv )
-    return xor
-#      nonce = b''
-#      for i in range( self.nonce_len ):
-#        nonce += sn[ i ] ^ iv[ i ]
-#      return nonce
-#      formatted_num = (b"\x00" * 4) + struct.pack(">q", num)
-#    return bytes([i ^ j for i, j in zip(iv, formatted_num)])
-
-  def hkdf_expand_label( self, secret,\
-                       label, \
-                       context, \
-                       length, \
-                       backend=default_backend() ): #, \
-    hkdf_label = lurk.HkdfLabel.build( \
-      { 'length' : length,
-        'label' : b"tls13 " + label, \
-        'context' : context } )
-    return HKDFExpand( algorithm=self.hash,\
-                         length=length,\
-                         info=hkdf_label,\
-                         backend=backend ).derive( secret )
-  
-  def traffic_key( self, secret ):
-#    ks = pylurk.tls13.lurk_tls13.KeyScheduler( tls_hash=self.hash )
-    self.write_key = self.hkdf_expand_label( secret=secret, label=b'key', \
-            context=b'', length=self.key_len )
-    self.write_iv = self.hkdf_expand_label( secret=secret, label=b'iv', \
-            context=b'', length=self.nonce_len )
-    self.sequence_number = 0
-   
-
-  def next_generation_application_traffic_secret( self, secret ):
-#    ks = pylurk.tls13.lurk_tls13.KeyScheduler( tls_hash=self.hash )
-    return self.hkdf_expand_label( secret=secret, label=b'traffic upd', \
-             context=b'', length=self.tls_hash.digest_size )
-
-
-  def decrypt( self, msg ):
-    additional_data = tls.ContentType.build( msg[ 'type' ] ) +\
-                      msg[ 'legacy_record_version' ] +\
-                      len( msg[ 'fragment' ] ).to_bytes( 2, byteorder='big' )
-#    additional_data = b'\x17\x03\x03' + len( encrypted_text ).to_bytes( 2, byteorder='big' )
-#    cipher_text = fragment # cipher with tag appended 
-    nonce = self.compute_nonce( self.sequence_number, self.write_iv )
-    pylurk.utils.print_bin( "fragment (encrypted)",  msg[ 'fragment' ] )
-    pylurk.utils.print_bin( "write_key", self.write_key )
-    pylurk.utils.print_bin( "write_iv", self.write_iv )
-    pylurk.utils.print_bin( "nonce", nonce )
-    pylurk.utils.print_bin( "additional_data", additional_data )
-    print( f"  - sequence_number : {self.sequence_number}" )
-    if 'GCM' in self.name:
-      cipher = AESGCM( self.write_key )
-    elif 'CCM' in self.name :
-      cipher = AESCCM( self.write_key, tag_length=self.tag_len )
-    elif self.name == 'TLS_CHACHA20_POLY1305_SHA256':
-      cipher = ChaCha20Poly1305( self.write_key )
-    else:
-       raise LURKError( 'invalid_cipher_suite', f"{self.name} is not implemented" )
-    clear_text = cipher.decrypt( nonce, msg[ 'fragment' ], additional_data )
-    ## this probably can be handled by construct itself
-    length_of_padding = 0
-    for i in range( len( clear_text ) ):
-      if clear_text[ -1 - i ] != b'\x00':
-        break
-      else: 
-        length_of_padding += 1
-    type_byte = ( clear_text[ -1 - length_of_padding ]).to_bytes( 1, byteorder='big' )
-    ct_type = tls.ContentType.parse( type_byte )
-    pylurk.utils.print_bin( "fragment (decrypted)",  msg[ 'fragment' ] ) 
-    clear_text_msg = tls.TLSInnerPlaintext.parse( clear_text, type=ct_type, length_of_padding=length_of_padding )
-    self.sequence_number += 1
-    return  { 'type' : ct_type, 'content' : clear_text_msg[ 'content' ] } 
-
-  def encrypt( self, clear_text_msg, content_type, length_of_padding=0 ):
-    zeros = b'\x00' * length_of_padding
-    inner_plain_text = { \
-      'content' : clear_text_msg, 
-      'type' : content_type,
-      'zeros' : zeros }
-    clear_text_record_bytes = tls.TLSInnerPlaintext.build( inner_plain_text, type=content_type, length_of_padding=length_of_padding)
-    print( f"  - inner clear_text : {tls.TLSInnerPlaintext.parse( clear_text_record_bytes, type=content_type, length_of_padding=length_of_padding)}" )
-    pylurk.utils.print_bin( "inner_clear_text", clear_text_record_bytes ) 
-    additional_data = b'\x17\x03\x03' + int( len( clear_text_record_bytes ) + self.tag_len ).to_bytes( 2, byteorder='big' )
-#    cipher_text = fragment[ : - self.tag_len ] 
-    nonce = self.compute_nonce( self.sequence_number, self.write_iv )
-    if 'GCM' in self.name:
-      cipher = AESGCM( self.write_key )
-    elif 'CCM' in self.name :
-      cipher = AESCCM( self.write_key, tag_length=self.tag_len )
-    elif self.name == 'TLS_CHACHA20_POLY1305_SHA256':
-      cipher = ChaCha20Poly1305( self.write_key )
-    else:
-       raise LURKError( 'invalid_cipher_suite', f"{self.name} is not implemented" )
-    encrypted_reccord =  cipher.encrypt( nonce, clear_text_record_bytes, additional_data )
-    pylurk.utils.print_bin( "write_key", self.write_key )
-    pylurk.utils.print_bin( "write_iv", self.write_iv )
-    print( f"  - sequence_number : {self.sequence_number}" )
-    pylurk.utils.print_bin( "nonce", nonce )
-    pylurk.utils.print_bin( "additional_data", additional_data )
-    
-    self.sequence_number += 1 
-    return encrypted_reccord
 
 
 class Configuration:
@@ -420,7 +189,7 @@ class Configuration:
       raise ConfigurationError( f"Invalid sig_scheme - only TLS1.3 sig_scheme" \
               "are expected: {conf[ ( 'tls13', 'v1' ) ][ 'sig_scheme' ]}." )
 
-    sig_scheme = SigScheme( tls_sig_scheme )
+    sig_scheme = pylurk.tls13.crypto_suites.SigScheme( tls_sig_scheme )
     sig_algo = sig_scheme.algo
     if sig_algo == 'ed25519' :
       private_key = Ed25519PrivateKey.generate()
