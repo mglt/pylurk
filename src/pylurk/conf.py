@@ -63,6 +63,16 @@ web_profile = {
 conf_template = {
   'profile' : 'explicit configuration',
 #  'mode' : 'debug',
+  'connectivity' : {
+      'type' : "udp",  # "local", "stateless_tcp", "tcp", "tcp+tls", http, https
+      'fqdn' : None,
+      'ip_address' : "127.0.0.1",
+      'port' : 9999,
+      'key' : join(data_dir, 'key_tls12_rsa_server.key'),
+      'cert' : join(data_dir, 'cert_tls12_rsa_server.crt'),
+      'key_peer' : join(data_dir, 'key_tls12_rsa_client.key'),
+      'cert_peer' : join(data_dir, 'cert_tls12_rsa_client.crt')
+      },
   'enabled_extensions' : [ ( 'lurk', 'v1' ) , ( 'tls13', 'v1' ) ],
   ( 'lurk', 'v1' ) : {
      'type_authorized' : [ 'ping',  'capabilities' ]

@@ -20,8 +20,9 @@ def logger( conf, __name__ ):
   logging.basicConfig(filename=log_file, format=FORMAT )
   return logger
 
-class CryptoService:
+class BaseCryptoService:
   def __init__( self, conf ):
+    self.con_type = 'lib_cs'
     self.conf = conf
     
     for ext in self.conf[ 'enabled_extensions' ]:
@@ -103,3 +104,87 @@ class CryptoService:
 #      print( f"--- crypto service: resp : {resp}")
       return LURKMessage.build( resp )
 
+import socketserver
+
+class StatelessTCPHandler( socketserver.BaseRequestHandler):
+  """ the StatelessTCPHandler assumes that the packet it handles 
+      contains only one LURK request. 
+      TCP ensures all bytes are transported but a TCP session is 
+      established for every LURK request.
+  """
+  def handle( self ):
+    req_bytes = self.request.recv(1024)
+    resp = self.server.cs.server( req_bytes ) 
+    self.request.sendall( )
+
+class StatelessTCPCryptoService( socketserver.TCPServer):
+
+  def __init__( self, conf  ):
+    """ 
+    
+    The stateless TCP Crypto Service handles one TCP session per
+    packet.  
+    The StatelessTCP server extends the TCP calls to instantiate 
+    a crypto service as self.cs. 
+    """
+    
+    self.con_type = 'stateless_tcp'
+    self.conf = conf
+    self.cs = BaseCryptoService( self.conf )
+    server_address = self.get_server_address_from_conf( )  
+    super().__init__( server_address, StatelessTCPHandler,\
+                      bind_and_activate=True )
+
+  def get_server_address_from_conf( self ):
+    """ return host and port from the configuration file """
+    key_list = self.conf[ 'connectivity' ].keys()
+    if 'type' in key_list: 
+      cs_type = self.conf[ 'connectivity' ][ 'type' ]
+      if cs_type != self.con_type:
+        raise ConfigurationError( f"unexpected type {cs_type} for "\
+          f"{self.__class__.__name__}. Expecting '{self.con_type}'." )
+    else:
+      raise ConfigurationError( f"Cannot find type in configuration "\
+        f"{self.__class__.__name__}. Expecting 'stateless_tcp'." ) 
+    host = None 
+    if 'fqdn' in key_list:
+      fqdn = self.conf[ 'connectivity' ][ 'fqdn' ]
+      if fqdn not in [ None, '' ]:
+        host = fqdn
+    if host is None and 'ip_address' in key_list: 
+      host = self.conf[ 'connectivity' ][ 'ip_address' ]
+    if 'type' in key_list: 
+      port = self.conf[ 'connectivity' ][ 'port' ] 
+    else:
+      raise ConfigurationError( f"Cannot find port in configuration "\
+        f"{self.__class__.__name__}." )
+    return ( host, port )
+#    with socketserver.TCPServer((host, port), MyTCPHandler) as server:
+#        # Activate the server; this will keep running until you
+#        # interrupt the program with Ctrl-C
+#        server.serve_forever()  
+
+class CryptoService:
+
+  def __init__( self, conf ):
+    self.conf = conf
+    self.con_type = self.conf[ 'connectivity' ][ 'type' ] 
+    if self.con_type == 'lib_cs':
+      self.cs = BaseCryptoService( self.conf )
+      BaseCryptoService.__init__( self,  self.conf )
+    elif self.con_type == 'stateless_tcp':
+      self.cs = StatelessTCPCryptoService( self.conf )
+#      StatelessTCPCryptoService.__init__( self, self.conf )
+    else:
+      raise ConfigurationError( f"unknown connection_type {con_type}" )
+
+  def serve( self, req_bytes ) -> bytes :
+    if self.con_type == 'lib_cs':
+      return self.cs.serve( req_bytes )
+    else: 
+##      self.serve_forever()
+      ImplementationError( f"'serve' can only be used for con_type {self.con_type}."\
+                            "Current con_type is set to {self.con_type}")
+ 
+  def serve_forever( self ):
+    self.cs.serve_forver()

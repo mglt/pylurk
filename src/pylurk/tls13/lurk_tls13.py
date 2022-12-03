@@ -789,7 +789,9 @@ class CInitClientFinishedReq:
                     True, self.handshake )
     client_cert = LurkCert( req[ 'client_certificate' ], self.mtype, self.conf, \
                     False, self.handshake )
+    print(f" --- CS: received random: {self.handshake.msg_list[0][ 'data' ][ 'random' ]}" )
     self.handshake.update_random( Freshness( req[ 'freshness' ] ) )
+    print(f" --- CS: updated random: {self.handshake.msg_list[0][ 'data' ][ 'random' ]}" )
     if server_cert.cert_type != 'no_certificate' : 
       self.handshake.update_certificate( server_cert, server=True )
     self.scheduler = None
