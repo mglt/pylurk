@@ -32,7 +32,7 @@ class ConfigurationError( LURKError ):
     self.message = message
 
 
-
+### NOt sure we nee dthe code below
 
 class LurkExt:
 

@@ -1,7 +1,8 @@
 import secrets
+import socket
 import pylurk.tls13.struct_lurk_tls13
 from pylurk.struct_lurk import LURKMessage
-from pylurk.lurk.lurk_lurk import ConfigurationError
+from pylurk.lurk.lurk_lurk import ConfigurationError, LURKError
 
 class BaseTls13LurkClient :
 
@@ -23,7 +24,7 @@ class BaseTls13LurkClient :
     on their own. 
     """
     self.conf = conf
-    self.con_type = 'lib_cs'
+#    self.con_type = 'lib_cs'
     self.lurk_client_session_id = secrets.token_bytes( 4 )
     self.cs_session_id  = None
     self.freshness = 'sha256'
@@ -165,10 +166,14 @@ class BaseTls13LurkClient :
 #      print( f"--- E -> CS: ephemral { pylurk.tls13.struct_lurk_tls13.Ephemeral.build( lurk_req[ 'payload' ][ 'ephemeral' ], _status='request', )}" )  
 #      print( f"  - build: {LURKMessage.build( lurk_req )}" )
 #    print( f"  - {LURKMessage.parse( LURKMessage.build( lurk_req ) )}" )
+#    print( f" lurk_req: {lurk_req}" )
+#    print( f" build: {LURKMessage.build( lurk_req )}" )
+#    print( f" bytes_resp : {self.bytes_resp( LURKMessage.build( lurk_req ) )}" )
     lurk_resp = LURKMessage.parse( self.bytes_resp( LURKMessage.build( lurk_req ) ) )
+#    print( f"resp: {lurk_resp}" )
     if lurk_resp[ 'status' ] != 'success':
-      raise ValueError( f"Lurk exchange error: {lurk_resp}" )
-    print( "--- E <- CS: Receiving {req_type} Response:" )
+      raise LURKError( lurk_resp[ 'status' ],  f"Lurk exchange error: {lurk_resp}" )
+    print( f"--- E <- CS: Receiving {req_type} Response:" )
 #    print( f"  - {LURKMessage.parse( LURKMessage.build( lurk_resp ) )}" )
     ## updating the session_id (sending)
     if '_init_' in req_type :
@@ -204,14 +209,15 @@ class StatelessTCPTls13LurkClient( BaseTls13LurkClient ) :
       Mostly fqdn - ip_address and port. 
       
     """
-    self.conf = conf 
-    self.conf_type = 'stateless_tcp'
-    self.check_conf_type()
+    super().__init__( conf=conf, cs=None ) 
+#    self.conf = conf 
+#    self.conf_type = 'stateless_tcp'
     self.server_address = self.get_server_address_from_conf( ) 
 
   def get_server_address_from_conf( self ):
     """ return host and port from the configuration file """
-    key_list = self.conf[ 'connectivity' ].keys()
+#    print( self.conf.keys() )
+#    key_list = self.conf[ 'connectivity' ].keys()
 #    if 'type' in key_list: 
 #      cs_type = self.conf[ 'connectivity' ][ 'type' ]
 #      if cs_type != 'stateless_tcp':
@@ -221,18 +227,23 @@ class StatelessTCPTls13LurkClient( BaseTls13LurkClient ) :
 #else:
 #      raise ConfigurationError( f"Cannot find type in configuration "\
 #        f"{self.__class__.__name__}. Expecting 'stateless_tcp'." ) 
-    
-    if 'fqdn' in key_list:
-      fqdn = self.conf[ 'connectivity' ][ 'fqdn' ]
+    host = None 
+    if 'fqdn' in self.conf.keys():
+      fqdn = self.conf[ 'fqdn' ]
       if fqdn not in [ None, '' ]:
+        ## maybe we coudl perform a DNS lookup
         host = fqdn
-    if host is None and 'ip_address' in key_list: 
-      host = self.conf[ 'connectivity' ][ 'ip_address' ]
-    if 'type' in key_list: 
-      port = self.conf[ 'connectivity' ][ 'port' ] 
+    if host is None and 'ip' in self.conf.keys(): 
+      host = self.conf[ 'ip' ]
     else:
-      raise ConfigurationError( f"Cannot find port in configuration "\
-        f"{self.__class__.__name__}." )
+      raise ConfigurationError( f"Cannot find 'ip' or 'fqdn' in "\
+        "configuration: {self.conf} for {self.__class__.__name__}." )
+    if 'port' in self.conf.keys(): 
+      port = self.conf[ 'port' ] 
+    else:
+      raise ConfigurationError( f"Cannot find 'port' in "\
+        "configuration: {self.conf} for {self.__class__.__name__}." )
+    return ( host, port )
 
 #  def resp( self, req_type, **kwargs ):
 #
@@ -247,24 +258,39 @@ class StatelessTCPTls13LurkClient( BaseTls13LurkClient ) :
       sock.sendall( bytes_req )
       return sock.recv(1024) 
 
+def get_lurk_client_instance( conf:dict=None, cs=None ):
+  """ returns a LURK Client instance as defined by the configuration """
 
-class Tls13LurkClient:
+  if conf is None:
+    conf = { 'connection_type' : 'lib_cs' }
+  con_type = conf[ 'connectivity_type' ] 
+  if con_type == 'lib_cs' :
+    if cs is None:
+      raise ValueError( f"cs MUST be provided " )  
+    lurk_client =  BaseTls13LurkClient( conf, cs=cs )
+  elif con_type == 'stateless_tcp':
+    lurk_client = StatelessTCPTls13LurkClient( conf )
+  else: 
+    raise ConfigurationError( f"unknown connection_type {con_type}" )
+  return lurk_client
 
-  def __init__( self, conf=None, cs=None ):
-    self.conf = conf 
-    if self.conf is None:
-      self.conf = { 'connection_type' : 'lib_cs' }
-    con_type = self.conf[ 'connectivity_type' ] 
-    if con_type == 'lib_cs' :
-      if cs is None:
-        raise ValueError( f"cs MUST be provided " )  
-      self.lurk_client = BaseTls13LurkClient( self.conf, cs=cs )
-      BaseTls13LurkClient.__init__( self,  self.conf, cs=cs )
-    elif con_type == 'stateless_tcp':
-      self.lurk_client = StatelessTCPTls13LurkClient( self.conf )
-      StatelessTCPTls13LurkClient.__init__( self, elf.conf )
-    else: 
-      raise ConfigurationError( f"unknown connection_type {con_type}" )
-
-  def resp( self, req_type, **kwargs ):
-    return self.lurk_client.resp( req_type, **kwargs )
+##class Tls13LurkClient:
+##
+##  def __init__( self, conf=None, cs=None ):
+##    self.conf = conf 
+##    if self.conf is None:
+##      self.conf = { 'connection_type' : 'lib_cs' }
+##    con_type = self.conf[ 'connectivity_type' ] 
+##    if con_type == 'lib_cs' :
+##      if cs is None:
+##        raise ValueError( f"cs MUST be provided " )  
+##      self.lurk_client = BaseTls13LurkClient( self.conf, cs=cs )
+##      BaseTls13LurkClient.__init__( self,  self.conf, cs=cs )
+##    elif con_type == 'stateless_tcp':
+##      self.lurk_client = StatelessTCPTls13LurkClient( self.conf )
+##      StatelessTCPTls13LurkClient.__init__( self, elf.conf )
+##    else: 
+##      raise ConfigurationError( f"unknown connection_type {con_type}" )
+##
+##  def resp( self, req_type, **kwargs ):
+##    return self.lurk_client.resp( req_type, **kwargs )

@@ -617,7 +617,8 @@ class TlsHandshake:
       del self.msg_list[ : upper_msg_index ]
     msg_bytes = bytearray()
     for msg in msg_list :
-      print( f"msg[ 'msg_type' ]: {msg}" ) 
+      print( f" appending to transcript {msg[ 'msg_type' ]}" ) 
+      print( f" appending to transcript {msg}" ) 
       msg_bytes.extend( tls.Handshake.build( msg, **ctx_struct ) )
 
     self.transcript.update( msg_bytes )

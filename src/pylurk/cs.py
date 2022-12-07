@@ -99,9 +99,9 @@ class BaseCryptoService:
           self.logger.exception( str( e ) )  
         resp[ 'status' ] = 'undefined_error' 
       resp[ 'payload' ] = { 'lurk_state' : self.lurk_state }
-#      print( f"--- CS: Returned Response by the CS:" )
-#      print( f"  - {LURKMessage.parse( LURKMessage.build( resp ) )}")
-#      print( f"--- crypto service: resp : {resp}")
+      print( f"--- CS: Returned Response by the CS:" )
+      print( f"  - {LURKMessage.parse( LURKMessage.build( resp ) )}")
+      print( f"--- crypto service: resp : {resp}")
       return LURKMessage.build( resp )
 
 import socketserver
@@ -114,8 +114,8 @@ class StatelessTCPHandler( socketserver.BaseRequestHandler):
   """
   def handle( self ):
     req_bytes = self.request.recv(1024)
-    resp = self.server.cs.server( req_bytes ) 
-    self.request.sendall( )
+    resp = self.server.cs.serve( req_bytes ) 
+    self.request.sendall( resp )
 
 class StatelessTCPCryptoService( socketserver.TCPServer):
 
@@ -133,7 +133,7 @@ class StatelessTCPCryptoService( socketserver.TCPServer):
     self.cs = BaseCryptoService( self.conf )
     server_address = self.get_server_address_from_conf( )  
     super().__init__( server_address, StatelessTCPHandler,\
-                      bind_and_activate=True )
+                       bind_and_activate=True )
 
   def get_server_address_from_conf( self ):
     """ return host and port from the configuration file """
@@ -164,27 +164,40 @@ class StatelessTCPCryptoService( socketserver.TCPServer):
 #        # interrupt the program with Ctrl-C
 #        server.serve_forever()  
 
-class CryptoService:
+def get_cs_instance( conf ):
+  """ returns appropriated Cryptographic Service instance from conf 
 
-  def __init__( self, conf ):
-    self.conf = conf
-    self.con_type = self.conf[ 'connectivity' ][ 'type' ] 
-    if self.con_type == 'lib_cs':
-      self.cs = BaseCryptoService( self.conf )
-      BaseCryptoService.__init__( self,  self.conf )
-    elif self.con_type == 'stateless_tcp':
-      self.cs = StatelessTCPCryptoService( self.conf )
-#      StatelessTCPCryptoService.__init__( self, self.conf )
-    else:
-      raise ConfigurationError( f"unknown connection_type {con_type}" )
+  """
+  con_type = conf[ 'connectivity' ][ 'type' ] 
+  if con_type == 'lib_cs':
+    cs = BaseCryptoService( conf )
+  elif con_type == 'stateless_tcp':
+    cs = StatelessTCPCryptoService( conf )
+  else:
+    raise ConfigurationError( f"unknown connection_type {con_type}" )
+  return cs
 
-  def serve( self, req_bytes ) -> bytes :
-    if self.con_type == 'lib_cs':
-      return self.cs.serve( req_bytes )
-    else: 
-##      self.serve_forever()
-      ImplementationError( f"'serve' can only be used for con_type {self.con_type}."\
-                            "Current con_type is set to {self.con_type}")
- 
-  def serve_forever( self ):
-    self.cs.serve_forver()
+##class CryptoService:
+##
+##  def __init__( self, conf ):
+##    self.conf = conf
+##    self.con_type = self.conf[ 'connectivity' ][ 'type' ] 
+##    if self.con_type == 'lib_cs':
+##      self.cs = BaseCryptoService( self.conf )
+##      BaseCryptoService.__init__( self,  self.conf )
+##    elif self.con_type == 'stateless_tcp':
+##      self.cs = StatelessTCPCryptoService( self.conf )
+###      StatelessTCPCryptoService.__init__( self, self.conf )
+##    else:
+##      raise ConfigurationError( f"unknown connection_type {con_type}" )
+##
+##  def serve( self, req_bytes ) -> bytes :
+##    if self.con_type == 'lib_cs':
+##      return self.cs.serve( req_bytes )
+##    else: 
+####      self.serve_forever()
+##      ImplementationError( f"'serve' can only be used for con_type {self.con_type}."\
+##                            "Current con_type is set to {self.con_type}")
+## 
+##  def serve_forever( self ):
+##    self.cs.serve_forver()

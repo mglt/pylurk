@@ -2,6 +2,7 @@ import os.path
 import binascii
 import json 
 from pylurk.struct_lurk import LURKMessage
+from pylurk.lurk.lurk_lurk import ConfigurationError
 
 def get_struct(l: list, key:str, value) -> dict :
   """ return the first element of the list that contains  key:value """
@@ -54,8 +55,14 @@ class TestVector:
 
     self.file = debug_conf[ 'test_vector_file' ]
     self.mode = debug_conf[ 'test_vector_mode' ] ## check, write
+    if self.mode not in [ 'check', 'record', None ]:
+      raise ConfigurationError( f"Unexpected mode. Acceptable values are: 'check'"\
+        f" 'record' or None. Provided configuration is {debug_conf}" )
+#    print( f"os.path.exists: {os.path.exists( self.file )}" )
+#    print( f"os.path.isfile: {os.path.isfile( self.file )}" )
 
-    if os.path.isfile( self.file ):
+    if os.path.exists( self.file ) and os.path.isfile( self.file )\
+       and os.stat( self.file ).st_size > 0:
       with open( self.file, 'rt', encoding='utf8' ) as f:
         self.db = json.load( f )
     else:
@@ -85,11 +92,11 @@ class TestVector:
 
   def check_bin( self, key:str, value:bytes ):
     """ raises an error when the key, value mismatches those of the test_vector """
-    
+#    print( f"DB: test_vector {self.db.keys()}" )    
     if key in self.db.keys() :
-##      print( f"DB: {type( self.db[ key ] )} - {self.db[ key ]}" )
+#      print( f"DB: {type( self.db[ key ] )} - {self.db[ key ]}" )
       ref_value = str_to_bytes( self.db[ key ] )
-##      print( f"ref_value {type( ref_value )} - {ref_value}" )
+#      print( f"ref_value {type( ref_value )} - {ref_value}" )
       if ref_value != b'' :
         if value != ref_value :
 #          i = 0
@@ -118,17 +125,35 @@ class TestVector:
 
   def record_bin( self, key:str, value:bytes ):
     value = bytes_to_str( value ) 
-    self.db[ key ] = value
+#    self.db[ key ] = value
     self.record_val( key, value )
 #    self.db[ key ] = self.value_to_json( value )
 #    with open( self.file, 'w', encoding='utf8' ) as f:
 #      json.dump( self.db, f, indent=2 )
 
   def record_val( self, key:str, value ):
-    with open( self.file, 'rt', encoding='utf8' ) as f:
-      tmp_db = json.load( f )
-      tmp_db[  key ] = self.db[ key ]
-    with open( self.file, 'w', encoding='utf8' ) as f:
+    """ record key value to the test_vector file 
+
+    The value is simultaneously added to the db as well as to the 
+    test_vector file. 
+    The reason to do so is to allow a common test_vector file being 
+    shared by the multiple modules as well as to avoid synchronizing 
+    the various db.  
+    """
+    ## updating the local db
+    self.db[ key ] = self.value_to_json( value )
+
+    ## updating the test_vector file
+    ## opens only when the file exists to read the existing records.
+    if os.path.exists( self.file ) and os.path.isfile( self.file )\
+       and os.stat( self.file ).st_size > 0:
+      with open( self.file, 'rt', encoding='utf8' ) as f:
+        tmp_db = json.load( f )
+#        tmp_db[  key ] = self.db[ key ]
+    else: 
+      tmp_db = {}
+    tmp_db[ key ] = self.value_to_json( value )
+    with open( self.file, 'wt', encoding='utf8' ) as f:
       json.dump( tmp_db, f, indent=2 )
 
   def trace_bin( self, key:str, value:bytes ):

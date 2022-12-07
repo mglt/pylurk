@@ -168,9 +168,18 @@ class KeyScheduler:
         self.process_handshake_and_master_secret( )
        
       if 'h_c' in secret_list or  'h_s' in secret_list:
-        print( f"Transcript ('h'): {handshake.msg_list} ")
+        print( f"-- INIT Transcript ('h'): {handshake.msg_type_list()} ")
+        
         t = handshake.transcript_hash( 'h' )
         s = self.handshake_secret
+        print( f"-- CURRENT Transcript ('h'): {t} ")
+        print( f"-- CURRENT Handshake_secret ('h'): {s} ")
+        print( f"-- self.test_vector.mode: {self.test_vector.mode}" ) 
+        print( f"-- self.test_vector.check: {self.test_vector.check}" ) 
+        print( f"-- self.test_vector.record: {self.test_vector.record}" ) 
+        print( f"-- self.test_vector.trace: {self.test_vector.trace}" ) 
+        print( f"-- self.test_vector.file: {self.test_vector.file}" ) 
+        print( f"-- self.test_vector.__class__: {self.test_vector.__class__.__name__}" ) 
         self.secrets[ 'h_c' ] = self.derive_secret( s, b'c hs traffic', t )
         self.secrets[ 'h_s' ] = self.derive_secret( s, b's hs traffic', t )
         if self.test_vector is not None:
@@ -195,6 +204,8 @@ class KeyScheduler:
       if 'r' in secret_list:
         t = handshake.transcript_hash( 'r' )
         s = self.master_secret
+        print( f"-- R CURRENT Transcript ('r'): {t} ")
+        print( f"-- R CURRENT Handshake_secret ('r'): {s} ")
         self.secrets[ 'r' ] = self.derive_secret( s, b'res master', t )
         if self.test_vector is not None:
           self.test_vector.handle_bin( f"transcript h ['r']", t )

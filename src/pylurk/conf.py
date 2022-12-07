@@ -176,6 +176,22 @@ class Configuration:
       raise ConfigurationError( f"unknown role {role}. Must be string or list." )
     self.conf[ ( 'tls13', 'v1' ) ] [ 'role' ] = role
 
+  def merge( self, branch:dict, master:dict=None ):
+    """ merge th ebranch conf to the master conf
+
+    The branch configuration is expected to provide a subset of the parameters
+    Those not provided are taken from the template.
+    """
+    if master is None :
+      master = self.conf
+    for key in branch.keys():
+      if isinstance( branch[ key ], dict ) is False :
+        master[ key ] = branch[ key ]
+      else:
+        master[ key ] = self.merge( branch[ key ], master[ key] )
+    return master
+
+
   def set_ecdhe_authentication( self, tls_sig_scheme:str, key_format='X509', conf_dir='./' ) :
     """generates, stores and configures self.conf for certificate based authentication
 
@@ -187,7 +203,10 @@ class Configuration:
     self.conf[ ( 'tls13', 'v1' ) ][ 'private_key' ] =  private_file
     self.conf[ ( 'tls13', 'v1' ) ][ 'public_key' ] = [ public_file ] 
     self.conf[ ( 'tls13', 'v1' ) ][ 'sig_scheme' ] = [ tls_sig_scheme ] 
-    
+
+ 
+
+
   def generate_keys( self, tls_sig_scheme:str ):
     """ updates conf to serve the mentioned signature 
 

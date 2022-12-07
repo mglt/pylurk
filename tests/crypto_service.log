@@ -1,3 +1,91 @@
 [2022-03-28 11:59:42,743 : cs.py:73 -                serve() ] ('invalid_extension', '(255, 1)') - (255, 1)
 [2022-03-28 11:59:42,744 : cs.py:73 -                serve() ] ('invalid_type', '255') - 255
 [2022-03-28 11:59:42,744 : cs.py:73 -                serve() ] ('invalid_status', '255') - 255
+[2022-12-05 12:04:39,642 : cs.py:99 -                serve() ] 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/cs.py", line 79, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1168, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1041, in serve
+    req = CInitClientHelloReq( payload, self.conf, self.ticket_db, test_vector=self.test_vector )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 864, in __init__
+    self.handshake.update_key_share( [ k.ks_entry() for k in self.ephemeral.client_ecdhe_key_list ])
+AttributeError: 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
+[2022-12-05 12:04:39,647 : cs.py:99 -                serve() ] 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/cs.py", line 79, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1168, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1041, in serve
+    req = CInitClientHelloReq( payload, self.conf, self.ticket_db, test_vector=self.test_vector )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 864, in __init__
+    self.handshake.update_key_share( [ k.ks_entry() for k in self.ephemeral.client_ecdhe_key_list ])
+AttributeError: 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
+[2022-12-05 12:06:15,529 : cs.py:99 -                serve() ] 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/cs.py", line 79, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1168, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1041, in serve
+    req = CInitClientHelloReq( payload, self.conf, self.ticket_db, test_vector=self.test_vector )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 864, in __init__
+    self.handshake.update_key_share( [ k.ks_entry() for k in self.ephemeral.client_ecdhe_key_list ])
+AttributeError: 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
+[2022-12-05 12:06:15,534 : cs.py:99 -                serve() ] 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/cs.py", line 79, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1168, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1041, in serve
+    req = CInitClientHelloReq( payload, self.conf, self.ticket_db, test_vector=self.test_vector )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 864, in __init__
+    self.handshake.update_key_share( [ k.ks_entry() for k in self.ephemeral.client_ecdhe_key_list ])
+AttributeError: 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
+[2022-12-05 12:08:47,885 : cs.py:99 -                serve() ] 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/cs.py", line 79, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1168, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1041, in serve
+    req = CInitClientHelloReq( payload, self.conf, self.ticket_db, test_vector=self.test_vector )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 864, in __init__
+    self.handshake.update_key_share( [ k.ks_entry() for k in self.ephemeral.client_ecdhe_key_list ])
+AttributeError: 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
+[2022-12-05 12:08:47,889 : cs.py:99 -                serve() ] 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/cs.py", line 79, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1168, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1041, in serve
+    req = CInitClientHelloReq( payload, self.conf, self.ticket_db, test_vector=self.test_vector )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 864, in __init__
+    self.handshake.update_key_share( [ k.ks_entry() for k in self.ephemeral.client_ecdhe_key_list ])
+AttributeError: 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
+[2022-12-05 12:57:06,206 : cs.py:99 -                serve() ] 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/cs.py", line 79, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1168, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1041, in serve
+    req = CInitClientHelloReq( payload, self.conf, self.ticket_db, test_vector=self.test_vector )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 864, in __init__
+    self.handshake.update_key_share( [ k.ks_entry() for k in self.ephemeral.client_ecdhe_key_list ])
+AttributeError: 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
+[2022-12-05 12:57:06,210 : cs.py:99 -                serve() ] 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
+Traceback (most recent call last):
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/cs.py", line 79, in serve
+    payload = self.tls13.payload_resp( req )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1168, in payload_resp
+    payload  = session.serve( req_payload, req_type, 'request')
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 1041, in serve
+    req = CInitClientHelloReq( payload, self.conf, self.ticket_db, test_vector=self.test_vector )
+  File "/home/emigdan/gitlab/pylurk.git/src/pylurk/tls13/lurk_tls13.py", line 864, in __init__
+    self.handshake.update_key_share( [ k.ks_entry() for k in self.ephemeral.client_ecdhe_key_list ])
+AttributeError: 'Ephemeral' object has no attribute 'client_ecdhe_key_list'
