@@ -49,7 +49,7 @@ import pylurk.tls13.crypto_suites
 
 ##from pylurk.tls13.struct_tls13 import PskIdentity, Certificate, SignatureScheme, Handshake, OfferedPsks
 #from pylurk.tls13.key_schedule import TlsHash, PSKWrapper
-from pylurk.conf import default_conf 
+import pylurk.conf 
 from pylurk.tls13.crypto_suites import SigScheme, CipherSuite
 from pylurk.lurk.lurk_lurk import LURKError, ImplementationError, ConfigurationError
 import pylurk
@@ -1141,7 +1141,8 @@ class TicketDB:
       return None
 
 class Tls13Ext:
-  def __init__(self, conf=default_conf, ticket_db=None, session_db=None, test_vector=None ):
+##def __init__(self, conf=default_conf, ticket_db=None, session_db=None, test_vector=None ):
+  def __init__(self, conf=pylurk.conf.conf_template, ticket_db=None, session_db=None, test_vector=None ):
     self.conf = conf 
     self.test_vector = test_vector
     if session_db is None:

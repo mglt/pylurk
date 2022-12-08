@@ -1,6 +1,7 @@
 import os.path
 import binascii
 import json 
+import pprint
 from pylurk.struct_lurk import LURKMessage
 from pylurk.lurk.lurk_lurk import ConfigurationError
 
@@ -63,7 +64,6 @@ class TestVector:
       self.file = debug_conf[ 'test_vector_file' ]
     except KeyError: 
       self.file = None
-      self.test_vector = False
 
     try: 
       self.mode = debug_conf[ 'test_vector_mode' ] ## check, write
@@ -109,17 +109,10 @@ class TestVector:
 
   def check_bin( self, key:str, value:bytes ):
     """ raises an error when the key, value mismatches those of the test_vector """
-#    print( f"DB: test_vector {self.db.keys()}" )    
     if key in self.db.keys() :
-#      print( f"DB: {type( self.db[ key ] )} - {self.db[ key ]}" )
       ref_value = str_to_bytes( self.db[ key ] )
-#      print( f"ref_value {type( ref_value )} - {ref_value}" )
       if ref_value != b'' :
         if value != ref_value :
-#          i = 0
-#          for b in value:
-#            print( f" {i}: {ref_value[ i ]} - {value[ i ]} {ref_value[ i ] == value[ i ] }" )
-#            i += 1
           raise ValueError(
             f"TestVector {key} check fails:\n"\
             f"{bytes_to_human( 'expected', ref_value)}\n"\
@@ -136,17 +129,11 @@ class TestVector:
     elif isinstance( struct, list ) is True:
       for i in range( len ( struct ) ):
         struct[ i ] = value_to_json( struct[ i ] ) 
-#    else: 
-#      return struct
     return struct
 
   def record_bin( self, key:str, value:bytes ):
     value = bytes_to_str( value ) 
-#    self.db[ key ] = value
     self.record_val( key, value )
-#    self.db[ key ] = self.value_to_json( value )
-#    with open( self.file, 'w', encoding='utf8' ) as f:
-#      json.dump( self.db, f, indent=2 )
 
   def record_val( self, key:str, value ):
     """ record key value to the test_vector file 
@@ -180,7 +167,7 @@ class TestVector:
     if isinstance( value , bytes ) or isinstance( value, bytearray ):
       print( f"  - {key} [{len(value)} bytes]: {value}" )
     else: 
-      print( f"  - {key}: {value}" )
+      pprint.pprint( f"  - {key}: {value}", width=80, sort_dicts=False )
 
   def handle_bin( self, key:str, value:bytes ):
     if self.check is True:
