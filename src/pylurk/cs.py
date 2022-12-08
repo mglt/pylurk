@@ -33,16 +33,16 @@ class BaseCryptoService:
         self.ticket_db = pylurk.tls13.lurk_tls13.TicketDB()
         self.session_db = pylurk.tls13.lurk_tls13.SessionDB()
 
-        self.test_vector = None
-        test_vector_conf = self.conf[ ext ][ 'debug' ]
-        if test_vector_conf[ 'test_vector' ] is True or\
-           test_vector_conf[ 'trace' ] is True :
-          self.test_vector = pylurk.debug.Tls13Debug( test_vector_conf ) 
+        self.debug = None
+        debug_conf = self.conf[ ext ][ 'debug' ]
+        if debug_conf[ 'test_vector' ] is True or\
+           debug_conf[ 'trace' ] is True :
+          self.debug = pylurk.debug.Tls13Debug( debug_conf ) 
 
         self.tls13 = pylurk.tls13.lurk_tls13.Tls13Ext( self.conf[ ext ],\
                        ticket_db=self.ticket_db,\
                        session_db=self.session_db,\
-                       test_vector=self.test_vector )
+                       debug=self.debug )
 
 #        raise ValueError( )
     try: 
@@ -72,8 +72,8 @@ class BaseCryptoService:
       if header[ 'status' ] != 'request' :
         raise LURKError( 'invalid_status' , f"{header[ 'status' ]}" )
       req = LURKMessage.parse( req_bytes )
-      if self.test_vector is not None:
-        self.test_vector.handle_lurk_msg( req )
+      if self.debug is not None:
+        self.debug.handle_lurk_msg( req )
       if ext == ( 'lurk', 'v1' ):
         payload = self.lurk.payload_resp( req ) 
       elif ext == ( 'tls13', 'v1' ):
@@ -83,9 +83,9 @@ class BaseCryptoService:
 #      resp[ 'payload' ] = { 'lurk_state' : self.lurk_state }
       resp[ 'payload' ] = payload
       resp[ 'status' ] = 'success'
-      if self.test_vector is not None:
+      if self.debug is not None:
 #        self.test_vector.handle_lurk_msg( req )
-        self.test_vector.handle_lurk_msg( resp)
+        self.debug.handle_lurk_msg( resp)
 #      print( f"--- resp: {resp}" )
 #
       return LURKMessage.build( resp )

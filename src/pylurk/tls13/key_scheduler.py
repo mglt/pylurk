@@ -25,7 +25,7 @@ from pylurk.tls13.crypto_suites import SigScheme, CipherSuite
 
 class KeyScheduler:
 
-  def __init__( self, tls_hash, shared_secret:bytes=None, psk:bytes=None, is_ext=False, test_vector=None ): 
+  def __init__( self, tls_hash, shared_secret:bytes=None, psk:bytes=None, is_ext=False, debug=None ): 
     self.secrets = { 'b' : None, 'e_s' : None, 'e_x' : None,\
                     'h_c' : None, 'h_s' : None, 'a_c' : None,\
                     'a_s' : None, 'x' : None, 'r' : None }
@@ -35,7 +35,7 @@ class KeyScheduler:
     self.tls_hash = pylurk.tls13.crypto_suites.hash_sanity_check( tls_hash )
     
     self.shared_secret = shared_secret
-    self.test_vector = test_vector
+    self.debug = debug
 
     ## initializaton of secret
     self.early_secret = None
@@ -80,9 +80,9 @@ class KeyScheduler:
             salt=b"\x00",
         )._extract( self.psk )
 
-    if self.test_vector is not None:
-      self.test_vector.handle_bin( "psk", self.psk )
-      self.test_vector.handle_bin( "early_secret",  self.early_secret )
+    if self.debug is not None:
+      self.debug.handle_bin( "psk", self.psk )
+      self.debug.handle_bin( "early_secret",  self.early_secret )
     
 
   def empty_transcript_h( self ):
@@ -122,10 +122,10 @@ class KeyScheduler:
       salt=master_secret_salt,
       info=None,
       length=self.tls_hash.digest_size )._extract( b"\x00" * self.tls_hash.digest_size )
-    if self.test_vector is not None:
-      self.test_vector.handle_bin( "empty_transcript", empty_transcript )
-      self.test_vector.handle_bin( "handshake_secret", self.handshake_secret )
-      self.test_vector.handle_bin( "master_secret", self.master_secret )
+    if self.debug is not None:
+      self.debug.handle_bin( "empty_transcript", empty_transcript )
+      self.debug.handle_bin( "handshake_secret", self.handshake_secret )
+      self.debug.handle_bin( "master_secret", self.master_secret )
 
 
   def process( self, secret_list:list, handshake:TlsHandshake ) -> None: 
@@ -143,21 +143,21 @@ class KeyScheduler:
         else:
           label = b'res binder'
         self.secrets[ 'b' ] = self.derive_secret( s, label, t )
-        if self.test_vector is not None:
-          self.test_vector.handle_bin( f"transcript h ['b']", t )
-          self.test_vector.handle_bin( "binder_key", self.secrets[ 'b' ] )
+        if self.debug is not None:
+          self.debug.handle_bin( f"transcript h ['b']", t )
+          self.debug.handle_bin( "binder_key", self.secrets[ 'b' ] )
       if 'e_s' in secret_list or 'e_x' in secret_list:
         t = handshake.transcript_hash( 'e' )
-        if self.test_vector is not None:
-          self.test_vector.handle_bin( f"transcript h ['e_s', 'e_x']", t )
+        if self.debug is not None:
+          self.debug.handle_bin( f"transcript h ['e_s', 'e_x']", t )
         if 'e_s' in secret_list:
           self.secrets[ 'e_s' ] = self.derive_secret( s, b'c e traffic', t )
-          if self.test_vector is not None:
-            self.test_vector.handle_bin( "client_early_traffic_secret", self.secrets[ 'e_s' ] )
+          if self.debug is not None:
+            self.debug.handle_bin( "client_early_traffic_secret", self.secrets[ 'e_s' ] )
         if 'e_x' in secret_list:
           self.secrets[ 'e_x' ] = self.derive_secret( s, b'e exp master', t )
-          if self.test_vector is not None:
-            self.test_vector.handle_bin( "early_exporter_master_secret", self.secrets[ 'e_x' ] )
+          if self.debug is not None:
+            self.debug.handle_bin( "early_exporter_master_secret", self.secrets[ 'e_x' ] )
     # handshake and other secrets  
     if 'h_c' in secret_list or  'h_s' in secret_list or \
        'a_c' in secret_list or  'a_s' in secret_list or \
@@ -174,32 +174,32 @@ class KeyScheduler:
         s = self.handshake_secret
         print( f"-- CURRENT Transcript ('h'): {t} ")
         print( f"-- CURRENT Handshake_secret ('h'): {s} ")
-        print( f"-- self.test_vector.mode: {self.test_vector.mode}" ) 
-        print( f"-- self.test_vector.check: {self.test_vector.check}" ) 
-        print( f"-- self.test_vector.record: {self.test_vector.record}" ) 
-        print( f"-- self.test_vector.trace: {self.test_vector.trace}" ) 
-        print( f"-- self.test_vector.file: {self.test_vector.file}" ) 
-        print( f"-- self.test_vector.__class__: {self.test_vector.__class__.__name__}" ) 
+        print( f"-- self.debug.mode: {self.debug.mode}" ) 
+        print( f"-- self.debug.check: {self.debug.check}" ) 
+        print( f"-- self.debug.record: {self.debug.record}" ) 
+        print( f"-- self.debug.trace: {self.debug.trace}" ) 
+        print( f"-- self.debug.file: {self.debug.file}" ) 
+        print( f"-- self.debug.__class__: {self.debug.__class__.__name__}" ) 
         self.secrets[ 'h_c' ] = self.derive_secret( s, b'c hs traffic', t )
         self.secrets[ 'h_s' ] = self.derive_secret( s, b's hs traffic', t )
-        if self.test_vector is not None:
-          self.test_vector.handle_bin( f"transcript h ['h_c', 'h_s']", t )
-          self.test_vector.handle_bin( "client_handshake_traffic_secret", self.secrets[ 'h_c' ] )
-          self.test_vector.handle_bin( "server_handshake_traffic_secret", self.secrets[ 'h_s' ] )
+        if self.debug is not None:
+          self.debug.handle_bin( f"transcript h ['h_c', 'h_s']", t )
+          self.debug.handle_bin( "client_handshake_traffic_secret", self.secrets[ 'h_c' ] )
+          self.debug.handle_bin( "server_handshake_traffic_secret", self.secrets[ 'h_s' ] )
 
       if 'a_c' in secret_list or  'a_s' in secret_list or 'x' in secret_list:
         t = handshake.transcript_hash( 'a' )
         s = self.master_secret
         self.secrets[ 'a_c' ] = self.derive_secret( s, b'c ap traffic', t )
         self.secrets[ 'a_s' ] = self.derive_secret( s, b's ap traffic', t )
-        if self.test_vector is not None:
-          self.test_vector.handle_bin( f"transcript h ['a_c', 'a_s']", t )
-          self.test_vector.handle_bin( "client_application_traffic_secret_0", self.secrets[ 'a_c' ] )
-          self.test_vector.handle_bin( "server_application_traffic_secret_0", self.secrets[ 'a_s' ] )
+        if self.debug is not None:
+          self.debug.handle_bin( f"transcript h ['a_c', 'a_s']", t )
+          self.debug.handle_bin( "client_application_traffic_secret_0", self.secrets[ 'a_c' ] )
+          self.debug.handle_bin( "server_application_traffic_secret_0", self.secrets[ 'a_s' ] )
         if 'x' in secret_list:
           self.secrets[ 'x' ] = self.derive_secret( s, b'exp master', t )
-          if self.test_vector is not None:
-            self.test_vector.handle_bin( "exporter_master_secret", self.secrets[ 'x' ] )
+          if self.debug is not None:
+            self.debug.handle_bin( "exporter_master_secret", self.secrets[ 'x' ] )
       
       if 'r' in secret_list:
         t = handshake.transcript_hash( 'r' )
@@ -207,9 +207,9 @@ class KeyScheduler:
         print( f"-- R CURRENT Transcript ('r'): {t} ")
         print( f"-- R CURRENT Handshake_secret ('r'): {s} ")
         self.secrets[ 'r' ] = self.derive_secret( s, b'res master', t )
-        if self.test_vector is not None:
-          self.test_vector.handle_bin( f"transcript h ['r']", t )
-          self.test_vector.handle_bin( "resumption_master_secret", self.secrets[ 'r' ] )
+        if self.debug is not None:
+          self.debug.handle_bin( f"transcript h ['r']", t )
+          self.debug.handle_bin( "resumption_master_secret", self.secrets[ 'r' ] )
 
   def finished_key( self, role ):
     if role == 'server' :

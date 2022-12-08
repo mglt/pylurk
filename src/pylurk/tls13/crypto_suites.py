@@ -313,9 +313,9 @@ class CipherSuite:
       return encrypted_reccord, clear_text_record_bytes, inner_plain_text
     return encrypted_reccord
 
-  def debug( self, test_vector, description="" ):
-    test_vector.handle_bin( f"{description}_write_key", self.write_key )
-    test_vector.handle_bin( f"{description}_write_iv", self.write_iv )
+  def debug( self, debug, description="" ):
+    debug.handle_bin( f"{description}_write_key", self.write_key )
+    debug.handle_bin( f"{description}_write_iv", self.write_iv )
 
 
 class ECDHEKey():

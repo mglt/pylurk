@@ -91,13 +91,13 @@ class Tag:
 class Ephemeral:
 
   def __init__(self, ephemeral:dict, mtype, tls13_conf, handshake=None,\
-               client_hello_ephemeral=None, test_vector=None ) -> None:
+               client_hello_ephemeral=None, debug=None ) -> None:
     """ initializes the object based on the structure """
 
     self.conf = tls13_conf
     self.ephemeral = ephemeral
     self.mtype = mtype
-    self.test_vector = test_vector
+    self.debug = debug
     ## The s_init_early_data only requires to store the cliemt_shares
     if ephemeral != {}:
       self.method = self.ephemeral['method']
@@ -177,18 +177,18 @@ class Ephemeral:
     ecdhe_key = pylurk.tls13.crypto_suites.ECDHEKey()
     ecdhe_key.group = group
     print( f" --- ecdhe_key: {ecdhe_key}" )
-    print( f" --- self.test_vector: {self.test_vector}" )
+    print( f" --- self.debug: {self.debug}" )
     print( f" --- ecdhe_key.private: {ecdhe_key.private}" )
     print( f" --- ecdhe_key.public: {ecdhe_key.public}" )
     ## try to read value from test_vector file
-    if self.test_vector is not None and self.test_vector.test_vector is True:
+    if self.debug is not None and self.debug.test_vector is True:
       print( f"--- I AM HERE, but I SHOULD NOT BE HERE")
       key =f"{self.conf[ 'role' ]}_{group}_ecdhe_private"
-      if key in self.test_vector.db.keys():
-        ecdhe_key.generate_from_pem( self.test_vector.read_bin( key ) )
+      if key in self.debug.db.keys():
+        ecdhe_key.generate_from_pem( self.debug.read_bin( key ) )
 #        print( f"--- ecdhe: echde_key (gen_from_pem) {self.test_vector.read_bin( key )}" )
-      if self.test_vector.check is True:
-        self.test_vector.check_bin( ecdhe_key.pkcs8(), self.test_vector.read_bin( key ) )   
+      if self.debug.check is True:
+        self.debug.check_bin( ecdhe_key.pkcs8(), self.debug.read_bin( key ) )   
     elif ecdhe_key.private is None and ecdhe_key.public is None:
 #      raise ValueError("unable to read ECDHEKey")
       ecdhe_key.generate( group )
@@ -557,7 +557,7 @@ class SessionTicket:
 
 class SInitCertVerifyReq:
 
-  def __init__(self, req, tls13_conf, test_vector=None ):
+  def __init__(self, req, tls13_conf, debug=None ):
     self.conf = tls13_conf
     self.mtype = 's_init_cert_verify'
     self.next_mtype = 's_new_ticket'
@@ -578,7 +578,7 @@ class SInitCertVerifyReq:
       self.handshake.update_key_share( self.ephemeral.server_share )
     self.scheduler = KeyScheduler( self.handshake.get_tls_hash(), \
                                    shared_secret=self.ephemeral.shared_secret )
-    self.scheduler.process( self.secret_request.of([ 'h_c', 'h_s' ] ), self.handshake, test_vector=test_vector )
+    self.scheduler.process( self.secret_request.of([ 'h_c', 'h_s' ] ), self.handshake, debug=debug )
     self.handshake.update_certificate( self.cert )
     self.handshake.update_certificate_verify( )
     ## get sig from freshly generated certificate_verify 
@@ -596,7 +596,7 @@ class SInitCertVerifyReq:
 class SNewTicketReq:
 
   def __init__( self, req, tls13_conf, handshake, scheduler, session_id, \
-                ticket_counter, test_vector=None ):
+                ticket_counter, debug=None ):
     self.conf = tls13_conf
     self.mtype = 's_new_ticket'
     self.handshake = handshake
@@ -641,7 +641,7 @@ class SNewTicketReq:
   
 class SInitEarlySecretReq:
 
-  def __init__( self, req, tls13_conf, test_vector=None ):
+  def __init__( self, req, tls13_conf, debug=None ):
     self.conf = tls13_conf
     self.mtype = 's_init_early_secret'
     self.next_mtype = 's_hand_and_app_secret'
@@ -667,7 +667,7 @@ class SInitEarlySecretReq:
     if self.handshake.is_ks_proposed( ) is True:
       self.ephemeral = Ephemeral( {}, self.mtype, self.conf, self.handshake )
     self.scheduler = KeyScheduler( self.session_ticket.tls_hash, \
-                                   psk=self.session_ticket.psk, is_ext=False, test_vector=test_vector )
+                                   psk=self.session_ticket.psk, is_ext=False, debug=debug )
 #    self.last_exchange = None 
     self.session_id = SessionID( req[ 'session_id' ] )
     self.scheduler.process( self.secret_request.of([ 'b', 'e_s', 'e_x' ] ), self.handshake )
@@ -677,7 +677,7 @@ class SInitEarlySecretReq:
 class SHandAndAppSecretReq: 
 
   def __init__( self, req, tls13_conf, handshake, scheduler, session_id,\
-                session_ticket, freshness, client_hello_ephemeral, test_vector=None ):
+                session_ticket, freshness, client_hello_ephemeral, debug=None ):
     self.conf = tls13_conf
     self.mtype = 's_hand_and_app_secret'
     self.next_mtype = 's_new_ticket'
@@ -710,7 +710,7 @@ class SHandAndAppSecretReq:
 
 class SSession:
 
-  def __init__( self, tls13_conf, session_db=None, ticket_db=None, test_vector=None ): # type Conf
+  def __init__( self, tls13_conf, session_db=None, ticket_db=None, debug=None ): # type Conf
     """ handles the various requests associated to a given session """ 
     self.conf = tls13_conf 
     self.next_mtype = None
@@ -723,7 +723,7 @@ class SSession:
     self.ticket_counter = 0
     self.session_db = session_db
     self.ticket_db = ticket_db
-    self.test_vector=test_vector
+    self.debug=debug
 
   def is_expected_message( self, mtype, status ):
     """ check the message type is expected """
@@ -780,16 +780,16 @@ class SSession:
 
 class CInitClientFinishedReq:
 
-  def __init__(self, req, tls13_conf, test_vector=None ):
+  def __init__(self, req, tls13_conf, debug=None ):
     self.conf = tls13_conf
-    self.test_vector = test_vector
+    self.debug = debug
     self.mtype = 'c_init_client_finished'
     self.next_mtype = 'c_post_hand_auth'
    
 #    freshness = Freshness( req[ 'freshness' ] )
     
     psk = req[ 'psk' ]
-    self.handshake = TlsHandshake( 'client', self.conf, test_vector=self.test_vector )
+    self.handshake = TlsHandshake( 'client', self.conf, debug=self.debug )
     self.handshake.msg_list.extend( req[ 'handshake' ] )
     self.handshake.sanity_check( self.mtype )
     server_cert = LurkCert( req[ 'server_certificate' ], self.mtype, self.conf, \
@@ -807,7 +807,7 @@ class CInitClientFinishedReq:
     ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf, self.handshake )
     print( f"ephemeral.shared_secret: {ephemeral.shared_secret}")
     self.scheduler = KeyScheduler( self.handshake.get_tls_hash(), \
-                                   shared_secret=ephemeral.shared_secret, psk=psk, test_vector=test_vector )
+                                   shared_secret=ephemeral.shared_secret, psk=psk, debug=debug )
     ### the current handshake.msg_list is up to early data
     ## we need to make sur we limit ourselves to the ClientHello...ServerHello
     self.scheduler.process( [ 'h_c', 'h_s' ], self.handshake )
@@ -830,7 +830,7 @@ class CInitClientFinishedReq:
 
 class CPostHandAuthReq:
 
-  def __init__(self, req, tls13_conf, handshake, scheduler, session_id, post_hand_auth_counter, test_vector=None ):
+  def __init__(self, req, tls13_conf, handshake, scheduler, session_id, post_hand_auth_counter, debug=None ):
     self.conf = tls13_conf
     self.mtype = 'c_post_hand_auth'
     self.next_mtype = 'c_post_hand_auth'
@@ -855,18 +855,18 @@ class CPostHandAuthReq:
 
 class CInitClientHelloReq:
 
-  def __init__(self, req, tls13_conf, ticket_db, test_vector=None ):
+  def __init__(self, req, tls13_conf, ticket_db, debug=None ):
     self.conf = tls13_conf
-    self.test_vector = test_vector
+    self.debug = debug
     self.mtype = 'c_init_client_hello'
     self.next_mtype = [ 'c_server_hello', 'c_client_finished' ]
    
-    self.handshake = TlsHandshake( 'client', self.conf, test_vector=self.test_vector )
+    self.handshake = TlsHandshake( 'client', self.conf, debug=self.debug )
     self.handshake.msg_list.extend( req[ 'handshake' ] )
     self.handshake.update_random( Freshness( req[ 'freshness' ] ) )
     ## keyshare
     self.ephemeral = Ephemeral( { 'method' : 'cs_generated' }, self.mtype, \
-      self.conf, self.handshake, test_vector=test_vector )
+      self.conf, self.handshake, debug=debug )
 
     self.handshake.update_key_share( [ k.ks_entry() for k in self.ephemeral.client_ecdhe_key_list ])
     ## pre-shared-key extension
@@ -917,7 +917,7 @@ class CInitClientHelloReq:
 class CServerHelloReq:
 
   def __init__(self, req, tls13_conf, handshake, client_hello_ephemeral,\
-               scheduler_list, session_id, test_vector=None ):
+               scheduler_list, session_id, debug=None ):
     self.conf = tls13_conf
     self.mtype = 'c_server_hello'
     self.next_mtype = 'c_client_finished'
@@ -933,15 +933,15 @@ class CServerHelloReq:
     ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, \
                                 self.conf, self.handshake )
     ephemeral.client_shared_secret( client_hello_ephemeral )
-    if test_vector is not None:
-      test_vector.handle_bin( 'ecdhe_shared_secret', ephemeral.shared_secret )
+    if debug is not None:
+      debug.handle_bin( 'ecdhe_shared_secret', ephemeral.shared_secret )
     if self.handshake.is_psk_agreed( ):
       selected_identity = self.handshake.server_hello_ext_data( 'pre_shared_key' )
       self.scheduler = scheduler_list[ selected_identity ]
       self.scheduler.shared_secret = ephemeral.shared_secret
     else: 
       self.scheduler = KeyScheduler( self.handshake.get_tls_hash(), \
-                                     shared_secret=ephemeral.shared_secret, test_vector=test_vector )
+                                     shared_secret=ephemeral.shared_secret, debug=debug )
     self.scheduler.process( [ 'h_c', 'h_s' ], self.handshake )
     self.session_id = session_id
     self.resp = { 'session_id' : session_id.e, 
@@ -950,7 +950,7 @@ class CServerHelloReq:
 
 class CClientFinishedReq:
 
-  def __init__(self, req, tls13_conf, handshake, scheduler, session_id, test_vector=None ):
+  def __init__(self, req, tls13_conf, handshake, scheduler, session_id, debug=None ):
     self.conf = tls13_conf
     self.mtype = 'c_client_finished'
     self.next_mtype = [ 'c_post_hand_auth', 'c_register_ticket' ]
@@ -1005,7 +1005,7 @@ class CClientFinishedReq:
 class CRegisterTicketsReq:
 
   def __init__( self, req, tls13_conf, ticket_db, scheduler,\
-                handshake, ticket_counter, session_id, test_vector=None ):
+                handshake, ticket_counter, session_id, debug=None ):
     self.conf = tls13_conf
     self.mtype = 'c_register_tickets'
     self.next_mtype = [ 'c_post_hand_auth', 'c_register_ticket' ]
@@ -1028,7 +1028,7 @@ class CSession(SSession) :
     ## check request and next_
     self.is_expected_message( mtype, status )
     if mtype == 'c_init_client_finished':
-      req = CInitClientFinishedReq( payload, self.conf, test_vector=self.test_vector )
+      req = CInitClientFinishedReq( payload, self.conf, debug=self.debug )
       self.scheduler = req.scheduler
       self.handshake = req.handshake
       self.session_id = req.session_id
@@ -1036,11 +1036,11 @@ class CSession(SSession) :
       self.post_hand_auth_counter = 0
     elif mtype == 'c_post_hand_auth':
       req = CPostHandAuthReq( payload, self.conf, self.handshake, self.scheduler,\
-                           self.session_id, self.post_hand_auth_counter, test_vector=self.test_vector )
+                           self.session_id, self.post_hand_auth_counter, debug=self.debug )
       self.last_exchange = req.last_exchange
       self.post_hand_auth_counter = req.post_hand_auth_counter
     elif mtype == 'c_init_client_hello':
-      req = CInitClientHelloReq( payload, self.conf, self.ticket_db, test_vector=self.test_vector )
+      req = CInitClientHelloReq( payload, self.conf, self.ticket_db, debug=self.debug )
       self.scheduler_list = req.scheduler_list
       self.handshake = req.handshake
       self.session_id = req.session_id
@@ -1048,13 +1048,13 @@ class CSession(SSession) :
       self.scheduler_list = req.scheduler_list
     elif mtype == 'c_server_hello' :
       req = CServerHelloReq( payload, self.conf, self.handshake, self.ephemeral,\
-                             self.scheduler_list, self.session_id, test_vector=self.test_vector )
+                             self.scheduler_list, self.session_id, debug=self.debug )
       ## maybe we can remove these two lines
       self.handshake = req.handshake
       self.scheduler = req.scheduler
     elif mtype == 'c_client_finished' :
       req = CClientFinishedReq( payload, self.conf, self.handshake, self.scheduler,\
-                             self.session_id, test_vector=self.test_vector )
+                             self.session_id, debug=self.debug )
       ## saving context for the register_tickets
       self.transcript_r = req.handshake.transcript_r
       self.cipher_suite = req.handshake.cipher_suite
@@ -1067,7 +1067,7 @@ class CSession(SSession) :
     elif mtype == 'c_register_tickets' :
       req = CRegisterTicketsReq( payload, self.conf, self.ticket_db,\
               self.scheduler, self.handshake,\
-              self.ticket_counter, self.session_id, test_vector=self.test_vector )
+              self.ticket_counter, self.session_id, debug=self.debug )
       self.ticket_counter = req.ticket_counter
     else: 
       raise LURKError( 'invalid_request', "unexpected request {mtype}" )
@@ -1091,9 +1091,9 @@ class SessionDB:
 
 class TicketDB:
 
-  def __init__( self, test_vector=None ):
+  def __init__( self, debug=None ):
     self.db = {}
-    self.test_vector=test_vector
+    self.debug=debug
 
   def key( self, new_session_ticket ):
     return new_session_ticket[ 'ticket' ]
@@ -1106,8 +1106,8 @@ class TicketDB:
                     'psk_type' : 'resumption',
                     'cipher_suite' : tls_handshake.cipher_suite, 
                     'registration_time' : time.time() }
-    if self.test_vector is not None:
-      self.test_vector.trace_val( "Registering in CS Tickert DB", self.db[ key ] )
+    if self.debug is not None:
+      self.debug.trace_val( "Registering in CS Tickert DB", self.db[ key ] )
 
   def update_ticket_info( self, ticket_info ):
     """ update ticket_info with obfuscated_ticket_age 
@@ -1137,15 +1137,15 @@ class TicketDB:
 
 class Tls13Ext:
 ##def __init__(self, conf=default_conf, ticket_db=None, session_db=None, test_vector=None ):
-  def __init__(self, conf=pylurk.conf.conf_template, ticket_db=None, session_db=None, test_vector=None ):
+  def __init__(self, conf=pylurk.conf.conf_template, ticket_db=None, session_db=None, debug=None ):
     self.conf = conf 
-    self.test_vector = test_vector
+    self.debug = debug
     if session_db is None:
       self.session_db = SessionDB()
     else: 
       self.session_db = session_db
     if ticket_db is None:
-      self.ticket_db = TicketDB( test_vector=self.test_vector)
+      self.ticket_db = TicketDB( debug=self.debug)
     else: 
       self.ticket_db = ticket_db
       
@@ -1160,11 +1160,11 @@ class Tls13Ext:
         if req_type[ :7 ] == 's_init_': 
           session = SSession( self.conf, session_db=self.session_db,\
                               ticket_db=self.ticket_db, \
-                              test_vector=self.test_vector )
+                              debug=self.debug )
         elif req_type[ :7 ] == 'c_init_' : 
           session = CSession( self.conf, session_db=self.session_db,\
                               ticket_db=self.ticket_db,\
-                              test_vector=self.test_vector )
+                              debug=self.debug )
         else:
           raise LURKError( 'invalid_type', f"{req_type}" )
         ##print( f" --- reqq: {req}" )

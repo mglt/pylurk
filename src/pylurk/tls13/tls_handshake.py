@@ -46,14 +46,14 @@ import pylurk.tls13.key_scheduler
 
 class TlsHandshake:
 
-  def __init__( self, role, tls13_conf=None, test_vector=None ) -> None:
+  def __init__( self, role, tls13_conf=None, debug=None ) -> None:
     self.role = role #tls13_conf[ 'role' ]  ## list of role
     ## mostly makes sense for the server side
     self.conf = tls13_conf
     if self.conf != None :
       self.finger_print_dict = self.conf[ '_finger_print_dict' ]
       self.private_key = self.conf[ '_private_key' ]
-    self.test_vector = test_vector
+    self.debug = debug
     ## list of structures representing the TLS handshake messages
     self.msg_list = []
     self.cipher_suite = None 
@@ -415,8 +415,8 @@ class TlsHandshake:
     for msg in self.msg_list[ : ch_index + 1]:
       truncated_client_hello_bytes += tls.Handshake.build( msg )
     truncated_client_hello_bytes = truncated_client_hello_bytes[ : -binder_list_len - 2 ] ## removing list length
-    if self.test_vector is not None:
-      self.test_vector.handle_bin( 'truncated_client_hello', truncated_client_hello_bytes )
+    if self.debug is not None:
+      self.debug.handle_bin( 'truncated_client_hello', truncated_client_hello_bytes )
     return truncated_client_hello_bytes
 
   def compute_binder( self, tls_hash, binder_finished_key, truncated_client_hello_bytes, binder_index='' ) -> bytes:
@@ -444,14 +444,14 @@ class TlsHandshake:
     hmac = HMAC( binder_finished_key, tls_hash )
     hmac.update( transcript_hash )
     binder = hmac.finalize()
-    if self.test_vector is not None:
+    if self.debug is not None:
 #      test_vector.handle_bin( 'truncated_client_hello' , truncated_client_hello_bytes ) 
       if binder_index != '':
         binder_index = f"({binder_index})"
-      self.test_vector.handle_bin( f"compute_binder: {binder_index} binder_finished_key" , binder_finished_key )
+      self.debug.handle_bin( f"compute_binder: {binder_index} binder_finished_key" , binder_finished_key )
       print( f"compute_binder: {binder_index} tls_hash:  {tls_hash}" )
-      self.test_vector.handle_bin( f"Transcript( truncated_client_hello ) {binder_index}" , transcript_hash )
-      self.test_vector.handle_bin( f"binder {binder_index}" , binder )
+      self.debug.handle_bin( f"Transcript( truncated_client_hello ) {binder_index}" , transcript_hash )
+      self.debug.handle_bin( f"binder {binder_index}" , binder )
 
     return binder
 
@@ -466,16 +466,16 @@ class TlsHandshake:
         is_ext = False
       else: 
         is_ext = True 
-      ks = pylurk.tls13.key_scheduler.KeyScheduler( tls_hash, psk=psk, is_ext=is_ext, test_vector=self.test_vector )
+      ks = pylurk.tls13.key_scheduler.KeyScheduler( tls_hash, psk=psk, is_ext=is_ext, debug=self.debug )
       ks.process( [ 'b' ] , None )
       ks_list.append( ks ) 
-    if self.test_vector is not None:
+    if self.debug is not None:
       for ticket_info in ticket_info_list :
         index = ticket_info_list.index( ticket_info ) 
-        self.test_vector.trace_val( f"ticket ({index})", ticket_info )   
+        self.debug.trace_val( f"ticket ({index})", ticket_info )   
         ks = ks_list[ index ]
-        self.test_vector.handle_bin( f"binder_key ({index})", ks.secrets[ 'b' ] )  
-        self.test_vector.handle_bin( f"binder_finished_key ({index})", ks.finished_key( role='binder') )  
+        self.debug.handle_bin( f"binder_key ({index})", ks.secrets[ 'b' ] )  
+        self.debug.handle_bin( f"binder_finished_key ({index})", ks.finished_key( role='binder') )  
     return ks_list 
 
   def update_binders( self, ticket_info_list, binder_finished_key_list )-> None :
@@ -542,7 +542,7 @@ class TlsHandshake:
     else:
         raise ImplementationError( f"unknown role {self.role}" )
     content = b'\x20' * 64 + ctx_string + b'\x00' + transcript_h 
-    self.test_vector.handle_bin( 'content to be signed', content )
+    self.debug.handle_bin( 'content to be signed', content )
     return content
 
   def update_certificate_verify( self ) :
@@ -767,8 +767,8 @@ class TlsHandshake:
       if transcript_type == 'r' :
         self.transcript_r = transcript
 
-    if self.test_vector is not None:
-      self.test_vector.handle_bin( f"Transcript Hash [mode {transcript_type}]", transcript ) 
+    if self.debug is not None:
+      self.debug.handle_bin( f"Transcript Hash [mode {transcript_type}]", transcript ) 
     return transcript 
 
   def get_ticket( self, selected_identity:int=None ):
