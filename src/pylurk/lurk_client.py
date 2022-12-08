@@ -263,7 +263,7 @@ def get_lurk_client_instance( conf:dict=None, cs=None ):
 
   if conf is None:
     conf = { 'connection_type' : 'lib_cs' }
-  con_type = conf[ 'connectivity_type' ] 
+  con_type = conf[ 'connectivity' ] [ 'type' ] 
   if con_type == 'lib_cs' :
     if cs is None:
       raise ValueError( f"cs MUST be provided " )  

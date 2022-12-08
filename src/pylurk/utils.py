@@ -52,31 +52,48 @@ def print_bin( description:str, bit_string:bytes ):
 class TestVector:
 
   def __init__( self, debug_conf ):
+   
+    self.test_vector = False
+    try:
+      self.test_vector = debug_conf[ 'test_vector' ]
+    except KeyError:
+      pass
 
-    self.file = debug_conf[ 'test_vector_file' ]
-    self.mode = debug_conf[ 'test_vector_mode' ] ## check, write
+    try:  
+      self.file = debug_conf[ 'test_vector_file' ]
+    except KeyError: 
+      self.file = None
+      self.test_vector = False
+
+    try: 
+      self.mode = debug_conf[ 'test_vector_mode' ] ## check, write
+    except KeyError: 
+      self.mode = None
     if self.mode not in [ 'check', 'record', None ]:
       raise ConfigurationError( f"Unexpected mode. Acceptable values are: 'check'"\
         f" 'record' or None. Provided configuration is {debug_conf}" )
+    if self.mode is None or self.file is None:
+      self.test_vector = False
+      self.file = None
+      self.mode = None
+
 #    print( f"os.path.exists: {os.path.exists( self.file )}" )
 #    print( f"os.path.isfile: {os.path.isfile( self.file )}" )
+    self.db = {}
 
-    if os.path.exists( self.file ) and os.path.isfile( self.file )\
-       and os.stat( self.file ).st_size > 0:
-      with open( self.file, 'rt', encoding='utf8' ) as f:
-        self.db = json.load( f )
-    else:
-      self.db = {}
+    if self.file is not None:
+      if os.path.exists( self.file ) and os.path.isfile( self.file )\
+         and os.stat( self.file ).st_size > 0:
+        with open( self.file, 'rt', encoding='utf8' ) as f:
+          self.db = json.load( f )
 
     self.check = False
-    if debug_conf[ 'test_vector' ] is True:
-      if debug_conf[ 'test_vector_mode' ] == 'check':
+    if self.test_vector is True and self.mode == 'check':
         self.check = True
 
     self.record = False
-    if debug_conf[ 'test_vector' ] is True:
-      if debug_conf[ 'test_vector_mode' ] == 'record':
-        self.record = True
+    if self.test_vector is True and self.mode == 'record':
+      self.record = True
 
     self.trace = debug_conf[ 'trace' ]
 

@@ -62,6 +62,7 @@ web_profile = {
 
 conf_template = {
   'profile' : 'explicit configuration',
+  'description' : "LURK Cryptographic Service configuration template",
 #  'mode' : 'debug',
   'connectivity' : {
       'type' : "udp",  # "local", "stateless_tcp", "tcp", "tcp+tls", http, https
@@ -192,7 +193,7 @@ class Configuration:
     return master
 
 
-  def set_ecdhe_authentication( self, tls_sig_scheme:str, key_format='X509', conf_dir='./' ) :
+  def set_ecdhe_authentication( self, tls_sig_scheme:str='ed25519', key_format='X509', conf_dir='./' ) :
     """generates, stores and configures self.conf for certificate based authentication
 
     Args:
@@ -408,6 +409,171 @@ class Configuration:
       cert_entry_list.append( { 'cert' : public_bytes, 'extensions': [] } ) ## certificateEntry
     return cert_entry_list 
 
+  def set_tls13_keys( self, private_key_file=None, public_key_file=None, \
+                      sig_scheme:str='ed25519', key_format='X509' ):
+    """ configures the cryptographic material for the TLS 1.3 extension 
+
+    This function generates the appropriated cryptographic material when
+    needed. 
+    This includes when the material is not specified or when not coherent.
+       
+    """
+    ## Trying to derive directory from the files being provided.
+    try:
+       conf_dir = os.path.dirname( private_key_file )
+    except:
+      try:
+        conf_dir = os.path.dirname( public_key_file )
+      except:
+        conf_dir = './'
+    ## ensures that there is a private key
+    try:  
+      private_key = self.load_private_key( private_key_file )
+    except :
+      ## set_ecdhe_authentication( self, tls_sig_scheme:str='ed25519', \
+      ##  key_format='X509', conf_dir=conf_dir ) :
+      private_key, public_key = self.generate_keys( sig_scheme )
+      private_file, public_file = self.store_keys( private_key, key_format, conf_dir )
+#      if key_scope == 'tls_signing_key' :
+#        self.conf[ ( 'tls13', 'v1' ) ][ 'private_key' ] =  private_file
+#        self.conf[ ( 'tls13', 'v1' ) ][ 'public_key' ] = [ public_file ] 
+#        self.conf[ ( 'tls13', 'v1' ) ][ 'sig_scheme' ] = [ tls_sig_scheme ] 
+
+    private_key = self.load_private_key( private_key_file )
+    sig_scheme = self.key_algo( private_key )
+    
+    ## ensure there is a corresponding public key or certificate
+    ## stored in the file and that public key matches the private key
+    try :
+      ## taking the last file mentioned in the public_key list
+      public_key_file = self.conf[ ( 'tls13', 'v1' )  ] ['public_key'][ -1 ]
+      public_key, cert_type = self.load_public_key( public_key_file )
+      if self.key_algo( public_key ) !=  sig_scheme:
+        raise ConfigurationError( f"public ({self.key_algo( public_key )}) and "\
+                f"private keys ({self.key_algo( private_key )}) do not match" )
+    except:
+      private_key = self.load_private_key( private_key_file )
+      public_key = private_key.public_key( )
+      self.store_keys( public_key, key_format, conf_dir )
+    return private_key_file, public_key_file
+
+
+  def set_connectivity( self, **kwargs ):
+    """configure the connectivity informations """
+    self.conf[ 'connectivity' ] = kwargs 
+
+  def set_tls13_debug( self, **kwargs ):
+    """ updating the debug configuration
+    
+    There is a special check for the trace key
+    """
+    if 'trace' not in kwargs.keys() :
+      kwargs[ 'trace' ] = False
+    self.conf[ ( 'tls13', 'v1' ) ][ 'debug' ] = kwargs
+
+  def set_tls13_authorization_type( self ):
+    role = self.conf[ ( 'tls13', 'v1' ) ][ 'role' ]
+    for k in self.conf[ ( 'tls13', 'v1' ) ][ 'type_authorized'] :
+     
+     if ( role == 'client' and k[0:2] == 's_' ) or\
+        ( role == 'server' and k[0:2] == 'c_' ):
+       self.conf[ ( 'tls13', 'v1' ) ][ 'type_authorized'].remove( k )
+
+  def set_tls13_cs_signing_key( self ):
+    """configure the CS signing keys and associated internal variables"""
+   
+    try: 
+      private_file = self.conf[ ( 'tls13', 'v1' ) ][ 'private_key' ]
+    except KeyError:
+      private_file = None
+    try:
+      public_key_file = self.conf[ ( 'tls13', 'v1' )  ] ['public_key'][ -1 ]
+    except KeyError:
+      public_key_file = None
+    try: 
+      sig_scheme = self.conf[ ( 'tls13', 'v1' )  ] [ 'sig_scheme' ]
+    except KeyError:
+      sig_scheme = 'ed25519'
+    private_key_file, public_key_file = self.set_tls13_keys( \
+                                          private_key_file=private_file, \
+                                          public_key_file=public_key_file, \
+                                          sig_scheme=sig_scheme,\
+                                          key_format='X509' )
+    ## Once the files have been checked are correct we can load them
+    public_key, cert_type = self.load_public_key( public_key_file )
+    private_key = self.load_private_key( private_file )
+
+    ## updating self.conf 
+    self.conf[ ( 'tls13', 'v1' ) ][ 'private_key' ] = private_file
+    ## handling the public key file is a bit more complex as the 
+    ## file is a file list when key format X509 is used.
+    public_key_conf_status = False
+    if 'public_key' in self.conf[ ( 'tls13', 'v1' )  ].keys( ) :
+      if isinstance( self.conf[ ( 'tls13', 'v1' )  ]['public_key'], list ):
+        if self.conf[ ( 'tls13', 'v1' )  ] ['public_key'][ -1 ] == public_key_file :
+          public_key_conf_status = True
+    if public_key_conf_status is False:
+      self.conf[ ( 'tls13', 'v1' )  ] ['public_key'] = [ public_key_file ]   
+
+    ## configuring  internal variable derived from the keys.
+    ## the purpose is to automate their generation
+    ## taking the last file mentioned in the public_key list
+#    public_key_file = self.conf[ ( 'tls13', 'v1' )  ] ['public_key'][ -1 ]
+#    public_key, cert_type = self.load_public_key( public_key_file )
+#    private_file = self.conf[ ( 'tls13', 'v1' ) ][ 'private_key' ]
+#    private_key = self.load_private_key( private_file )
+#    if self.key_algo( public_key ) !=  self.key_algo( private_key ) :
+#      raise ConfigurationError( f"public ({self.key_algo( public_key )}) and "\
+#              f"private keys ({self.key_algo( private_key )}) do not match" )
+    self.conf[ ( 'tls13', 'v1' ) ] [ '_private_key' ] = private_key
+    self.set_tls13_cs_public_signing_key( )
+
+##o##    self.set_tls13_public_signing_key( self ):
+##o##
+##o##
+##o##    self.conf[ ( 'tls13', 'v1' ) ] [ '_public_key' ] = public_key 
+##o##    self.conf[ ( 'tls13', 'v1' ) ] [ '_cert_type' ] = cert_type
+##o##    cert_entry_list = self.load_cert_entry_list() 
+##o##    self.conf[ ( 'tls13', 'v1' ) ][ '_cert_entry_list' ] = cert_entry_list
+##o###    hs_certificate =\
+##o###      { 'msg_type' : 'certificate',
+##o###        'data' :  { 'certificate_request_context': b'',
+##o###                    'certificate_list' : cert_list } }
+##o####   digest = Hash( SHA256(), backend=default_backend())
+##o##    finger_print_dict = {}
+##o##    finger_print_entry_list = []
+##o##    for cert_entry in cert_entry_list:
+##o##      public_bytes = cert_entry[ 'cert' ]
+##o##      digest = Hash( SHA256() )
+##o##      digest.update( public_bytes )
+##o##      finger_print = digest.finalize()[ :4 ]
+##o##      finger_print_dict[ finger_print ] = public_bytes
+##o##      finger_print_entry_list.append( { 'finger_print' : finger_print, 'extensions': [] } )
+##o##    self.conf[ ( 'tls13', 'v1' ) ] [ '_finger_print_entry_list' ] = finger_print_entry_list
+##o##    self.conf[ ( 'tls13', 'v1' ) ] [ '_finger_print_dict' ] = finger_print_dict
+   
+  def set_tls13_cs_public_signing_key( self ):
+    public_key_file = self.conf[ ( 'tls13', 'v1' )  ] ['public_key'][ -1 ]
+    public_key, cert_type = self.load_public_key( public_key_file )
+    self.conf[ ( 'tls13', 'v1' ) ] [ '_public_key' ] = public_key 
+    self.conf[ ( 'tls13', 'v1' ) ] [ '_cert_type' ] = cert_type
+    cert_entry_list = self.load_cert_entry_list() 
+    self.conf[ ( 'tls13', 'v1' ) ][ '_cert_entry_list' ] = cert_entry_list
+    finger_print_dict = {}
+    finger_print_entry_list = []
+    for cert_entry in cert_entry_list:
+      public_bytes = cert_entry[ 'cert' ]
+      digest = Hash( SHA256() )
+      digest.update( public_bytes )
+      finger_print = digest.finalize()[ :4 ]
+      finger_print_dict[ finger_print ] = public_bytes
+      finger_print_entry_list.append( { 'finger_print' : finger_print, 'extensions': [] } )
+    self.conf[ ( 'tls13', 'v1' ) ] [ '_finger_print_entry_list' ] = finger_print_entry_list
+    self.conf[ ( 'tls13', 'v1' ) ] [ '_finger_print_dict' ] = finger_print_dict
+
+  
+
+## WE SHOULD NOT NEED THIS EXTENSION ANYMORE
   def set_extention( self, ext=None ) : 
 #  def export_conf( self ):
     if ext == ( 'tls13', 'v1' ):

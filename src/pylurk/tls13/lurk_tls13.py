@@ -176,16 +176,23 @@ class Ephemeral:
 ###
     ecdhe_key = pylurk.tls13.crypto_suites.ECDHEKey()
     ecdhe_key.group = group
+    print( f" --- ecdhe_key: {ecdhe_key}" )
+    print( f" --- self.test_vector: {self.test_vector}" )
+    print( f" --- ecdhe_key.private: {ecdhe_key.private}" )
+    print( f" --- ecdhe_key.public: {ecdhe_key.public}" )
     ## try to read value from test_vector file
-    if self.test_vector is not None:
+    if self.test_vector is not None and self.test_vector.test_vector is True:
+      print( f"--- I AM HERE, but I SHOULD NOT BE HERE")
       key =f"{self.conf[ 'role' ]}_{group}_ecdhe_private"
       if key in self.test_vector.db.keys():
         ecdhe_key.generate_from_pem( self.test_vector.read_bin( key ) )
+#        print( f"--- ecdhe: echde_key (gen_from_pem) {self.test_vector.read_bin( key )}" )
       if self.test_vector.check is True:
         self.test_vector.check_bin( ecdhe_key.pkcs8(), self.test_vector.read_bin( key ) )   
     elif ecdhe_key.private is None and ecdhe_key.public is None:
 #      raise ValueError("unable to read ECDHEKey")
-      ecdhe_key.generate( group ) 
+      ecdhe_key.generate( group )
+    print( f" ecdhe_key.public.public_bytes(): {ecdhe_key.public.public_bytes( encoding=Encoding.Raw, format=PublicFormat.Raw) }" )
     return ecdhe_key
 
   def client_shares( self ):
