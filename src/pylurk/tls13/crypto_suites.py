@@ -25,7 +25,7 @@ sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
 from pylurk.lurk.lurk_lurk import LURKError, ImplementationError, ConfigurationError
 import pylurk.tls13.struct_tls13 as lurk
 import pytls13.struct_tls13 as tls
-import pylurk.utils
+import pylurk.debug
 
 def hash_sanity_check( tls_hash ):
     """ enables to provide tls_hash as a string
@@ -243,12 +243,12 @@ class CipherSuite:
     additional_data = b'\x17\x03\x03' + len( msg ).to_bytes( 2, byteorder='big' )
 #    cipher_text = fragment # cipher with tag appended 
     nonce = self.compute_nonce( self.sequence_number, self.write_iv )
-#    pylurk.utils.print_bin( "fragment (encrypted)",  msg[ 'fragment' ] )
-    pylurk.utils.print_bin( "fragment (encrypted)",  msg  )
-    pylurk.utils.print_bin( "write_key", self.write_key )
-    pylurk.utils.print_bin( "write_iv", self.write_iv )
-    pylurk.utils.print_bin( "nonce", nonce )
-    pylurk.utils.print_bin( "additional_data", additional_data )
+#    pylurk.debug.print_bin( "fragment (encrypted)",  msg[ 'fragment' ] )
+    pylurk.debug.print_bin( "fragment (encrypted)",  msg  )
+    pylurk.debug.print_bin( "write_key", self.write_key )
+    pylurk.debug.print_bin( "write_iv", self.write_iv )
+    pylurk.debug.print_bin( "nonce", nonce )
+    pylurk.debug.print_bin( "additional_data", additional_data )
     print( f"  - sequence_number : {self.sequence_number}" )
     if 'GCM' in self.name:
       cipher = AESGCM( self.write_key )
@@ -269,8 +269,8 @@ class CipherSuite:
         length_of_padding += 1
     type_byte = ( clear_text[ -1 - length_of_padding ]).to_bytes( 1, byteorder='big' )
     ct_type = tls.ContentType.parse( type_byte )
-#    pylurk.utils.print_bin( "fragment (decrypted)",  msg[ 'fragment' ] ) 
-    pylurk.utils.print_bin( f"fragment (decrypted) [type {ct_type}]",  clear_text )
+#    pylurk.debug.print_bin( "fragment (decrypted)",  msg[ 'fragment' ] ) 
+    pylurk.debug.print_bin( f"fragment (decrypted) [type {ct_type}]",  clear_text )
     clear_text_struct = tls.TLSInnerPlaintext.parse( clear_text, type=ct_type, length_of_padding=length_of_padding )
     self.sequence_number += 1
     if debug is True:
@@ -289,7 +289,7 @@ class CipherSuite:
     else: # handshake
       clear_text_record_bytes = tls.TLSInnerPlaintext.build( inner_plain_text, type=content_type, length_of_padding=length_of_padding)
     print( f"  - inner clear_text : {tls.TLSInnerPlaintext.parse( clear_text_record_bytes, type=content_type, length_of_padding=length_of_padding, clear_text_msg_len=len(clear_text_msg) ) }" )
-    pylurk.utils.print_bin( "inner_clear_text", clear_text_record_bytes ) 
+    pylurk.debug.print_bin( "inner_clear_text", clear_text_record_bytes ) 
     additional_data = b'\x17\x03\x03' + int( len( clear_text_record_bytes ) + self.tag_len ).to_bytes( 2, byteorder='big' )
 #    cipher_text = fragment[ : - self.tag_len ] 
     nonce = self.compute_nonce( self.sequence_number, self.write_iv )
@@ -302,11 +302,11 @@ class CipherSuite:
     else:
        raise LURKError( 'invalid_cipher_suite', f"{self.name} is not implemented" )
     encrypted_reccord =  cipher.encrypt( nonce, clear_text_record_bytes, additional_data )
-    pylurk.utils.print_bin( "write_key", self.write_key )
-    pylurk.utils.print_bin( "write_iv", self.write_iv )
+    pylurk.debug.print_bin( "write_key", self.write_key )
+    pylurk.debug.print_bin( "write_iv", self.write_iv )
     print( f"  - sequence_number : {self.sequence_number}" )
-    pylurk.utils.print_bin( "nonce", nonce )
-    pylurk.utils.print_bin( "additional_data", additional_data )
+    pylurk.debug.print_bin( "nonce", nonce )
+    pylurk.debug.print_bin( "additional_data", additional_data )
     
     self.sequence_number += 1 
     if debug is True:

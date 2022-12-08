@@ -3,7 +3,8 @@ from pylurk.struct_lurk import LURKMessage, LURKHeader
 from pylurk.lurk.lurk_lurk   import LURKError, ImplementationError, ConfigurationError, LurkExt 
 import sys
 sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src/')
-import pylurk.tls13.lurk_tls13  
+import pylurk.tls13.lurk_tls13 
+import pylurk.debug
 #from pylurk.tls13.lurk_tls13  import Tls13Ext, TicketDB, SessionDB 
 
 MINIMUM_PACKET_SIZE = 16
@@ -36,7 +37,7 @@ class BaseCryptoService:
         test_vector_conf = self.conf[ ext ][ 'debug' ]
         if test_vector_conf[ 'test_vector' ] is True or\
            test_vector_conf[ 'trace' ] is True :
-          self.test_vector = pylurk.utils.Tls13TestVector( test_vector_conf ) 
+          self.test_vector = pylurk.debug.Tls13Debug( test_vector_conf ) 
 
         self.tls13 = pylurk.tls13.lurk_tls13.Tls13Ext( self.conf[ ext ],\
                        ticket_db=self.ticket_db,\

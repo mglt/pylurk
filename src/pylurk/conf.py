@@ -41,7 +41,7 @@ from pylurk.lurk.lurk_lurk import LURKError, ImplementationError, ConfigurationE
 
 
 import pylurk.tls13.struct_tls13 as lurk
-import pylurk.utils
+#import pylurk.utils
 import pylurk.tls13.crypto_suites
 import binascii
 

@@ -40,9 +40,9 @@ import sys
 sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/')
 import pytls13.struct_tls13 as tls
 sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
-import pylurk.utils
+import pylurk.debug
 import pylurk.tls13.struct_tls13 as lurk
-from pylurk.utils import get_struct, get_struct_index
+from pylurk.debug import get_struct, get_struct_index
 from pylurk.tls13.key_scheduler import KeyScheduler
 from pylurk.tls13.tls_handshake import TlsHandshake 
 import pylurk.tls13.crypto_suites
@@ -943,11 +943,6 @@ class CServerHelloReq:
       self.scheduler = KeyScheduler( self.handshake.get_tls_hash(), \
                                      shared_secret=ephemeral.shared_secret, test_vector=test_vector )
     self.scheduler.process( [ 'h_c', 'h_s' ], self.handshake )
-#    print( f"--- CS ks [secrets]: {self.scheduler.secrets }" )
-#    pylurk.utils.print_bin( f"--- CS ks [psk]:", self.scheduler.psk )
-#    pylurk.utils.print_bin( f"--- CS ks [shared_secret]:", self.scheduler.shared_secret)
-#    pylurk.utils.print_bin( f"--- CS ks [h_c]:", self.scheduler.secrets[ 'h_c' ] )
-#    pylurk.utils.print_bin( f"--- CS ks [h_s]:", self.scheduler.secrets[ 'h_s' ] )
     self.session_id = session_id
     self.resp = { 'session_id' : session_id.e, 
                   'secret_list' : secret_request.resp( self.scheduler ) }
