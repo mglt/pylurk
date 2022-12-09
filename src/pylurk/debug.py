@@ -49,7 +49,7 @@ def print_bin( description:str, bit_string:bytes ):
 class Debug:
 
   def __init__( self, debug_conf ):
-   
+    self.conf = debug_conf   
     self.test_vector = False
     self.test_vector_file = None
     test_vector_mode = None

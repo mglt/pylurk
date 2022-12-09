@@ -83,12 +83,13 @@ class Configuration:
       },
       ( 'tls13', 'v1' ) : {
         'debug' : {
-    #     'test_vector' : True,
           'trace' : True,  # prints multiple useful information
-          'test_vector' : { 
-            'file' : './illustrated_tls13.json',
-            'mode' : 'check', # check / record
-           }
+           ## test_vector is not part of the default template and
+           ## is expected to be explicitly provided.
+  #        'test_vector' : { 
+  #        'file' : './illustrated_tls13.json',
+  #        'mode' : 'check', # check / record
+  #           }
         },
     #      'test_vector_file' : './illustrated_tls13.json',
     #      'test_vector_mode' : 'check', # check / record
@@ -447,10 +448,11 @@ class Configuration:
 
   def set_tls13_authorization_type( self ):
     role = self.conf[ ( 'tls13', 'v1' ) ][ 'role' ]
-    for k in self.conf[ ( 'tls13', 'v1' ) ][ 'type_authorized'] :
+    for k in list( self.conf[ ( 'tls13', 'v1' ) ][ 'type_authorized'] ) :
      
      if ( role == 'client' and k[0:2] == 's_' ) or\
         ( role == 'server' and k[0:2] == 'c_' ):
+       print( f" --- removing {k}" )
        self.conf[ ( 'tls13', 'v1' ) ][ 'type_authorized'].remove( k )
 
   def set_tls13_cs_signing_key( self ):

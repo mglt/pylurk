@@ -118,7 +118,7 @@ class StatelessTCPHandler( socketserver.BaseRequestHandler):
       established for every LURK request.
   """
   def handle( self ):
-    req_bytes = self.request.recv(1024)
+    req_bytes = self.request.recv(4096)
     resp = self.server.cs.serve( req_bytes ) 
     self.request.sendall( resp )
 
@@ -156,9 +156,9 @@ class StatelessTCPCryptoService( socketserver.TCPServer):
       fqdn = self.conf[ 'connectivity' ][ 'fqdn' ]
       if fqdn not in [ None, '' ]:
         host = fqdn
-    if host is None and 'ip_address' in key_list: 
-      host = self.conf[ 'connectivity' ][ 'ip_address' ]
-    if 'type' in key_list: 
+    if host is None and 'ip' in key_list: 
+      host = self.conf[ 'connectivity' ][ 'ip' ]
+    if 'port' in key_list: 
       port = self.conf[ 'connectivity' ][ 'port' ] 
     else:
       raise ConfigurationError( f"Cannot find port in configuration "\

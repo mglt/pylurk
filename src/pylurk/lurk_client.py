@@ -227,19 +227,20 @@ class StatelessTCPTls13LurkClient( BaseTls13LurkClient ) :
 #else:
 #      raise ConfigurationError( f"Cannot find type in configuration "\
 #        f"{self.__class__.__name__}. Expecting 'stateless_tcp'." ) 
-    host = None 
-    if 'fqdn' in self.conf.keys():
-      fqdn = self.conf[ 'fqdn' ]
+    host = None
+    con_conf = self.conf[ 'connectivity' ]
+    if 'fqdn' in con_conf.keys():
+      fqdn = con_conf[ 'fqdn' ]
       if fqdn not in [ None, '' ]:
         ## maybe we coudl perform a DNS lookup
         host = fqdn
-    if host is None and 'ip' in self.conf.keys(): 
-      host = self.conf[ 'ip' ]
+    if host is None and 'ip' in con_conf.keys(): 
+      host = con_conf[ 'ip' ]
     else:
       raise ConfigurationError( f"Cannot find 'ip' or 'fqdn' in "\
         "configuration: {self.conf} for {self.__class__.__name__}." )
-    if 'port' in self.conf.keys(): 
-      port = self.conf[ 'port' ] 
+    if 'port' in con_conf.keys(): 
+      port = con_conf[ 'port' ] 
     else:
       raise ConfigurationError( f"Cannot find 'port' in "\
         "configuration: {self.conf} for {self.__class__.__name__}." )
