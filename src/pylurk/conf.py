@@ -1,6 +1,7 @@
 
 from  os.path import join
 import pkg_resources
+import copy
 from copy import deepcopy
 from construct.core import MappingError
 import hashlib ## mostly for compatibility with key_schedule
@@ -45,102 +46,12 @@ import pylurk.tls13.struct_tls13 as lurk
 import pylurk.tls13.crypto_suites
 import binascii
 
-data_dir = pkg_resources.resource_filename(__name__, '../data/')
-
-
-conf_template = {
-  'profile' : 'explicit configuration',
-  'description' : "LURK Cryptographic Service configuration template",
-#  'mode' : 'debug',
-  'connectivity' : {
-      'type' : "udp",  # "local", "stateless_tcp", "tcp", "tcp+tls", http, https
-      'fqdn' : None,
-      'ip_address' : "127.0.0.1",
-      'port' : 9999,
-      'key' : join(data_dir, 'key_tls12_rsa_server.key'),
-      'cert' : join(data_dir, 'cert_tls12_rsa_server.crt'),
-      'key_peer' : join(data_dir, 'key_tls12_rsa_client.key'),
-      'cert_peer' : join(data_dir, 'cert_tls12_rsa_client.crt')
-      },
-  'enabled_extensions' : [ ( 'lurk', 'v1' ) , ( 'tls13', 'v1' ) ],
-  ( 'lurk', 'v1' ) : {
-     'type_authorized' : [ 'ping',  'capabilities' ]
-  },
-  ( 'tls13', 'v1' ) : {
-    'debug' : {
-      'test_vector' : True,
-      'trace' : True,  # prints multiple useful information
-      'test_vector_file' : './illustrated_tls13.json',
-      'test_vector_mode' : 'check', # check / record
-      'test_vector_tls_traffic' : True, #'local' # / remote 
-      },
-     'role' : 'server', #[ 'client', 'server' ],
-     'type_authorized' : [ 's_init_cert_verify',     ## server ECDHE
-                           's_init_early_secret',    ## server PSK
-                           's_hand_and_app_secret',  ## server PSK
-                           's_new_ticket',           ## session resumption
-                           'c_init_client_finished', ## only signature 
-                           'c_post_hand_auth',       ## post hand
-                           'c_init_client_hello',    ## client hello
-                           'c_server_hello',
-                           'c_client_finished',
-                           'c_register_tickets' ],
-     ## echde authentication parameter
-       ## certificate chain, the public key of the TLS client or server
-       ## is expected to be the last one
-     'public_key' : [join( data_dir, 'cert-rsa-enc.der' )], 
-     'private_key' : join( data_dir, 'key-rsa-enc.pkcs8' ), ## der, pkcs8
-     'ephemeral_method_list' : ['no_secret', 'cs_generated', 'e_generated'],
-     'authorized_ecdhe_group' : ['secp256r1', 'secp384r1', 
-                                 'secp521r1', 'x25519', 'x448'], 
-     ## only one signature scheme must be selected
-     'sig_scheme' : ['rsa_pkcs1_sha256', \
-                   'rsa_pkcs1_sha384', \
-                   'rsa_pkcs1_sha512',\
-                   'ecdsa_secp256r1_sha256', \
-                   'ecdsa_secp384r1_sha384',\
-                   'ecdsa_secp521r1_sha512', \
-                   'rsa_pss_rsae_sha256', \
-                   'rsa_pss_rsae_sha384', \
-                   'rsa_pss_rsae_sha512', \
-                   'ed25519', \
-                   'ed448', \
-                   'rsa_pss_pss_sha256', \
-                   'rsa_pss_pss_sha384', \
-                   'rsa_pss_pss_sha512' ], 
-     ## secrets
-     'client_early_secret_authorized' : True,    ## only for PSK
-     'early_exporter_secret_authorized' : True,  
-     'exporter_secret_authorized' : True,  
-     'app_secret_authorized' : True,             ## anytime application is protected by TLS
-     'resumption_secret_authorized' : True,     ## PSK / non protected ECDHE
-
-     ## machinery logic
-     's_init_early_secret_session_id' : True,
-     'last_exchange' : { 's_init_cert_verify' : False, 
-                         's_hand_and_app_secret' : False,
-                         'c_init_client_finished' : False,
-                         'c_init_post_auth' : False, 
-                         'c_client_finished' : False}, 
-     ## ticket related configuration
-     'max_tickets' : 6, 
-     'ticket_life_time' : 172800, # 2d = 2*24*3600 < 2**32-1
-     'ticket_nonce_len' : 20,  ## bytes < 255
-     'ticket_generation_method': 'ticket', ## versus index 
-     'ticket_public_key': join(data_dir, 'ticket-cert-rsa-enc.der'), ## one key
-     'ticket_private_key' : join(data_dir, 'key-rsa-enc.pkcs8'), ## der, pkcs8
-     'ticket_len' : 4,  ## bytes < 255
-     ## client parameters
-     'post_handshake_authentication' : True,
-     'max_post_handshake_authentication' : 1, ## 'c_post_hand_auth' ?
-        },
-}
 
 
 
 class Configuration:
 
-  def __init__( self, conf=deepcopy( conf_template ) ):
+  def __init__( self ):
     """ manipuationof teh configuration file
     
     configuration class has two distinct goals:
@@ -148,7 +59,102 @@ class Configuration:
       2 - generates informations that can be used by the software: This typically includes some information that can be derive. In this case, we would like to avoid information to be reprocessed muliutple times. For example, we do not want the certificate to read from the file each time a CERT message is sent. 
      We that purpose we are adding some extra variables that are noted _key to distinguish from those expected from the user. 
     """
-    self.conf = conf 
+#    self.conf = conf 
+    data_dir = pkg_resources.resource_filename(__name__, '../data/')
+    self.conf = {
+      'profile' : 'explicit configuration',
+      'description' : "LURK Cryptographic Service configuration template",
+    #  'mode' : 'debug',
+      'connectivity' : {
+          'type' : "lib_cs", #"udp",  # "local", "stateless_tcp", "tcp", "tcp+tls", http, https
+    # These needs to be specified with specific configuration 
+    # entries when applicable.
+    #          'fqdn' : None,
+    #          'ip_address' : "127.0.0.1",
+    #          'port' : 9999,
+    #          'key' : join(data_dir, 'key_tls12_rsa_server.key'),
+    #          'cert' : join(data_dir, 'cert_tls12_rsa_server.crt'),
+    #          'key_peer' : join(data_dir, 'key_tls12_rsa_client.key'),
+    #          'cert_peer' : join(data_dir, 'cert_tls12_rsa_client.crt')
+          },
+      'enabled_extensions' : [ ( 'lurk', 'v1' ) , ( 'tls13', 'v1' ) ],
+      ( 'lurk', 'v1' ) : {
+         'type_authorized' : [ 'ping',  'capabilities' ]
+      },
+      ( 'tls13', 'v1' ) : {
+        'debug' : {
+    #     'test_vector' : True,
+          'trace' : True,  # prints multiple useful information
+          'test_vector' : { 
+            'file' : './illustrated_tls13.json',
+            'mode' : 'check', # check / record
+           }
+        },
+    #      'test_vector_file' : './illustrated_tls13.json',
+    #      'test_vector_mode' : 'check', # check / record
+    #      'test_vector_tls_traffic' : True, #'local' # / remote 
+    #      },
+         'role' : 'server', #[ 'client', 'server' ],
+         'type_authorized' : [ 's_init_cert_verify',     ## server ECDHE
+                               's_init_early_secret',    ## server PSK
+                               's_hand_and_app_secret',  ## server PSK
+                               's_new_ticket',           ## session resumption
+                               'c_init_client_finished', ## only signature 
+                               'c_post_hand_auth',       ## post hand
+                               'c_init_client_hello',    ## client hello
+                               'c_server_hello',
+                               'c_client_finished',
+                               'c_register_tickets' ],
+         ## echde authentication parameter
+           ## certificate chain, the public key of the TLS client or server
+           ## is expected to be the last one
+         'public_key' : [join( data_dir, 'cert-rsa-enc.der' )], 
+         'private_key' : join( data_dir, 'key-rsa-enc.pkcs8' ), ## der, pkcs8
+         'ephemeral_method_list' : ['no_secret', 'cs_generated', 'e_generated'],
+         'authorized_ecdhe_group' : ['secp256r1', 'secp384r1', 
+                                     'secp521r1', 'x25519', 'x448'], 
+         ## only one signature scheme must be selected
+         'sig_scheme' : ['rsa_pkcs1_sha256', \
+                       'rsa_pkcs1_sha384', \
+                       'rsa_pkcs1_sha512',\
+                       'ecdsa_secp256r1_sha256', \
+                       'ecdsa_secp384r1_sha384',\
+                       'ecdsa_secp521r1_sha512', \
+                       'rsa_pss_rsae_sha256', \
+                       'rsa_pss_rsae_sha384', \
+                       'rsa_pss_rsae_sha512', \
+                       'ed25519', \
+                       'ed448', \
+                       'rsa_pss_pss_sha256', \
+                       'rsa_pss_pss_sha384', \
+                       'rsa_pss_pss_sha512' ], 
+         ## secrets
+         'client_early_secret_authorized' : True,    ## only for PSK
+         'early_exporter_secret_authorized' : True,  
+         'exporter_secret_authorized' : True,  
+         'app_secret_authorized' : True,             ## anytime application is protected by TLS
+         'resumption_secret_authorized' : True,     ## PSK / non protected ECDHE
+    
+         ## machinery logic
+         's_init_early_secret_session_id' : True,
+         'last_exchange' : { 's_init_cert_verify' : False, 
+                             's_hand_and_app_secret' : False,
+                             'c_init_client_finished' : False,
+                             'c_init_post_auth' : False, 
+                             'c_client_finished' : False}, 
+         ## ticket related configuration
+         'max_tickets' : 6, 
+         'ticket_life_time' : 172800, # 2d = 2*24*3600 < 2**32-1
+         'ticket_nonce_len' : 20,  ## bytes < 255
+         'ticket_generation_method': 'ticket', ## versus index 
+         'ticket_public_key': join(data_dir, 'ticket-cert-rsa-enc.der'), ## one key
+         'ticket_private_key' : join(data_dir, 'key-rsa-enc.pkcs8'), ## der, pkcs8
+         'ticket_len' : 4,  ## bytes < 255
+         ## client parameters
+         'post_handshake_authentication' : True,
+         'max_post_handshake_authentication' : 1, ## 'c_post_hand_auth' ?
+            },
+    }
 
   def set_role( self, role:str ):
     """ set the role """
@@ -173,8 +179,10 @@ class Configuration:
     """
     if master is None :
       master = self.conf
+#    branch = copy.deepcopy( branch )
     for key in branch.keys():
-      if isinstance( branch[ key ], dict ) is False :
+      value_is_dict = isinstance( branch[ key ], dict )
+      if value_is_dict is False or key not in master.keys() :
         master[ key ] = branch[ key ]
       else:
         master[ key ] = self.merge( branch[ key ], master[ key] )

@@ -1137,7 +1137,8 @@ class TicketDB:
 
 class Tls13Ext:
 ##def __init__(self, conf=default_conf, ticket_db=None, session_db=None, test_vector=None ):
-  def __init__(self, conf=pylurk.conf.conf_template, ticket_db=None, session_db=None, debug=None ):
+#  def __init__(self, conf=pylurk.conf.conf_template, ticket_db=None, session_db=None, debug=None ):
+  def __init__(self, conf, ticket_db=None, session_db=None, debug=None ):
     self.conf = conf 
     self.debug = debug
     if session_db is None:
