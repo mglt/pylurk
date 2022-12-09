@@ -176,13 +176,13 @@ class Ephemeral:
 ###
     ecdhe_key = pylurk.tls13.crypto_suites.ECDHEKey()
     ecdhe_key.group = group
-    print( f" --- ecdhe_key: {ecdhe_key}" )
-    print( f" --- self.debug: {self.debug}" )
-    print( f" --- ecdhe_key.private: {ecdhe_key.private}" )
-    print( f" --- ecdhe_key.public: {ecdhe_key.public}" )
+#    print( f" --- ecdhe_key: {ecdhe_key}" )
+#    print( f" --- self.debug: {self.debug}" )
+#    print( f" --- ecdhe_key.private: {ecdhe_key.private}" )
+#    print( f" --- ecdhe_key.public: {ecdhe_key.public}" )
     ## try to read value from test_vector file
     if self.debug is not None and self.debug.test_vector is True:
-      print( f"--- I AM HERE, but I SHOULD NOT BE HERE")
+#      print( f"--- I AM HERE, but I SHOULD NOT BE HERE")
       key =f"{self.conf[ 'role' ]}_{group}_ecdhe_private"
       if key in self.debug.db.keys():
         ecdhe_key.generate_from_pem( self.debug.read_bin( key ) )
@@ -192,7 +192,7 @@ class Ephemeral:
     elif ecdhe_key.private is None and ecdhe_key.public is None:
 #      raise ValueError("unable to read ECDHEKey")
       ecdhe_key.generate( group )
-    print( f" ecdhe_key.public.public_bytes(): {ecdhe_key.public.public_bytes( encoding=Encoding.Raw, format=PublicFormat.Raw) }" )
+#    print( f" ecdhe_key.public.public_bytes(): {ecdhe_key.public.public_bytes( encoding=Encoding.Raw, format=PublicFormat.Raw) }" )
     return ecdhe_key
 
   def client_shares( self ):
@@ -229,7 +229,7 @@ class Ephemeral:
       self.server_ecdhe_key = pylurk.tls13.crypto_suites.ECDHEKey( )
       self.server_ecdhe_key.generate_from_ks_entry( self.handshake.get_key_share( side='server' ) )
       for key in c_init_client_hello_ephemeral.client_ecdhe_key_list :
-        print( f" key ({key.group}) versus {self.server_ecdhe_key.group}" )
+#        print( f" key ({key.group}) versus {self.server_ecdhe_key.group}" )
         if self.server_ecdhe_key.group == key.group :
           self.shared_secret = self.server_ecdhe_key.shared_secret( key )
           break
@@ -289,7 +289,7 @@ class SessionID:
       self.cs = token_bytes( 4  )
       self.e = session_id
     else:
-      print( f"--- tag: {tag}" )
+#      print( f"--- tag: {tag}" )
       if tag.last_exchange is False:
         self.cs = token_bytes( 4  )
         self.e = session_id
@@ -369,7 +369,7 @@ class LurkCert:
         raise LURKError( 'invalid_certificate', f"unrecognized fingerprint "\
                          f"{finger_print_entry_list} {self.finger_print_dict}" )
       else:
-        print( f"{self.conf[ 'role' ]}")
+#        print( f"{self.conf[ 'role' ]}")
         if self.conf[ 'role' ] == 'server':
           cert_req_ctx = b''
         elif self.conf[ 'role' ] == 'client':
@@ -455,7 +455,7 @@ class SecretReq:
       if secret_request[ key ] == True and key not in forbiden :
         self.authorized_secrets.append( key )
     self.authorized_secrets = list( set( self.authorized_secrets ) )
-    print( f"self.authorized_secrets (adding requested): {self.authorized_secrets}" )
+#    print( f"self.authorized_secrets (adding requested): {self.authorized_secrets}" )
 
     if mtype in [ 's_init_cert_verify', 'c_hand_and_app_secret' ] :
       if self.conf[ 'app_secret_authorized' ] == False :
@@ -499,7 +499,7 @@ class SecretReq:
 
   def resp( self, scheduler ):
     secret_list = []
-    print( f"self.authorized_secrets: {self.authorized_secrets}" )
+#    print( f"self.authorized_secrets: {self.authorized_secrets}" )
     for secret_type in self.authorized_secrets:
       secret_list.append( \
         { 'secret_type' : secret_type, 
@@ -607,7 +607,7 @@ class SNewTicketReq:
     self.cert = LurkCert( req[ 'certificate' ], self.mtype, self.conf, False, \
                           self.handshake ) 
     if self.cert.cert_type != 'no_certificate' :
-      print( f" {self.handshake.msg_type_list()} - {self.cert.cert_type}" )
+#      print( f" {self.handshake.msg_type_list()} - {self.cert.cert_type}" )
       self.handshake.update_certificate( self.cert, server=False )
     self.secret_request = SecretReq(req[ 'secret_request' ], self.mtype, self.conf )
     self.scheduler.process( self.secret_request.of( [ 'r' ] ), self.handshake )
@@ -689,11 +689,11 @@ class SHandAndAppSecretReq:
     self.session_ticket = session_ticket 
     self.handshake.sanity_check( self.mtype, session_ticket=session_ticket )
     self.handshake.update_random( self.freshness )
-    print( f"initilaizing ephemeral {req[ 'ephemeral' ]} - {self.mtype} - {self.handshake.msg_type_list()}" )
+#    print( f"initilaizing ephemeral {req[ 'ephemeral' ]} - {self.mtype} - {self.handshake.msg_type_list()}" )
     self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf,\
                                 self.handshake, client_hello_ephemeral )
       
-    print("initialized SHandAndAppSecretReq")
+#    print("initialized SHandAndAppSecretReq")
 
 #    self.ephemeral.compute_server_key_exchange( self.handshake ) 
     if self.ephemeral.method == 'cs_generated':
@@ -772,7 +772,7 @@ class SSession:
     else: 
       raise LURKError( 'invalid_request', f"unexpected request {mtype}"\
               f"expecting {self.next_mtype} or initial request" )
-    print( f" -- {req}" )
+#    print( f" -- {req}" )
     self.next_mtype = req.next_mtype
     return req.resp
 
@@ -796,26 +796,26 @@ class CInitClientFinishedReq:
                     True, self.handshake )
     client_cert = LurkCert( req[ 'client_certificate' ], self.mtype, self.conf, \
                     False, self.handshake )
-    print(f" --- CS: received random: {self.handshake.msg_list[0][ 'data' ][ 'random' ]}" )
+#    print(f" --- CS: received random: {self.handshake.msg_list[0][ 'data' ][ 'random' ]}" )
     self.handshake.update_random( Freshness( req[ 'freshness' ] ) )
-    print(f" --- CS: updated random: {self.handshake.msg_list[0][ 'data' ][ 'random' ]}" )
+#    print(f" --- CS: updated random: {self.handshake.msg_list[0][ 'data' ][ 'random' ]}" )
     if server_cert.cert_type != 'no_certificate' : 
       self.handshake.update_certificate( server_cert, server=True )
     self.scheduler = None
     self.tag = Tag( req[ 'tag' ], self.mtype, self.conf, ctx=self.handshake )
     self.session_id = SessionID( req[ 'session_id' ], tag=self.tag )
     ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf, self.handshake )
-    print( f"ephemeral.shared_secret: {ephemeral.shared_secret}")
+#    print( f"ephemeral.shared_secret: {ephemeral.shared_secret}")
     self.scheduler = KeyScheduler( self.handshake.get_tls_hash(), \
                                    shared_secret=ephemeral.shared_secret, psk=psk, debug=debug )
     ### the current handshake.msg_list is up to early data
     ## we need to make sur we limit ourselves to the ClientHello...ServerHello
     self.scheduler.process( [ 'h_c', 'h_s' ], self.handshake )
-    print( f"after h : {self.handshake.msg_type_list()}" )
+#    print( f"after h : {self.handshake.msg_type_list()}" )
     self.client_cert  = LurkCert( req[ 'client_certificate' ], self.mtype, self.conf, server=False, handshake=self.handshake )
 
     self.handshake.update_certificate( self.client_cert, server=False )
-    print( f"client cert inserted : {self.handshake.msg_type_list()}" ) 
+#    print( f"client cert inserted : {self.handshake.msg_type_list()}" ) 
     self.handshake.update_certificate_verify( )
     ## get sig from freshly generated certificate_verify 
     sig = self.handshake.msg_list[ 0 ][ 'data' ]['signature' ]
@@ -844,7 +844,7 @@ class CPostHandAuthReq:
 
     ## the signature is performed for a post handshake transcript
     self.handshake.update_certificate_verify( )
-    print( self.handshake.msg_list )
+#    print( self.handshake.msg_list )
     sig = self.handshake.msg_list[ 0 ][ 'data' ]['signature' ]
     del self.handshake.msg_list[ : ]
 
@@ -1115,7 +1115,7 @@ class TicketDB:
     This function updates the information so all information is 
     available to generate a TLS ticket
     """
-    print( f" -- update_ticket_info: {ticket_info}" )
+#    print( f" -- update_ticket_info: {ticket_info}" )
     if ticket_info[ 'psk_type' ] == 'external': 
       obfuscated_ticket_age = 0
     else :

@@ -302,8 +302,8 @@ class TlsHandshake:
         ch_index_list.append( ch_index )
       engine_random = self.msg_list[ 0 ] [ 'data' ][ 'random' ]
       client_random = freshness.update_random( self.role, engine_random )
-      print( f"--- update_random engine_random : {engine_random}" )
-      print( f"--- update_random client_random : {client_random}" )
+#      print( f"--- update_random engine_random : {engine_random}" )
+#      print( f"--- update_random client_random : {client_random}" )
       for ch_index in ch_index_list :
         self.msg_list[ ch_index ] [ 'data' ][ 'random' ] = client_random
     else:
@@ -449,7 +449,7 @@ class TlsHandshake:
       if binder_index != '':
         binder_index = f"({binder_index})"
       self.debug.handle_bin( f"compute_binder: {binder_index} binder_finished_key" , binder_finished_key )
-      print( f"compute_binder: {binder_index} tls_hash:  {tls_hash}" )
+#      print( f"compute_binder: {binder_index} tls_hash:  {tls_hash}" )
       self.debug.handle_bin( f"Transcript( truncated_client_hello ) {binder_index}" , transcript_hash )
       self.debug.handle_bin( f"binder {binder_index}" , binder )
 
@@ -488,7 +488,7 @@ class TlsHandshake:
         f"   - psk_info_list  (len: {len( psk_info_list )})\n"\
         f"   - binder_key_list  (len: {len( binder_key_list )})" )
     
-    print( f"update_binders: binder_finished_key_list: " )
+#    print( f"update_binders: binder_finished_key_list: " )
     ## generates the truncated client hello
     truncated_client_hello = self.truncated_client_hello( ticket_info_list )
     ## adding the binders
@@ -541,8 +541,9 @@ class TlsHandshake:
         transcript_h = self.transcript_hash( 'post_hand_auth_sig' )
     else:
         raise ImplementationError( f"unknown role {self.role}" )
-    content = b'\x20' * 64 + ctx_string + b'\x00' + transcript_h 
-    self.debug.handle_bin( 'content to be signed', content )
+    content = b'\x20' * 64 + ctx_string + b'\x00' + transcript_h
+    if self.debug is not None:
+      self.debug.handle_bin( 'content to be signed', content )
     return content
 
   def update_certificate_verify( self ) :
@@ -617,8 +618,8 @@ class TlsHandshake:
       del self.msg_list[ : upper_msg_index ]
     msg_bytes = bytearray()
     for msg in msg_list :
-      print( f" appending to transcript {msg[ 'msg_type' ]}" ) 
-      print( f" appending to transcript {msg}" ) 
+#      print( f" appending to transcript {msg[ 'msg_type' ]}" ) 
+#      print( f" appending to transcript {msg}" ) 
       msg_bytes.extend( tls.Handshake.build( msg, **ctx_struct ) )
 
     self.transcript.update( msg_bytes )
@@ -733,7 +734,7 @@ class TlsHandshake:
         ]:
         raise LURKError( 'invalid_handshake', f"unexpected handshake {self.msg_type_list()}" )
     elif transcript_type == 'r' : 
-      print( f" --- self.msg_type_list( ): {self.msg_list}" )
+#      print( f" --- self.msg_type_list( ): {self.msg_list}" )
       if self.msg_type_list( ) not in [ \
         ## 's_new_ticket 
         [ 'finished' ], \

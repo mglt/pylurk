@@ -35,9 +35,13 @@ class BaseCryptoService:
 
         self.debug = None
         debug_conf = self.conf[ ext ][ 'debug' ]
-        if debug_conf[ 'test_vector' ] is True or\
-           debug_conf[ 'trace' ] is True :
-          self.debug = pylurk.debug.Tls13Debug( debug_conf ) 
+        debug = pylurk.debug.Tls13Debug( debug_conf )
+        if debug.trace is True or debug.test_vector is True: 
+          self.debug = debug
+
+#          if ( debug_conf[ 'test_vector' ][ 'file' ] and debug_conf[ 'test_vector' ][ 'mode' ] is True or\
+#             debug_conf[ 'trace' ] is True :
+#          self.debug = pylurk.debug.Tls13Debug( debug_conf ) 
 
         self.tls13 = pylurk.tls13.lurk_tls13.Tls13Ext( self.conf[ ext ],\
                        ticket_db=self.ticket_db,\

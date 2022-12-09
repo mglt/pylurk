@@ -22,9 +22,7 @@ def get_struct_index(l: list, key:str, value) -> dict :
 def str_to_bytes( hexlify_string:str ):
   hexlify_string = str( hexlify_string )
   bytes_output = b''
-#  print(  f" {type(hexlify_string)} {hexlify_string}" )
   for hex_str in hexlify_string.split( " " ):
-#    print( hex_str )
     bytes_output += binascii.unhexlify( hex_str )
   return bytes_output
 
@@ -44,60 +42,51 @@ def bytes_to_human( description:str, bit_string:bytes ):
       else:
         output_string += char
     return output_string
-#    return f"  - {description} [{len(bit_string)} bytes]: {bytes_to_str(bit_string)}"
 
 def print_bin( description:str, bit_string:bytes ):
     print( bytes_to_human( description, bit_string ) )
-#    print( f"  - {description} [{len(bit_string)} bytes]: {bytes_to_str(bit_string)}" )
 
-#class TestVector:
 class Debug:
 
   def __init__( self, debug_conf ):
    
     self.test_vector = False
-    try:
-      self.test_vector = debug_conf[ 'test_vector' ]
-    except KeyError:
-      pass
-
-    try:  
-      self.file = debug_conf[ 'test_vector_file' ]
-    except KeyError: 
-      self.file = None
-
-    try: 
-      self.mode = debug_conf[ 'test_vector_mode' ] ## check, write
-    except KeyError: 
-      self.mode = None
-    if self.mode not in [ 'check', 'record', None ]:
-      raise ConfigurationError( f"Unexpected mode. Acceptable values are: 'check'"\
-        f" 'record' or None. Provided configuration is {debug_conf}" )
-    if self.mode is None or self.file is None:
-      self.test_vector = False
-      self.file = None
-      self.mode = None
-
-#    print( f"os.path.exists: {os.path.exists( self.file )}" )
-#    print( f"os.path.isfile: {os.path.isfile( self.file )}" )
-    self.db = {}
-
-    if self.file is not None:
-      if os.path.exists( self.file ) and os.path.isfile( self.file )\
-         and os.stat( self.file ).st_size > 0:
-        with open( self.file, 'rt', encoding='utf8' ) as f:
-          self.db = json.load( f )
-
+    self.test_vector_file = None
+    test_vector_mode = None
     self.check = False
-    if self.test_vector is True and self.mode == 'check':
-        self.check = True
-
     self.record = False
-    if self.test_vector is True and self.mode == 'record':
-      self.record = True
+    self.db = {}
+    self.trace = False
+    if 'trace' in debug_conf.keys( ):
+      self.trace = debug_conf[ 'trace' ]
+      if isinstance( self.trace, bool ) is False:
+        raise ConfigurationError( f"Unexpected value for trace."\
+          f" Expecting boolean value. {debug_conf}" )
+      
+    ## handling test_vector when present test_vector MUST have a file 
+    ## and a mode.
+    if 'test_vector' in debug_conf.keys( ):
+      key_list = debug_conf[ 'test_vector' ]
+      if 'file' in key_list and 'mode' in key_list :
+        self.test_vector_file = debug_conf[ 'test_vector' ][ 'file' ]
+        test_vector_mode = debug_conf[ 'test_vector' ][ 'mode' ]
+        self.test_vector = True
+        if test_vector_mode == 'check':
+          self.check = True
+        elif test_vector_mode == 'record':
+          self.record = True
+        elif test_vector_mode is None :
+          pass
+        else:
+          raise ConfigurationError( f"Unexpected mode. Acceptable values "\
+            f"are: 'check', 'record' or None. Provided mode is {debug_conf}" )
 
-    self.trace = debug_conf[ 'trace' ]
-
+        if os.path.exists( self.test_vector_file ) and\
+           os.path.isfile( self.test_vector_file ) and\
+           os.stat( self.test_vector_file ).st_size > 0:
+          with open( self.test_vector_file, 'rt', encoding='utf8' ) as f:
+            self.db = json.load( f )
+      
   def read_bin( self, key ) -> bytes :
     """ returns the value in a binary format """
     if key in self.db.keys() :
@@ -150,15 +139,15 @@ class Debug:
 
     ## updating the test_vector file
     ## opens only when the file exists to read the existing records.
-    if os.path.exists( self.file ) and os.path.isfile( self.file )\
-       and os.stat( self.file ).st_size > 0:
-      with open( self.file, 'rt', encoding='utf8' ) as f:
+    if os.path.exists( self.test_vector_file ) and os.path.isfile( self.test_vector_file )\
+       and os.stat( self.test_vector_file ).st_size > 0:
+      with open( self.test_vector_file, 'rt', encoding='utf8' ) as f:
         tmp_db = json.load( f )
 #        tmp_db[  key ] = self.db[ key ]
     else: 
       tmp_db = {}
     tmp_db[ key ] = self.value_to_json( value )
-    with open( self.file, 'wt', encoding='utf8' ) as f:
+    with open( self.test_vector_file, 'wt', encoding='utf8' ) as f:
       json.dump( tmp_db, f, indent=2 )
 
   def trace_bin( self, key:str, value:bytes ):
@@ -194,7 +183,6 @@ class Tls13Debug( Debug ):
         key = f"client_{k.group}_ecdhe_private"
         self.trace_bin( key, pkcs8_bytes )   
         self.trace_val( key, pkcs8_bytes )
-#        print( f"  - {key} [{len(pkcs8_bytes)} bytes]: {pkcs8_bytes}" )
       self.trace_val( f"client_{k.group}_ecdhe_public", k.ks_entry( ) )   
 
   def record_client_ephemeral( self, ephemeral ):
