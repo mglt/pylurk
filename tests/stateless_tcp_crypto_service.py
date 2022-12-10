@@ -10,6 +10,7 @@ sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
 import pylurk.cs
 import pylurk.conf
 
+conf_dir = '/home/emigdan/gitlab/pytls13/src/pytls13/clt_cs'
 
 cs_list = { 
 #  'lib_cs' : { 
@@ -29,12 +30,18 @@ cs_list = {
       'type': 'stateless_tcp',
       'ip' : '127.0.0.1', 
       'port' : 9401
+     }, 
+     'cs' : { 
+       ( 'tls13', 'v1' ) : { 
+         'publickey' : [ os.path.join( conf_dir, '_Ed25519PublicKey-ed25519-X509.der' ) ],
+         'private_key': os.path.join( conf_dir, '_Ed25519PrivateKey-ed25519-pkcs8.der' ) ,
+         'sig_scheme': ['ed25519']
+       }   
      }   
-   }   
+  }    
 }
 
 
-conf_dir = '/home/emigdan/gitlab/pytls13/src/pytls13/clt_cs'
 ## adding the key to all servers
 for k in cs_list.keys():
   cs_list[ k ][ ( 'tls13', 'v1' ) ] = {

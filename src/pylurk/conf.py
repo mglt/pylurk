@@ -1,4 +1,5 @@
-
+import os
+import os.path
 from  os.path import join
 import pkg_resources
 import copy
@@ -59,58 +60,73 @@ class Configuration:
       2 - generates informations that can be used by the software: This typically includes some information that can be derive. In this case, we would like to avoid information to be reprocessed muliutple times. For example, we do not want the certificate to read from the file each time a CERT message is sent. 
      We that purpose we are adding some extra variables that are noted _key to distinguish from those expected from the user. 
     """
-#    self.conf = conf 
-    data_dir = pkg_resources.resource_filename(__name__, '../data/')
+#    data_dir = pkg_resources.resource_filename(__name__, '../data/')
     self.conf = {
       'profile' : 'explicit configuration',
       'description' : "LURK Cryptographic Service configuration template",
-    #  'mode' : 'debug',
+      ## connectivity describes how to connect the CS
+      ##  type: describe sthe type of connectivity. 
+      ##    Values include 'lib_cs', stateless_tcp, tcp, tcp+tls, http, https,..
+      ##    The default type is lib_cs. other types are usually associated with
+      ##    other parameters that needs to be provided explicitly
       'connectivity' : {
-          'type' : "lib_cs", #"udp",  # "local", "stateless_tcp", "tcp", "tcp+tls", http, https
-    # These needs to be specified with specific configuration 
-    # entries when applicable.
-    #          'fqdn' : None,
-    #          'ip_address' : "127.0.0.1",
-    #          'port' : 9999,
-    #          'key' : join(data_dir, 'key_tls12_rsa_server.key'),
-    #          'cert' : join(data_dir, 'cert_tls12_rsa_server.crt'),
-    #          'key_peer' : join(data_dir, 'key_tls12_rsa_client.key'),
-    #          'cert_peer' : join(data_dir, 'cert_tls12_rsa_client.crt')
+          'type' : "lib_cs"
+           #'fqdn' : None,
+           #'ip_address' : "127.0.0.1",
+           #'port' : 9999,
+           #'key' : join(data_dir, 'key_tls12_rsa_server.key'),
+           #'cert' : join(data_dir, 'cert_tls12_rsa_server.crt'),
+           #'key_peer' : join(data_dir, 'key_tls12_rsa_client.key'),
+           #'cert_peer' : join(data_dir, 'cert_tls12_rsa_client.crt')
           },
       'enabled_extensions' : [ ( 'lurk', 'v1' ) , ( 'tls13', 'v1' ) ],
       ( 'lurk', 'v1' ) : {
          'type_authorized' : [ 'ping',  'capabilities' ]
       },
       ( 'tls13', 'v1' ) : {
+        ## prints multiple useful information
+        ## test_vector is not part of the default template and
+        ## is expected to be explicitly provided.
+        ##   trace (bool) : indicate to provide multiple information
+        ##   file : is te path tho the file that is use to record the 
+        ##     parameters or to check the measured parameters against those 
+        ##     provided in the test vector 
         'debug' : {
-          'trace' : True,  # prints multiple useful information
-           ## test_vector is not part of the default template and
-           ## is expected to be explicitly provided.
-  #        'test_vector' : { 
-  #        'file' : './illustrated_tls13.json',
-  #        'mode' : 'check', # check / record
-  #           }
+          'trace' : True,  
+          #'test_vector' : { 
+          #'file' : './illustrated_tls13.json', 
+          #'mode' : 'check', # possible value None /check / record
+          #   }
         },
-    #      'test_vector_file' : './illustrated_tls13.json',
-    #      'test_vector_mode' : 'check', # check / record
-    #      'test_vector_tls_traffic' : True, #'local' # / remote 
-    #      },
-         'role' : 'server', #[ 'client', 'server' ],
-         'type_authorized' : [ 's_init_cert_verify',     ## server ECDHE
-                               's_init_early_secret',    ## server PSK
-                               's_hand_and_app_secret',  ## server PSK
-                               's_new_ticket',           ## session resumption
-                               'c_init_client_finished', ## only signature 
-                               'c_post_hand_auth',       ## post hand
-                               'c_init_client_hello',    ## client hello
-                               'c_server_hello',
-                               'c_client_finished',
-                               'c_register_tickets' ],
-         ## echde authentication parameter
-           ## certificate chain, the public key of the TLS client or server
-           ## is expected to be the last one
-         'public_key' : [join( data_dir, 'cert-rsa-enc.der' )], 
-         'private_key' : join( data_dir, 'key-rsa-enc.pkcs8' ), ## der, pkcs8
+        ## role indicates if the CS is implemented for a 
+        ## TLS client or a TLS server
+        'role' : 'server', #[ 'client', 'server' ],
+        ## defines the type of LURK requests that are served by the 
+        ## CS.
+        'type_authorized' : [ 's_init_cert_verify',     ## server ECDHE
+                              's_init_early_secret',    ## server PSK
+                              's_hand_and_app_secret',  ## server PSK
+                              's_new_ticket',           ## session resumption
+                              'c_init_client_finished', ## only signature 
+                              'c_post_hand_auth',       ## post hand
+                              'c_init_client_hello',    ## client hello
+                              'c_server_hello',
+                              'c_client_finished',
+                              'c_register_tickets' ],
+        ## echde authentication parameter
+        ## certificate chain, the public key of the TLS client or server
+        ## is the last one.
+        ## 
+        ## Note that the file name follows a generic patent to specify 
+        ## the type of the key (in some case sig_scheme) as well as the 
+        ## type of encoding.
+        ## This information are not necessary, and we shoudl be able to 
+        ## remove that constraint.
+        ## 
+        ## Note that the chain of certificates is likely to be stored 
+        ## into a single file.  
+        #'public_key' : [join( data_dir, 'cert-rsa-enc.der' )], 
+        #'private_key' : join( data_dir, 'key-rsa-enc.pkcs8' ), ## der, pkcs8
          'ephemeral_method_list' : ['no_secret', 'cs_generated', 'e_generated'],
          'authorized_ecdhe_group' : ['secp256r1', 'secp384r1', 
                                      'secp521r1', 'x25519', 'x448'], 
@@ -148,8 +164,10 @@ class Configuration:
          'ticket_life_time' : 172800, # 2d = 2*24*3600 < 2**32-1
          'ticket_nonce_len' : 20,  ## bytes < 255
          'ticket_generation_method': 'ticket', ## versus index 
-         'ticket_public_key': join(data_dir, 'ticket-cert-rsa-enc.der'), ## one key
-         'ticket_private_key' : join(data_dir, 'key-rsa-enc.pkcs8'), ## der, pkcs8
+         ## the key used to encrypt tickets
+         ## 
+         #'ticket_public_key': join(data_dir, 'ticket-cert-rsa-enc.der'), ## one key
+         #'ticket_private_key' : join( data_dir, 'key-rsa-enc.pkcs8'), ## der, pkcs8
          'ticket_len' : 4,  ## bytes < 255
          ## client parameters
          'post_handshake_authentication' : True,
@@ -254,8 +272,10 @@ class Configuration:
       ## retrieving the public key
       private_key = key
       public_key = private_key.public_key( )
-    
+    else:
+      public_key = key
     ## storing public key
+    ## Note that storing self signed certificate requires the private key
     class_name = public_key.__class__.__name__
     public_file = join( conf_dir, f"{class_name}-{algo}-{key_format}.der" )
     if key_format == 'Raw':
@@ -303,6 +323,7 @@ class Configuration:
   def load_public_key( self, public_file) :
     """ load the public key and define the key format"""
 
+    pylurk.debug.check_file( public_file )
     with open( public_file, 'rb' )  as f:
       public_bytes = f.read()
     ## trying to load the certificate
@@ -340,6 +361,7 @@ class Configuration:
   def load_private_key( self, private_file ):
     """ returns the private key """
 
+    pylurk.debug.check_file( private_file )
     with open( private_file, 'rb' )  as f:
       private_bytes = f.read()
       ## ed25519
@@ -400,6 +422,8 @@ class Configuration:
        
     """
     ## Trying to derive directory from the files being provided.
+#    print( f" dirname( private_key_file ): {os.path.dirname( private_key_file )}" ) 
+#    print( f" dirname( public_key_file ): {os.path.dirname( public_key_file )}" ) 
     try:
        conf_dir = os.path.dirname( private_key_file )
     except:
@@ -408,11 +432,15 @@ class Configuration:
       except:
         conf_dir = './'
     ## ensures that there is a private key
-    try:  
+    try :  
       private_key = self.load_private_key( private_key_file )
-    except :
+    except ConfigurationError as e:
+      print( e.message )
+      print( f"WARNING: Generating new keys")
       private_key, public_key = self.generate_keys( sig_scheme )
       private_file, public_file = self.store_keys( private_key, key_format, conf_dir )
+      print( f"  - private_file: {private_file}" )
+      print( f"  - public_file: {private_file}" )
 
     private_key = self.load_private_key( private_key_file )
     sig_scheme = self.key_algo( private_key )
@@ -429,7 +457,11 @@ class Configuration:
     except:
       private_key = self.load_private_key( private_key_file )
       public_key = private_key.public_key( )
-      self.store_keys( public_key, key_format, conf_dir )
+##      self.store_keys( public_key, key_format, conf_dir )
+      ##  we do store the private key as 1) storing the private key
+      ## results in storing the public key. but also 2) storing the public 
+      ## key as a self-signed certificate requires the private key. 
+      self.store_keys( private_key, key_format, conf_dir )
     return private_key_file, public_key_file
 
 
@@ -459,28 +491,31 @@ class Configuration:
     """configure the CS signing keys and associated internal variables"""
    
     try: 
-      private_file = self.conf[ ( 'tls13', 'v1' ) ][ 'private_key' ]
+      private_key_file = self.conf[ ( 'tls13', 'v1' ) ][ 'private_key' ]
     except KeyError:
-      private_file = None
+      private_key_file = None
     try:
       public_key_file = self.conf[ ( 'tls13', 'v1' )  ] ['public_key'][ -1 ]
     except KeyError:
       public_key_file = None
     try: 
-      sig_scheme = self.conf[ ( 'tls13', 'v1' )  ] [ 'sig_scheme' ]
+      sig_scheme = self.conf[ ( 'tls13', 'v1' )  ] [ 'sig_scheme' ][ 0 ]
     except KeyError:
       sig_scheme = 'ed25519'
+    print( f"private_key_file: {private_key_file}" )
+    print( f"public_key_file: {public_key_file}" )
+    print( f"conf: {self.conf}" )
     private_key_file, public_key_file = self.set_tls13_keys( \
-                                          private_key_file=private_file, \
+                                          private_key_file=private_key_file, \
                                           public_key_file=public_key_file, \
                                           sig_scheme=sig_scheme,\
                                           key_format='X509' )
     ## Once the files have been checked are correct we can load them
     public_key, cert_type = self.load_public_key( public_key_file )
-    private_key = self.load_private_key( private_file )
+    private_key = self.load_private_key( private_key_file )
 
     ## updating self.conf 
-    self.conf[ ( 'tls13', 'v1' ) ][ 'private_key' ] = private_file
+    self.conf[ ( 'tls13', 'v1' ) ][ 'private_key' ] = private_key_file
     ## handling the public key file is a bit more complex as the 
     ## file is a file list when key format X509 is used.
     public_key_conf_status = False

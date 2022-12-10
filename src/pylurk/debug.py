@@ -43,6 +43,17 @@ def bytes_to_human( description:str, bit_string:bytes ):
         output_string += char
     return output_string
 
+def check_file( file_path ):
+  """ checks a file can be open """
+  if file_path is None :
+    raise ConfigurationError( f"file_path is None. Expecting file path." )
+  if os.path.exists( file_path ) is False:
+    raise ConfigurationError( f"{file_path} does not exist." )
+  if os.path.isfile( file_path ) is False: 
+    raise ConfigurationError( f"{file_path} is not a file but a directory" )
+  if os.stat( file_path ).st_size == 0 : 
+    raise ConfigurationError( f"{file_path} is empty" )
+
 def print_bin( description:str, bit_string:bytes ):
     print( bytes_to_human( description, bit_string ) )
 

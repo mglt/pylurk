@@ -287,6 +287,9 @@ class CipherSuite:
     if content_type == 'application_data' :
       clear_text_record_bytes = tls.TLSInnerPlaintext.build( inner_plain_text, type=content_type, length_of_padding=length_of_padding, clear_text_msg_len=len(clear_text_msg) )
     else: # handshake
+      print( f"inner_plain_text: {inner_plain_text}" )
+      print( f"content_type: {content_type}" )
+      print( f"length_of_padding: {length_of_padding}" )
       clear_text_record_bytes = tls.TLSInnerPlaintext.build( inner_plain_text, type=content_type, length_of_padding=length_of_padding)
     print( f"  - inner clear_text : {tls.TLSInnerPlaintext.parse( clear_text_record_bytes, type=content_type, length_of_padding=length_of_padding, clear_text_msg_len=len(clear_text_msg) ) }" )
     pylurk.debug.print_bin( "inner_clear_text", clear_text_record_bytes ) 
