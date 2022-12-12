@@ -1,8 +1,8 @@
 from construct.core import *
 from construct.lib import *
 from construct.debug import *
-import sys
-sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/pytls13') #pytls13
+#import sys
+#sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/pytls13') #pytls13
 import pytls13.struct_tls13 as tls
 
 """ TLS 1.3 related structures modified by lurk"""

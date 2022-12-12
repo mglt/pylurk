@@ -20,8 +20,8 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305, AESGCM, AESCCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF, HKDFExpand
 
-import sys
-sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
+#import sys
+#sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
 from pylurk.lurk.lurk_lurk import LURKError, ImplementationError, ConfigurationError
 import pylurk.tls13.struct_tls13 as lurk
 import pytls13.struct_tls13 as tls

@@ -1,10 +1,11 @@
 from construct.core import *
 from construct.lib import *
 from construct.debug import *
-import sys
-sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/')
+
+#import sys
+#sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/')
 import pytls13.struct_tls13 as tls
-sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
+#sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
 import pylurk.tls13.struct_tls13 as lurk
 
 TLS13Version = Enum( BytesInteger(1), 

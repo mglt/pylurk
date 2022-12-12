@@ -31,12 +31,12 @@ from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305, AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF, HKDFExpand
 import datetime
 
-import sys
-sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/')
+#import sys
+#sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/')
 import pytls13.struct_tls13 as tls
 #import pytls13.test_vector
 
-sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
+### sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
 #import pylurk.tls13.struct_tls13 as lurk
 from pylurk.lurk.lurk_lurk import LURKError, ImplementationError, ConfigurationError
 #import pylurk.tls13.lurk_tls13

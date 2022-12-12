@@ -32,11 +32,11 @@ from construct.core import *
 from construct.lib import *
 
 
-import sys
-sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/')
-import pytls13.struct_tls13 as tls
-sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
-import pylurk.tls13.struct_tls13 as lurk
+#import sys
+#sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/')
+#import pytls13.struct_tls13 as tls
+#sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
+#import pylurk.tls13.struct_tls13 as lurk
 import pylurk.debug
 from pylurk.debug import get_struct, get_struct_index
 from pylurk.tls13.crypto_suites import SigScheme, CipherSuite

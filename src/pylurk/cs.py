@@ -1,8 +1,8 @@
 import logging
 from pylurk.struct_lurk import LURKMessage, LURKHeader 
 from pylurk.lurk.lurk_lurk   import LURKError, ImplementationError, ConfigurationError, LurkExt 
-import sys
-sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src/')
+####import sys
+###sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src/')
 import pylurk.tls13.lurk_tls13 
 import pylurk.debug
 #from pylurk.tls13.lurk_tls13  import Tls13Ext, TicketDB, SessionDB 
