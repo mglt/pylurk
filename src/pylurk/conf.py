@@ -20,8 +20,6 @@ from cryptography.hazmat.primitives.asymmetric.ec import SECP256R1, SECP384R1, S
 
 from cryptography.hazmat.primitives.hashes import Hash, SHA256, SHA384, SHA512
 from cryptography.hazmat.primitives.serialization import load_der_private_key, load_pem_private_key, NoEncryption, Encoding, PrivateFormat, PublicFormat
-#from cryptography.hazmat.primitives.serialization.PrivateFormat import PKCS8, Raw
-#from cryptography.hazmat.primitives.serialization.PublicFormat import PublicKeyInfo, Raw
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -31,19 +29,10 @@ from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305, AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF, HKDFExpand
 import datetime
 
-#import sys
-#sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/')
 import pytls13.struct_tls13 as tls
-#import pytls13.test_vector
 
-### sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
-#import pylurk.tls13.struct_tls13 as lurk
 from pylurk.lurk.lurk_lurk import LURKError, ImplementationError, ConfigurationError
-#import pylurk.tls13.lurk_tls13
-
-
 import pylurk.tls13.struct_tls13 as lurk
-#import pylurk.utils
 import pylurk.tls13.crypto_suites
 import binascii
 
@@ -421,9 +410,7 @@ class Configuration:
     This includes when the material is not specified or when not coherent.
        
     """
-    ## Trying to derive directory from the files being provided.
-#    print( f" dirname( private_key_file ): {os.path.dirname( private_key_file )}" ) 
-#    print( f" dirname( public_key_file ): {os.path.dirname( public_key_file )}" ) 
+    ## Derive directory from the provided files (when possible).
     try:
        conf_dir = os.path.dirname( private_key_file )
     except:

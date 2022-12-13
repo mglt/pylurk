@@ -5,9 +5,6 @@ from copy import deepcopy
 
 from typing import Union, NoReturn, TypeVar, List  
 
-#from cryptography.hazmat.backends import default_backend
-
-
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from cryptography.hazmat.primitives.asymmetric.x448 import X448PrivateKey, X448PublicKey
 
@@ -36,10 +33,6 @@ import hashlib
 from construct.core import *
 from construct.lib import *
 
-#import sys
-#sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/')
-#import pytls13.struct_tls13 as tls
-#sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
 import pylurk.debug
 import pylurk.tls13.struct_tls13 as lurk
 from pylurk.debug import get_struct, get_struct_index
@@ -47,8 +40,6 @@ from pylurk.tls13.key_scheduler import KeyScheduler
 from pylurk.tls13.tls_handshake import TlsHandshake 
 import pylurk.tls13.crypto_suites
 
-##from pylurk.tls13.struct_tls13 import PskIdentity, Certificate, SignatureScheme, Handshake, OfferedPsks
-#from pylurk.tls13.key_schedule import TlsHash, PSKWrapper
 import pylurk.conf 
 from pylurk.tls13.crypto_suites import SigScheme, CipherSuite
 from pylurk.lurk.lurk_lurk import LURKError, ImplementationError, ConfigurationError
@@ -176,34 +167,20 @@ class Ephemeral:
 ###
     ecdhe_key = pylurk.tls13.crypto_suites.ECDHEKey()
     ecdhe_key.group = group
-    print( f" --- ecdhe_key: {ecdhe_key}" )
-    print( f" --- self.debug: {self.debug}" )
-    print( f" --- self.debug.test_vector: {self.debug.test_vector}" )
-    print( f" --- self.debug.check: {self.debug.test_vector}" )
-    print( f" --- self.debug.record: {self.debug.record}" )
-    print( f" --- self.debug.conf: {self.debug.conf}" )
-    print( f" --- ecdhe_key.private: {ecdhe_key.private}" )
-    print( f" --- ecdhe_key.public: {ecdhe_key.public}" )
     ## try to read value from test_vector file
     if self.debug is not None and self.debug.test_vector is True:
-#      print( f"--- I AM HERE, but I SHOULD NOT BE HERE")
       key =f"{self.conf[ 'role' ]}_{group}_ecdhe_private"
       if key in self.debug.db.keys():
         ecdhe_key.generate_from_pem( self.debug.read_bin( key ) )
-#        print( f"--- ecdhe: echde_key (gen_from_pem) {self.test_vector.read_bin( key )}" )
       if self.debug.check is True:
         self.debug.check_bin( ecdhe_key.pkcs8(), self.debug.read_bin( key ) )   
     elif ecdhe_key.private is None and ecdhe_key.public is None:
-#      raise ValueError("unable to read ECDHEKey")
       ecdhe_key.generate( group )
-      print( f" ecdhe_key.public.public_bytes(): {ecdhe_key.public.public_bytes( encoding=Encoding.Raw, format=PublicFormat.Raw) }" )
     return ecdhe_key
 
   def client_shares( self ):
     """ computes client_shares, private_keys and resp """ 
     client_shares = self.handshake.get_key_share( side='client' )
-    print( f"client_shares : {client_shares}" )
-    print( f"tls_handshake: {self.handshake.msg_list}" )
     ecdhe_key_list = []
     resp = []
     for ks in client_shares :
@@ -235,7 +212,6 @@ class Ephemeral:
       self.server_ecdhe_key = pylurk.tls13.crypto_suites.ECDHEKey( )
       self.server_ecdhe_key.generate_from_ks_entry( self.handshake.get_key_share( side='server' ) )
       for key in c_init_client_hello_ephemeral.client_ecdhe_key_list :
-#        print( f" key ({key.group}) versus {self.server_ecdhe_key.group}" )
         if self.server_ecdhe_key.group == key.group :
           self.shared_secret = self.server_ecdhe_key.shared_secret( key )
           break
@@ -295,7 +271,6 @@ class SessionID:
       self.cs = token_bytes( 4  )
       self.e = session_id
     else:
-#      print( f"--- tag: {tag}" )
       if tag.last_exchange is False:
         self.cs = token_bytes( 4  )
         self.e = session_id
@@ -375,7 +350,6 @@ class LurkCert:
         raise LURKError( 'invalid_certificate', f"unrecognized fingerprint "\
                          f"{finger_print_entry_list} {self.finger_print_dict}" )
       else:
-#        print( f"{self.conf[ 'role' ]}")
         if self.conf[ 'role' ] == 'server':
           cert_req_ctx = b''
         elif self.conf[ 'role' ] == 'client':
@@ -428,7 +402,6 @@ class LurkCert:
 class SecretReq:
 
   def __init__( self, secret_request:dict, mtype, tls13_conf, handshake=None ):
-#    print( f"SecretReq init start {secret_request}")
 
     self.conf = tls13_conf
     if mtype in [ 's_init_early_secret', 'c_init_client_hello' ]:
@@ -461,7 +434,6 @@ class SecretReq:
       if secret_request[ key ] == True and key not in forbiden :
         self.authorized_secrets.append( key )
     self.authorized_secrets = list( set( self.authorized_secrets ) )
-#    print( f"self.authorized_secrets (adding requested): {self.authorized_secrets}" )
 
     if mtype in [ 's_init_cert_verify', 'c_hand_and_app_secret' ] :
       if self.conf[ 'app_secret_authorized' ] == False :
@@ -505,7 +477,6 @@ class SecretReq:
 
   def resp( self, scheduler ):
     secret_list = []
-#    print( f"self.authorized_secrets: {self.authorized_secrets}" )
     for secret_type in self.authorized_secrets:
       secret_list.append( \
         { 'secret_type' : secret_type, 
@@ -613,7 +584,6 @@ class SNewTicketReq:
     self.cert = LurkCert( req[ 'certificate' ], self.mtype, self.conf, False, \
                           self.handshake ) 
     if self.cert.cert_type != 'no_certificate' :
-#      print( f" {self.handshake.msg_type_list()} - {self.cert.cert_type}" )
       self.handshake.update_certificate( self.cert, server=False )
     self.secret_request = SecretReq(req[ 'secret_request' ], self.mtype, self.conf )
     self.scheduler.process( self.secret_request.of( [ 'r' ] ), self.handshake )
@@ -695,13 +665,9 @@ class SHandAndAppSecretReq:
     self.session_ticket = session_ticket 
     self.handshake.sanity_check( self.mtype, session_ticket=session_ticket )
     self.handshake.update_random( self.freshness )
-#    print( f"initilaizing ephemeral {req[ 'ephemeral' ]} - {self.mtype} - {self.handshake.msg_type_list()}" )
     self.ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf,\
                                 self.handshake, client_hello_ephemeral )
       
-#    print("initialized SHandAndAppSecretReq")
-
-#    self.ephemeral.compute_server_key_exchange( self.handshake ) 
     if self.ephemeral.method == 'cs_generated':
       self.handshake.update_key_share( self.ephemeral.server_share )
     self.scheduler.shared_secret = self.ephemeral.shared_secret 
@@ -778,7 +744,6 @@ class SSession:
     else: 
       raise LURKError( 'invalid_request', f"unexpected request {mtype}"\
               f"expecting {self.next_mtype} or initial request" )
-#    print( f" -- {req}" )
     self.next_mtype = req.next_mtype
     return req.resp
 
@@ -802,26 +767,21 @@ class CInitClientFinishedReq:
                     True, self.handshake )
     client_cert = LurkCert( req[ 'client_certificate' ], self.mtype, self.conf, \
                     False, self.handshake )
-#    print(f" --- CS: received random: {self.handshake.msg_list[0][ 'data' ][ 'random' ]}" )
     self.handshake.update_random( Freshness( req[ 'freshness' ] ) )
-#    print(f" --- CS: updated random: {self.handshake.msg_list[0][ 'data' ][ 'random' ]}" )
     if server_cert.cert_type != 'no_certificate' : 
       self.handshake.update_certificate( server_cert, server=True )
     self.scheduler = None
     self.tag = Tag( req[ 'tag' ], self.mtype, self.conf, ctx=self.handshake )
     self.session_id = SessionID( req[ 'session_id' ], tag=self.tag )
     ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf, self.handshake )
-#    print( f"ephemeral.shared_secret: {ephemeral.shared_secret}")
     self.scheduler = KeyScheduler( self.handshake.get_tls_hash(), \
                                    shared_secret=ephemeral.shared_secret, psk=psk, debug=debug )
     ### the current handshake.msg_list is up to early data
     ## we need to make sur we limit ourselves to the ClientHello...ServerHello
     self.scheduler.process( [ 'h_c', 'h_s' ], self.handshake )
-#    print( f"after h : {self.handshake.msg_type_list()}" )
     self.client_cert  = LurkCert( req[ 'client_certificate' ], self.mtype, self.conf, server=False, handshake=self.handshake )
 
     self.handshake.update_certificate( self.client_cert, server=False )
-#    print( f"client cert inserted : {self.handshake.msg_type_list()}" ) 
     self.handshake.update_certificate_verify( )
     ## get sig from freshly generated certificate_verify 
     sig = self.handshake.msg_list[ 0 ][ 'data' ]['signature' ]
@@ -850,7 +810,6 @@ class CPostHandAuthReq:
 
     ## the signature is performed for a post handshake transcript
     self.handshake.update_certificate_verify( )
-#    print( self.handshake.msg_list )
     sig = self.handshake.msg_list[ 0 ][ 'data' ]['signature' ]
     del self.handshake.msg_list[ : ]
 
@@ -979,13 +938,11 @@ class CClientFinishedReq:
     ## may be skipped when the client knows PSK and ECDHE secrets
     ## In this situation, the sheduler is not needed.
     if self.scheduler is None: ## we need to initialize transcript
-#      print( f"-- {self.handshake.msg_type_list()}" )
       self.handshake.transcript = Hash( self.handshake.get_tls_hash() )
     else:  
       self.scheduler.process( [ 'a_c', 'a_s' ], self.handshake )
     if is_cert_req:
       self.handshake.update_certificate( client_cert, server=False )
-#     print( f"client cert inserted : {self.handshake.msg_type_list()}" )
       self.handshake.update_certificate_verify( )
       ## get sig from freshly generated certificate_verify 
       sig = self.handshake.msg_list[ 0 ][ 'data' ]['signature' ]
@@ -994,14 +951,8 @@ class CClientFinishedReq:
     ## generating Finished message and generating the transcript of the full handshake
     if self.tag.last_exchange == False:
       self.handshake.update_finished( self.scheduler )
-#      print( f"Generat client_finished:  {self.handshake.msg_list}" )
       self.scheduler.process( [ 'r' ], self.handshake )
-#      print( f"Generat resumption_master_secret:  {self.scheduler.secrets[ 'r' ]}" )
     secret_request = SecretReq(req[ 'secret_request' ], self.mtype, self.conf )
-###
-#    secret_request = SecretReq( secret_req, self.mtype, self.conf, \
-#                                handshake=self.handshake )
-###
     self.resp = { 'tag' : self.tag.resp,
                   'session_id' : session_id.cs,
                   'signature' : sig,
@@ -1121,7 +1072,6 @@ class TicketDB:
     This function updates the information so all information is 
     available to generate a TLS ticket
     """
-#    print( f" -- update_ticket_info: {ticket_info}" )
     if ticket_info[ 'psk_type' ] == 'external': 
       obfuscated_ticket_age = 0
     else :
@@ -1142,8 +1092,6 @@ class TicketDB:
       return None
 
 class Tls13Ext:
-##def __init__(self, conf=default_conf, ticket_db=None, session_db=None, test_vector=None ):
-#  def __init__(self, conf=pylurk.conf.conf_template, ticket_db=None, session_db=None, debug=None ):
   def __init__(self, conf, ticket_db=None, session_db=None, debug=None ):
     self.conf = conf 
     self.debug = debug
@@ -1156,13 +1104,9 @@ class Tls13Ext:
     else: 
       self.ticket_db = ticket_db
       
-#    raise ValueError( f"test_vector trace: {test_vector.trace}" )
-   
-
   def payload_resp( self, req:dict ) -> dict :
       req_type = req[ 'type' ]
       req_payload = req[ 'payload' ]
-#      if req_type in [ 's_init_early_secret', 's_init_cert_verify' ]:
       if 'init' in req_type : #in [ 's_init_early_secret', 's_init_cert_verify' ]:
         if req_type[ :7 ] == 's_init_': 
           session = SSession( self.conf, session_db=self.session_db,\
@@ -1174,16 +1118,11 @@ class Tls13Ext:
                               debug=self.debug )
         else:
           raise LURKError( 'invalid_type', f"{req_type}" )
-        ##print( f" --- reqq: {req}" )
         payload  = session.serve( req_payload, req_type, 'request')
         if session.session_id != None :
           self.session_db.store( session ) 
-#      elif req_type in [ 's_hand_and_app_secret', 's_new_ticket' ]:
       else :
         try:
-#          print( f" --- cs session_id: {req_payload[ 'session_id' ] }" )
-#          print( f" --- cs sessionDB: {self.session_db.db }" )
-         
           session = self.session_db.unstore( req_payload[ 'session_id' ] )
         except KeyError:
           raise LURKError( 'invalid_session_id', f"{req} session_id not found in DB" )

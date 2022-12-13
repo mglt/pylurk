@@ -12,11 +12,8 @@ from cryptography.hazmat.primitives.hmac import HMAC
 
 from construct.core import *
 from construct.lib import *
+
 import pylurk.debug
-#import sys
-#sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/')
-#import pytls13.struct_tls13 as tls
-#sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
 import pylurk.tls13.struct_tls13 as lurk
 import pylurk.debug
 from pylurk.debug import get_struct, get_struct_index
@@ -168,18 +165,8 @@ class KeyScheduler:
         self.process_handshake_and_master_secret( )
        
       if 'h_c' in secret_list or  'h_s' in secret_list:
-#        print( f"-- INIT Transcript ('h'): {handshake.msg_type_list()} ")
-        
         t = handshake.transcript_hash( 'h' )
         s = self.handshake_secret
-#        print( f"-- CURRENT Transcript ('h'): {t} ")
-#        print( f"-- CURRENT Handshake_secret ('h'): {s} ")
-#        print( f"-- self.debug.mode: {self.debug.mode}" ) 
-#        print( f"-- self.debug.check: {self.debug.check}" ) 
-#        print( f"-- self.debug.record: {self.debug.record}" ) 
-#        print( f"-- self.debug.trace: {self.debug.trace}" ) 
-#        print( f"-- self.debug.file: {self.debug.file}" ) 
-#        print( f"-- self.debug.__class__: {self.debug.__class__.__name__}" ) 
         self.secrets[ 'h_c' ] = self.derive_secret( s, b'c hs traffic', t )
         self.secrets[ 'h_s' ] = self.derive_secret( s, b's hs traffic', t )
         if self.debug is not None:
@@ -204,8 +191,6 @@ class KeyScheduler:
       if 'r' in secret_list:
         t = handshake.transcript_hash( 'r' )
         s = self.master_secret
-#        print( f"-- R CURRENT Transcript ('r'): {t} ")
-#        print( f"-- R CURRENT Handshake_secret ('r'): {s} ")
         self.secrets[ 'r' ] = self.derive_secret( s, b'res master', t )
         if self.debug is not None:
           self.debug.handle_bin( f"transcript h ['r']", t )

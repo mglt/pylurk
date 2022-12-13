@@ -32,11 +32,7 @@ from construct.core import *
 from construct.lib import *
 
 
-#import sys
-#sys.path.insert(0, '/home/emigdan/gitlab/pytls13/src/')
-#import pytls13.struct_tls13 as tls
-#sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
-#import pylurk.tls13.struct_tls13 as lurk
+import pytls13.struct_tls13 as tls
 import pylurk.debug
 from pylurk.debug import get_struct, get_struct_index
 from pylurk.tls13.crypto_suites import SigScheme, CipherSuite
@@ -302,8 +298,6 @@ class TlsHandshake:
         ch_index_list.append( ch_index )
       engine_random = self.msg_list[ 0 ] [ 'data' ][ 'random' ]
       client_random = freshness.update_random( self.role, engine_random )
-#      print( f"--- update_random engine_random : {engine_random}" )
-#      print( f"--- update_random client_random : {client_random}" )
       for ch_index in ch_index_list :
         self.msg_list[ ch_index ] [ 'data' ][ 'random' ] = client_random
     else:
@@ -445,11 +439,9 @@ class TlsHandshake:
     hmac.update( transcript_hash )
     binder = hmac.finalize()
     if self.debug is not None:
-#      test_vector.handle_bin( 'truncated_client_hello' , truncated_client_hello_bytes ) 
       if binder_index != '':
         binder_index = f"({binder_index})"
       self.debug.handle_bin( f"compute_binder: {binder_index} binder_finished_key" , binder_finished_key )
-#      print( f"compute_binder: {binder_index} tls_hash:  {tls_hash}" )
       self.debug.handle_bin( f"Transcript( truncated_client_hello ) {binder_index}" , transcript_hash )
       self.debug.handle_bin( f"binder {binder_index}" , binder )
 
@@ -488,7 +480,6 @@ class TlsHandshake:
         f"   - psk_info_list  (len: {len( psk_info_list )})\n"\
         f"   - binder_key_list  (len: {len( binder_key_list )})" )
     
-#    print( f"update_binders: binder_finished_key_list: " )
     ## generates the truncated client hello
     truncated_client_hello = self.truncated_client_hello( ticket_info_list )
     ## adding the binders
@@ -572,9 +563,17 @@ class TlsHandshake:
     return hmac.finalize()
 
   def update_finished( self, scheduler ):
+    """ updates the finished message 
 
+    Only the self.role Finished message is generated. 
+    More specifically only the TLS client generates the client Finished 
+    and only the TLS server generates the server Finished. 
+    
+    get_verify_data is used directly to perform the verification of 
+    the other Finished message. 
+    """
     verify_data = self.get_verify_data( scheduler, \
-                    role=self.role, transcript_mode='finished' )  
+                    role=self.role, transcript_mode=f"{self.role} finished" )  
     self.msg_list.append( { 'msg_type' : 'finished',
                             'data' : { 'verify_data' : verify_data } } )
     
@@ -618,8 +617,6 @@ class TlsHandshake:
       del self.msg_list[ : upper_msg_index ]
     msg_bytes = bytearray()
     for msg in msg_list :
-#      print( f" appending to transcript {msg[ 'msg_type' ]}" ) 
-#      print( f" appending to transcript {msg}" ) 
       msg_bytes.extend( tls.Handshake.build( msg, **ctx_struct ) )
 
     self.transcript.update( msg_bytes )
@@ -692,7 +689,8 @@ class TlsHandshake:
         ['server_hello', 'encrypted_extensions', 'certificate_request',\
          'certificate', 'certificate_verify', 'finished', 'certificate'] ]:
         raise LURKError( 'invalid_handshake', f"unexpected handshake {self.msg_type_list()}" )
-    elif transcript_type == 'finished' :
+##    elif transcript_type == 'finished' :
+    elif transcript_type in [ 'client finished', 'server finished' ] :
       if self.msg_type_list( ) not in [ \
         ## 's_init_cert_verify', c_init_client_finished, c_client_finised
         ## without TLS client authentication, the client finished 
@@ -734,7 +732,6 @@ class TlsHandshake:
         ]:
         raise LURKError( 'invalid_handshake', f"unexpected handshake {self.msg_type_list()}" )
     elif transcript_type == 'r' : 
-#      print( f" --- self.msg_type_list( ): {self.msg_list}" )
       if self.msg_type_list( ) not in [ \
         ## 's_new_ticket 
         [ 'finished' ], \
@@ -742,7 +739,6 @@ class TlsHandshake:
         []] : ## when mutliple s_new_ticket are sent
         raise LURKError( 'invalid_handshake', f"unexpected handshake {self.msg_type_list()}" )
     elif transcript_type == 'e' :
-#      print( self.msg_type_list( ))
       if self.msg_type_list( ) not in [ \
         ## 's_init_early_secret'
         [ 'client_hello' ], \

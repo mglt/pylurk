@@ -20,8 +20,6 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305, AESGCM, AESCCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF, HKDFExpand
 
-#import sys
-#sys.path.insert(0, '/home/emigdan/gitlab/pylurk.git/src')
 from pylurk.lurk.lurk_lurk import LURKError, ImplementationError, ConfigurationError
 import pylurk.tls13.struct_tls13 as lurk
 import pytls13.struct_tls13 as tls
@@ -234,16 +232,8 @@ class CipherSuite:
 
 ## should we take the entire tls_msg objet or the recoord_layer_structure ????
   def decrypt( self, msg, debug=False ):
-##    additional_data = tls.ContentType.build( msg[ 'type' ] ) +\
-##                      msg[ 'legacy_record_version' ] +\
-##                      len( msg[ 'fragment' ] ).to_bytes( 2, byteorder='big' )
-##    additional_data = tls.ContentType.build( 'application_data' ) +\
-##                      msg[ 'legacy_record_version' ] +\
-##                      len( msg[ 'fragment' ] ).to_bytes( 2, byteorder='big' )
     additional_data = b'\x17\x03\x03' + len( msg ).to_bytes( 2, byteorder='big' )
-#    cipher_text = fragment # cipher with tag appended 
     nonce = self.compute_nonce( self.sequence_number, self.write_iv )
-#    pylurk.debug.print_bin( "fragment (encrypted)",  msg[ 'fragment' ] )
     pylurk.debug.print_bin( "fragment (encrypted)",  msg  )
     pylurk.debug.print_bin( "write_key", self.write_key )
     pylurk.debug.print_bin( "write_iv", self.write_iv )
@@ -258,7 +248,6 @@ class CipherSuite:
       cipher = ChaCha20Poly1305( self.write_key )
     else:
        raise LURKError( 'invalid_cipher_suite', f"{self.name} is not implemented" )
-#    clear_text = cipher.decrypt( nonce, msg[ 'fragment' ], additional_data )
     clear_text = cipher.decrypt( nonce, msg, additional_data )
     ## this probably can be handled by construct itself
     length_of_padding = 0
@@ -269,14 +258,12 @@ class CipherSuite:
         length_of_padding += 1
     type_byte = ( clear_text[ -1 - length_of_padding ]).to_bytes( 1, byteorder='big' )
     ct_type = tls.ContentType.parse( type_byte )
-#    pylurk.debug.print_bin( "fragment (decrypted)",  msg[ 'fragment' ] ) 
     pylurk.debug.print_bin( f"fragment (decrypted) [type {ct_type}]",  clear_text )
     clear_text_struct = tls.TLSInnerPlaintext.parse( clear_text, type=ct_type, length_of_padding=length_of_padding )
     self.sequence_number += 1
     if debug is True:
       return clear_text_struct, clear_text  
     return  { 'type' : ct_type, 'content' : clear_text_struct[ 'content' ] }
-#    return  clear_text_struct
 
   def encrypt( self, clear_text_msg, content_type, length_of_padding=0, debug=False ):
     zeros = b'\x00' * length_of_padding
@@ -287,9 +274,6 @@ class CipherSuite:
     if content_type == 'application_data' :
       clear_text_record_bytes = tls.TLSInnerPlaintext.build( inner_plain_text, type=content_type, length_of_padding=length_of_padding, clear_text_msg_len=len(clear_text_msg) )
     else: # handshake
-      print( f"inner_plain_text: {inner_plain_text}" )
-      print( f"content_type: {content_type}" )
-      print( f"length_of_padding: {length_of_padding}" )
       clear_text_record_bytes = tls.TLSInnerPlaintext.build( inner_plain_text, type=content_type, length_of_padding=length_of_padding)
     print( f"  - inner clear_text : {tls.TLSInnerPlaintext.parse( clear_text_record_bytes, type=content_type, length_of_padding=length_of_padding, clear_text_msg_len=len(clear_text_msg) ) }" )
     pylurk.debug.print_bin( "inner_clear_text", clear_text_record_bytes ) 
@@ -407,7 +391,6 @@ class ECDHEKey():
       raise LURKError( 'invalid_ephemeral', f"unknown group {group}" )
 
   def shared_secret( self, ecdhe_key ):
-    print( f"{type(self.private)} - {type(self.public)} / {type(ecdhe_key.private)} - {type(ecdhe_key.public)}") 
     if self.private is None: 
       private_key = ecdhe_key.private
       public_key = self.public

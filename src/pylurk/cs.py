@@ -84,14 +84,10 @@ class BaseCryptoService:
         payload = self.tls13.payload_resp( req )
       else:
         raise LURKError( 'invalid_extension' , f"{ext}" )
-#      resp[ 'payload' ] = { 'lurk_state' : self.lurk_state }
       resp[ 'payload' ] = payload
       resp[ 'status' ] = 'success'
       if self.debug is not None:
-#        self.test_vector.handle_lurk_msg( req )
         self.debug.handle_lurk_msg( resp)
-#      print( f"--- resp: {resp}" )
-#
       return LURKMessage.build( resp )
     except Exception as e :
       if isinstance( e, LURKError ):
@@ -104,9 +100,6 @@ class BaseCryptoService:
           self.logger.exception( str( e ) )  
         resp[ 'status' ] = 'undefined_error' 
       resp[ 'payload' ] = { 'lurk_state' : self.lurk_state }
-      print( f"--- CS: Returned Response by the CS:" )
-      print( f"  - {LURKMessage.parse( LURKMessage.build( resp ) )}")
-      print( f"--- crypto service: resp : {resp}")
       return LURKMessage.build( resp )
 
 import socketserver
