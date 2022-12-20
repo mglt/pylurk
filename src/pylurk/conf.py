@@ -1,7 +1,7 @@
 import os
 import os.path
 from  os.path import join
-import pkg_resources
+#import pkg_resources
 import copy
 from copy import deepcopy
 from construct.core import MappingError
@@ -471,7 +471,6 @@ class Configuration:
      
      if ( role == 'client' and k[0:2] == 's_' ) or\
         ( role == 'server' and k[0:2] == 'c_' ):
-       print( f" --- removing {k}" )
        self.conf[ ( 'tls13', 'v1' ) ][ 'type_authorized'].remove( k )
 
   def set_tls13_cs_signing_key( self ):

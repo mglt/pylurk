@@ -332,7 +332,6 @@ class TlsHandshake:
       key_share = get_struct( exts, 'extension_type', 'key_share' )
       key_share_index = exts.index( key_share )
     else: 
-#      key_share = None
       key_share_index = None
 
     return ks_designation, msg_index, key_share_index
@@ -344,7 +343,6 @@ class TlsHandshake:
         [ ks_designation ] 
    
 
-##  def update_key_share( self, server_key_exchange ) -> NoReturn:
   def update_key_share( self, key_share_entry ) -> NoReturn:
     """ update key_exchange value of the CLientHello or ServerHello 
 
@@ -534,6 +532,8 @@ class TlsHandshake:
         raise ImplementationError( f"unknown role {self.role}" )
     content = b'\x20' * 64 + ctx_string + b'\x00' + transcript_h
     if self.debug is not None:
+      self.debug.trace_val( 'ctx_string', ctx_string )
+      self.debug.handle_bin( 'ctx_string', ctx_string )
       self.debug.handle_bin( 'content to be signed', content )
     return content
 

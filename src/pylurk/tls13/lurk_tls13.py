@@ -752,12 +752,27 @@ class SSession:
 class CInitClientFinishedReq:
 
   def __init__(self, req, tls13_conf, debug=None ):
+    """ computes the signature for the client 
+
+    If post handshake authentication is not enabled, 
+    than, the c_init_client_finished exchange is not 
+    followed by other exchange and ther eis only the 
+    need to perform the signature over the ClientHello 
+    ... later of server Finished/EndOfEarlyData.
+
+    However, if post handshake authentication, is enabled, 
+    there is a need to generate the client Finished 
+    message, to be ready for the post authentication. 
+    This client Finished message requires h_c to be 
+    computed and so a key schedule to be initiated. 
+    This key schedule requires the shared secret and psk 
+    as input.
+    """
     self.conf = tls13_conf
     self.debug = debug
     self.mtype = 'c_init_client_finished'
     self.next_mtype = 'c_post_hand_auth'
    
-#    freshness = Freshness( req[ 'freshness' ] )
     
     psk = req[ 'psk' ]
     self.handshake = TlsHandshake( 'client', self.conf, debug=self.debug )
@@ -776,9 +791,9 @@ class CInitClientFinishedReq:
     ephemeral = Ephemeral( req[ 'ephemeral' ], self.mtype, self.conf, self.handshake )
     self.scheduler = KeyScheduler( self.handshake.get_tls_hash(), \
                                    shared_secret=ephemeral.shared_secret, psk=psk, debug=debug )
-    ### the current handshake.msg_list is up to early data
-    ## we need to make sur we limit ourselves to the ClientHello...ServerHello
     self.scheduler.process( [ 'h_c', 'h_s' ], self.handshake )
+    pylurk.debug.print_bin( 'h_c', self.scheduler.secrets[ 'h_c' ] )
+    pylurk.debug.print_bin( 'h_s', self.scheduler.secrets[ 'h_s' ] )
     self.client_cert  = LurkCert( req[ 'client_certificate' ], self.mtype, self.conf, server=False, handshake=self.handshake )
 
     self.handshake.update_certificate( self.client_cert, server=False )

@@ -239,7 +239,7 @@ class CipherSuite:
     pylurk.debug.print_bin( "write_iv", self.write_iv )
     pylurk.debug.print_bin( "nonce", nonce )
     pylurk.debug.print_bin( "additional_data", additional_data )
-    print( f"  - sequence_number : {self.sequence_number}" )
+    pylurk.debug.print_val( 'sequence_number', self.sequence_number )
     if 'GCM' in self.name:
       cipher = AESGCM( self.write_key )
     elif 'CCM' in self.name :
@@ -259,7 +259,11 @@ class CipherSuite:
     type_byte = ( clear_text[ -1 - length_of_padding ]).to_bytes( 1, byteorder='big' )
     ct_type = tls.ContentType.parse( type_byte )
     pylurk.debug.print_bin( f"fragment (decrypted) [type {ct_type}]",  clear_text )
-    clear_text_struct = tls.TLSInnerPlaintext.parse( clear_text, type=ct_type, length_of_padding=length_of_padding )
+    if ct_type == 'application_data' :
+      clear_text_msg_len = len( clear_text ) - 1 - length_of_padding
+      clear_text_struct = tls.TLSInnerPlaintext.parse( clear_text, type=ct_type, length_of_padding=length_of_padding, clear_text_msg_len=clear_text_msg_len )
+    else:      
+      clear_text_struct = tls.TLSInnerPlaintext.parse( clear_text, type=ct_type, length_of_padding=length_of_padding )
     self.sequence_number += 1
     if debug is True:
       return clear_text_struct, clear_text  

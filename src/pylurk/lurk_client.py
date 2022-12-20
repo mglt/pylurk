@@ -263,7 +263,7 @@ def get_lurk_client_instance( conf:dict=None, cs=None ):
   """ returns a LURK Client instance as defined by the configuration """
 
   if conf is None:
-    conf = { 'connection_type' : 'lib_cs' }
+    conf = { 'connectivity' : { 'type' : 'lib_cs' } }
   con_type = conf[ 'connectivity' ] [ 'type' ] 
   if con_type == 'lib_cs' :
     if cs is None:

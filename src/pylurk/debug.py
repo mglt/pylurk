@@ -57,6 +57,17 @@ def check_file( file_path ):
 def print_bin( description:str, bit_string:bytes ):
     print( bytes_to_human( description, bit_string ) )
 
+def print_val( key:str, value ):
+  """ pretty print values
+
+  We should probably replace print_bin by print val
+  """
+  if isinstance( value , bytes ) or isinstance( value, bytearray ):
+    ##    print( f"  - {key} [{len(value)} bytes]: {value}" )
+    print_bin( key, value )
+  else: 
+    pprint.pprint( f"  - {key}: {value}", width=80, sort_dicts=False )
+
 class Debug:
 
   def __init__( self, debug_conf ):
