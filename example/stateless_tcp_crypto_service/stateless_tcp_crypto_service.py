@@ -20,7 +20,7 @@ cs_list = {
     'connectivity' : { 
       'type': 'stateless_tcp',
       'ip' : '127.0.0.1', 
-      'port' : 9401
+      'port' : 9402
      },
      ## logs are redirected to stdout especially when 
      ## the cs is running in the enclave.
