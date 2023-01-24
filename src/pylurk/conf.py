@@ -1,6 +1,7 @@
 import os
 import os.path
 from  os.path import join
+import pathlib
 #import pkg_resources
 import copy
 from copy import deepcopy
@@ -35,7 +36,7 @@ from pylurk.lurk.lurk_lurk import LURKError, ImplementationError, ConfigurationE
 import pylurk.tls13.struct_tls13 as lurk
 import pylurk.tls13.crypto_suites
 import binascii
-
+import argparse 
 
 
 
@@ -538,3 +539,277 @@ class Configuration:
       finger_print_entry_list.append( { 'finger_print' : finger_print, 'extensions': [] } )
     self.conf[ ( 'tls13', 'v1' ) ] [ '_finger_print_entry_list' ] = finger_print_entry_list
     self.conf[ ( 'tls13', 'v1' ) ] [ '_finger_print_dict' ] = finger_print_dict
+
+
+class CLI:
+
+  def __init__( self, connectivity:str='lib_cs',
+                      debug:bool=False,
+                      test_vector_mode=None,
+                      test_vector_file=None,
+                      host='127.0.0.1', 
+                      port=9400, 
+                      sig_scheme='ed25519', 
+                      key='./_Ed25519PrivateKey-ed25519-pkcs8.der',
+                      cert='./_Ed25519PublicKey-ed25519-X509.der',
+                      ):
+    """ generates conf file from comman line arguments 
+
+        Template can be manually generated. 
+    The template is expected to provide a single port 
+    to each configuration.
+
+    The template for a CS is expected to look this way:
+    cs_conf_template = {
+    'connectivity' : {
+       'type': 'tcp',
+       'ip' : '127.0.0.1',
+       'port' : 9402
+      },
+      ## logs are redirected to stdout especially when 
+      ## the cs is running in the enclave.
+      'log' : None,
+      ( 'tls13', 'v1' ) : {
+        'public_key' : [ os.path.join( conf_dir, '_Ed25519PublicKey-ed25519-X509.der' ) ],
+        'private_key': os.path.join( conf_dir, '_Ed25519PrivateKey-ed25519-pkcs8.der' ) ,
+        'sig_scheme': ['ed25519']
+      }
+    } 
+
+    The reason we define a class is to be able to manage the 
+    various configuration of the CS with which also includes 
+    the implementation of illustrated_tls13 as well as the 
+    instantiation inside a sgx enclave. 
+
+    """    
+    self.template = { 'connectivity' : {}, 
+                      "( 'tls13', 'v1' )" : {},
+                      }
+    self.connectivity = connectivity
+    self.debug = debug
+    self.test_vector_mode = test_vector_mode
+    self.test_vector_file = test_vector_file
+    self.host = host
+    self.port = port 
+    self.sig_scheme = sig_scheme 
+    self.key = key
+    self.cert = cert
+
+
+  def get_template( self ):
+    return { 'connectivity' : self.get_connectivity( ),
+             'log' : None, 
+             ( 'tls13', 'v1' ) : self.get_tls13( ) }
+
+  def get_debug( self ):
+    debug_template = { 'trace' : self.debug }
+    if self.test_vector_mode not in [ 'check', 'mode', None ]:
+       raise ValueError( f"Invalid test_vector_mode value {test_vector_mode}")
+    if self.test_vector_file is None: 
+      if self.test_vector_mode == 'check' :
+        raise ValueError( f"non coherent values for test_vector_file"\
+              f"{test_vector_file} and test_vector_mode {test_vector_mode}" )
+      elif self.test_vector_mode == 'record' :
+        self.test_vector_file = "./test_vector_file.json"
+    else: 
+      if self.test_vector_mode is None:
+        self.test_vector_mode == 'check'
+   
+    if self.test_vector_mode is not None:
+      debug_template[ 'test_vector' ] = {}
+      debug_template[ 'test_vector' ][ 'file' ][ self.test_vector_file ]
+      debug_template[ 'test_vector' ][ 'mode' ][ self.test_vector_mode ]
+    return debug_template
+
+
+  def get_connectivity( self ):
+    if self.connectivity not in [ 'lib_cs', 'tcp', 'persistent_tcp' ]:
+      raise ValueError ( f"connectivity ({self.connectivity}) MUST be in "\
+            f"'lib_cs', 'tcp', 'persistent_tcp'" )
+    connectivity_template = { 'type' : self.connectivity }
+    if connectivity_template [ 'type' ] != 'lib_cs' :
+      connectivity_template [ 'ip' ] = self.host
+      connectivity_template [ 'port' ] = self.port
+    return connectivity_template 
+
+  def get_tls13( self ):
+    tls13_template = { 'sig_scheme': [ self.sig_scheme ] }
+    tls13_template[ 'public_key' ] = [ self.cert ]
+    tls13_template[ 'private_key' ] = self.key
+    tls13_template[ 'debug' ] = self.get_debug( )
+    return tls13_template
+
+
+##class CLI:
+
+##  def format_args( self, args ):
+##    """ format the arguments values as stored in args """
+##    for k in args.__dict__.keys():
+##      v = args.__dict__[ k ]  
+##      if isinstance( v, str ) :
+##        args.__dict__[ k ] = self.format_output( v )  
+##    return args
+##
+##  def format_output( self, parser_output ):
+##    """format the output of the parser  
+##  
+##    remove "'" that ends and finishes a string
+##  
+##    It happens that argparse takes the input string
+##    "toto" and store it as "'toto'"
+##    """
+##    if isinstance( parser_output, str ) is False:
+##      while parser_output[ 0 ] in [ "\"", "'" ]:
+##        parser_output = parser_output[ 1: ]
+##      while parser_output[ -1 ] == [ "\"", "'" ]:
+##        parser_output = parser_output[ : -1 ]
+##    return parser_output
+
+
+  def get_parser( self, cs_only:bool=False, conf_dir:str='./',
+                  parser=None):
+    """ This function returns a parser to start the CS
+
+    The CS can be started as a regular library in which case
+    only library related parameters are provided.
+    On the other hand, the CS MAY also requires some speciifc
+    OS configuration to start the service.
+    These parameters are not handled by the CS library itself,
+    but actually defines how the library is started.
+
+    args:
+      cs_only (bool) when set to true indicates that only the
+        library parameters are provided.
+        When set to False, this includes OS specific environement
+        configuration parameters.
+      conf_dir (str): The path to the CS directory. It is 
+        expected to contain the CS enclave as well as some 
+        parameters such as the keys, certificate. 
+
+    """
+
+#    print( f"cs_only - 1: {cs_only}" )
+
+    if parser is None:
+      if cs_only is False:
+        description = \
+        """
+        This scripts launches the Crypto Service in various modes.
+        These modes includes:
+          1) launching the Crypto Service in the rich environement
+          - that is like a standard python library in the OS.
+          This is the defaul mode.
+          2) lauching the Crypto Service in an SGX enclave using
+          Gramine. This is indicated by the -sgx or
+          --gramine_sgx option.
+          3) launching the Crypto Service with Gramine but NOT
+          in a SGX enclave.
+          This is indicated by the -g or --grammine_direct option
+
+        To start the Crypto Service using SGX, the Crypto Service
+        the enclave MUST have been previously built.
+        Building the enclave is performed using the -b or
+        --gramine_build option.
+
+        This script can be seen as setting the expected environement
+        to start the Crypto Service.
+        However the Crypto Service (with its expected configuration)
+        is actually started by the start_cs.py script.
+        Most of the arguments are passed to that start_cs.py
+
+        Example:
+          ## Building the enclave (needs only to be performed once)
+          ./crypto_service --gramine_build
+
+          ## Starting the CS in an SGX enclave
+          ./crypto_service --connectivity tcp --sig_scheme ed25519
+            --gramine_sgx
+        """
+
+      else :
+        description = \
+        """
+        This script configure the CS but not the OS environment
+        parameters.
+        """
+      parser = argparse.ArgumentParser( description=description )
+
+##    parser = argparse.ArgumentParser( description=description )
+    parser.add_argument( '-con', '--connectivity', type=ascii, \
+      default='tcp', nargs='?', \
+      help='Crypto Service  connectivity [ tcp, persistent_tcp ]')
+    parser.add_argument( '-host', '--host', type=ascii, \
+      default='127.0.0.1', nargs='?', \
+      help='Crypto Service  IP address or hostname')
+    parser.add_argument( '-port', '--port', type=int, \
+      default='9400', nargs='?', \
+      help='Crypto Service  port')
+    parser.add_argument( '-sig', '--sig_scheme', \
+      type=ascii, default='ed25519', nargs='?', \
+      help='Crypto Service  signature scheme  [ ed25519 ]')
+    #parser.add_argument( '-i', '--illustrated', default=False,  \
+    #  action='store_const', const=True, \
+    #  help='Crypto Service running test vector illustrated TLS 1.3')
+    ## We mandate the CS to have a public / private key
+    ## and currently do not consider the key not to be used.
+    ## this may not represent the case of an unauthenticated 
+    ## TLS client. 
+    key_file = os.path.join( conf_dir, 'sig_key_dir', \
+                 '_Ed25519PrivateKey-ed25519-pkcs8.der' )
+    parser.add_argument( '-key', '--key', \
+      type=pathlib.Path, default=f"{key_file}", nargs='?', \
+      help='Crypto Service  private key')
+    cert_file = os.path.join( conf_dir, 'sig_key_dir', \
+                  '_Ed25519PublicKey-ed25519-X509.der' )
+    parser.add_argument( '-cert', '--cert', \
+      type=pathlib.Path, default=f"{cert_file}", nargs='?', \
+      help='Crypto Service  public key')
+    parser.add_argument( '-debug', '--debug', default=False,  \
+      action='store_const', const=True, \
+      help='Crypto Service debug_mode')
+    parser.add_argument( '-tv_mode', '--test_vector_mode', \
+      type=ascii, default=None, nargs='?', \
+      help="Crypto Service  test vector mode [ 'check', 'record', None ]" )
+    parser.add_argument( '-tv_file', '--test_vector_file', \
+      type=pathlib.Path, default=None, nargs='?', \
+      help='Crypto Service  test vector file')
+#    print( f"cs_only - 2: {cs_only}" )
+    if cs_only is False:
+      parser.add_argument( '-sgx', '--gramine_sgx', default=False,  \
+        action='store_const', const=True, \
+        help='Crypto Service is run into SGX (gramine)')
+      parser.add_argument( '-g', '--gramine_direct', default=False,  \
+        action='store_const', const=True, \
+        help='Crypto Service is run into SGX (gramine)')
+      parser.add_argument( '-b', '--gramine_build', default=False,  \
+        action='store_const', const=True, \
+        help='Build the Crypto Service into the enclave')
+
+    return parser
+  
+  def init_from_args( self, args ):
+    """initializes the variables from the command lines arguments 
+
+    The command lines have been parsed with the parser obtained 
+    from get_parser. 
+    args results from parser.parse_args( )
+    """
+    if args.test_vector_mode is None:
+      test_vector_mode = None
+    else: 
+      test_vector_mode = args.test_vector_mode[ 1:-1 ]
+    if args.test_vector_file is None:
+      test_vector_file = None
+    else: 
+      test_vector_file = args.test_vector_file[ 1:-1 ]
+
+    self.connectivity = args.connectivity[1:-1]
+    self.debug = args.debug
+    self.test_vector_mode=test_vector_mode
+    self.test_vector_file=test_vector_file
+    self.host=args.host[1:-1]
+    self.port=args.port
+    self.sig_scheme=args.sig_scheme[1:-1]
+    self.key=args.key
+    self.cert=args.cert 
+

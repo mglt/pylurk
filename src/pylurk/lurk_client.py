@@ -195,7 +195,7 @@ class BaseTls13LurkClient :
 #        pass
 #    return lurk_resp
 
-class StatelessTCPTls13LurkClient( BaseTls13LurkClient ) :
+class TCPTls13LurkClient( BaseTls13LurkClient ) :
  
   def __init__( self, conf:dict ):
     """ configures the LURK client in a stateless TCP mode 
@@ -259,6 +259,38 @@ class StatelessTCPTls13LurkClient( BaseTls13LurkClient ) :
       sock.sendall( bytes_req )
       return sock.recv(1024) 
 
+class PersistentTCPTls13LurkClient( TCPTls13LurkClient ) :
+ 
+  def __init__( self, conf:dict ):
+    """ configures the LURK client in a persitent TCP mode 
+
+    While the TCP session remains persistent and thus can 
+    be re-used for multiple exchanges, this TCP client 
+    does not implement ways to pipeline query and responses. 
+    To do so would require a sort of Lurk resolver / proxy 
+    that binds response received to queries.  
+    """
+    super().__init__( conf=conf, cs=None ) 
+    self.socket = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
+    sock.connect( self.server_address )
+    
+  def bytes_resp( self, bytes_req:bytes ):
+    ## this should work
+    ## return sock.recv(1024)
+    ## alternatively we may parse the exact response.
+    ## introducing some listening 
+    bytes_recv = b''
+    while len(bytes_recv) < HEADER_LEN:
+        rlist, wlist, xlist = select([self.sock], [], [])
+        if len(rlist) > 0:
+            bytes_recv = self.sock.recv(HEADER_LEN)
+    header = LURKHeader.parse(bytes_recv)
+    bytes_nbr = header['length']
+
+    bytes_recv += self.sock.recv(min(bytes_nbr - len(bytes_recv), 4096))
+    return bytes_recv
+
+
 def get_lurk_client_instance( conf:dict=None, cs=None ):
   """ returns a LURK Client instance as defined by the configuration """
 
@@ -269,29 +301,11 @@ def get_lurk_client_instance( conf:dict=None, cs=None ):
     if cs is None:
       raise ValueError( f"cs MUST be provided " )  
     lurk_client =  BaseTls13LurkClient( conf, cs=cs )
-  elif con_type == 'stateless_tcp':
-    lurk_client = StatelessTCPTls13LurkClient( conf )
+  elif con_type == 'tcp':
+    lurk_client = TCPTls13LurkClient( conf )
+  elif con_type == 'persistent_tcp':
+    lurk_client = PersistentTCPTls13LurkClient( conf )
   else: 
     raise ConfigurationError( f"unknown connection_type {con_type}" )
   return lurk_client
 
-##class Tls13LurkClient:
-##
-##  def __init__( self, conf=None, cs=None ):
-##    self.conf = conf 
-##    if self.conf is None:
-##      self.conf = { 'connection_type' : 'lib_cs' }
-##    con_type = self.conf[ 'connectivity_type' ] 
-##    if con_type == 'lib_cs' :
-##      if cs is None:
-##        raise ValueError( f"cs MUST be provided " )  
-##      self.lurk_client = BaseTls13LurkClient( self.conf, cs=cs )
-##      BaseTls13LurkClient.__init__( self,  self.conf, cs=cs )
-##    elif con_type == 'stateless_tcp':
-##      self.lurk_client = StatelessTCPTls13LurkClient( self.conf )
-##      StatelessTCPTls13LurkClient.__init__( self, elf.conf )
-##    else: 
-##      raise ConfigurationError( f"unknown connection_type {con_type}" )
-##
-##  def resp( self, req_type, **kwargs ):
-##    return self.lurk_client.resp( req_type, **kwargs )
