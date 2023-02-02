@@ -1,0 +1,46 @@
+#!/usr/bin/python3
+import time
+import argparse
+
+import sys
+sys.path.insert(0, '../../src/') # pytls13
+## lurk
+sys.path.insert(0, '/home/mglt/gitlab/pylurk.git/src/')
+sys.path.insert(0, '/home/mglt/gitlab/pytls13/src/')
+
+import pylurk.lurk_client
+
+def lurk_ping( con, ip, port ):
+  
+  lurk_clt_conf = { 'connectivity' : \
+                    { 'type' : con, \
+                      'ip' : ip, \
+                      'port' : port  } }
+
+  lurk_client = pylurk.lurk_client.get_lurk_client_instance( lurk_clt_conf )
+  start_time = time.time()
+  resp = lurk_client.resp( 'ping' )
+  stop_time = time.time()
+
+  if resp[ 'status' ] == 'success' :
+    print( f"LURK PING ({ip}:{port}): time {stop_time - start_time} ms.")
+  else:
+    print( f"LURK PING Error: {resp}" )
+
+
+if __name__ == '__main__' :
+  description = """ LURK Ping """
+  parser = argparse.ArgumentParser( description=description )
+  parser.add_argument( '-con', '--connectivity', type=ascii, \
+    default='tcp', nargs='?', \
+    help='Crypto Service  connectivity [ tcp, persistent_tcp ]')
+  parser.add_argument( '-host', '--host', type=ascii, \
+    default='127.0.0.1', nargs='?', \
+    help='Crypto Service  IP address or hostname')
+  parser.add_argument( '-port', '--port', type=int, \
+    default='9400', nargs='?', \
+    help='Crypto Service  port')
+  args = parser.parse_args()
+
+  print( f" --- Executing: {__file__} with {args}" )
+  lurk_ping( args.connectivity[1:-1] , args.host[1:-1], args.port )

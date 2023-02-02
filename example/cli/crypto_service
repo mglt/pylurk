@@ -1,0 +1,77 @@
+#!/usr/bin/python3
+
+import argparse
+import subprocess
+import os
+import sys
+import shutil
+sys.path.insert(0, '/home/mglt/gitlab/pylurk.git/src')
+sys.path.insert(0, '/home/mglt/gitlab/pytls13/src')
+import pylurk.cs
+import pylurk.conf
+
+
+## The directoiry that contains the SGX enclave 
+## This directory MUST contain the necessary files to build the enclave
+## This is also the directory from which the enclave MUST be started.
+CS_GRAMINE_DIR = '/home/mglt/gitlab/pylurk.git/example/cli'
+
+
+if __name__ == '__main__' :
+  os.chdir( CS_GRAMINE_DIR )
+  cli = pylurk.conf.CLI( ) 
+#  parser = cli.get_parser( conf_dir=CS_GRAMINE_DIR )
+  parser = cli.get_parser( )
+  args = parser.parse_args()
+  ## updating value of of key_files to ./  so they can be 
+  ## used with gramine. 
+  ## Such a copy / update is only performed when gramine/sgx
+  ## is enabled
+  if args.gramine_build is True or args.gramine_sgx is True:
+    args.cert = cli.copy_and_update_file_path( args.cert, \
+        CS_GRAMINE_DIR, 'sig_key_dir' )
+    args.key = cli.copy_and_update_file_path( args.key, \
+        CS_GRAMINE_DIR, 'sig_key_dir' )
+#  sig_key_dir = os.path.join( CS_GRAMINE_DIR, 'sig_key_dir') 
+#  shutil.copy( args.key, sig_key_dir )
+#  shutil.copy( args.cert, sig_key_dir )
+#  args.key = os.path.join( './', os.path.basename( args.key ) )
+#  args.cert = os.path.join( './', os.path.basename( args.cert ) )
+
+
+  print( f" --- Executing: {__file__} with {args}" )
+  if args.gramine_build is True:
+    subprocess.Popen( f"make clean && make SGX=1 DEBUG=1", shell=True )
+    os._exit( 0 )
+  
+  ## starting the CS
+  if args.connectivity == 'lib_cs':
+    os._exit( 0 )
+
+  cmd = f"./start_cs.py --connectivity {args.connectivity[1:-1]} "\
+          f"--host {args.host[1:-1]} --port {args.port} "\
+          f"--sig_scheme {args.sig_scheme[1:-1]} --key {args.key} "\
+          f"--cert {args.cert} "\
+  ## for arguments that takes a None default when omited
+  ## the command line MUST omit these options as one cannot 
+  ## mention them as 'None'
+  if args.test_vector_file is not None :
+    cmd += f"--test_vector_file {args.test_vector_file[1:-1]}"
+  if args.test_vector_mode is not None :
+    cmd += f"--test_vector_mode {args.test_vector_mode[1:-1]}"
+  ## for arguments that are boolean, this MUST only be added 
+  ## when there value is True as abscence mens False   
+  if args.debug is True:
+    cmd += " --debug"
+ 
+  print( f"cmd: {cmd}" ) 
+  if args.gramine_sgx is False and args.gramine_direct is False:
+  ##  with pylurk.cs.get_cs_instance( cs_conf.conf ) as cs:
+  ##    cs.serve_forever()
+    subprocess.Popen( f"{cmd}", shell=True)
+  elif args.gramine_sgx is True :
+    subprocess.Popen( f"gramine-sgx python {cmd}", shell=True)
+  elif args.gramine_direct is True :
+    subprocess.Popen( f"gramine-direct python {cmd}", shell=True)
+
+

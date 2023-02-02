@@ -1,8 +1,10 @@
 import secrets
+import select
 import socket
 import pylurk.tls13.struct_lurk_tls13
 from pylurk.struct_lurk import LURKMessage
 from pylurk.lurk.lurk_lurk import ConfigurationError, LURKError
+import pylurk.cs
 
 class BaseTls13LurkClient :
 
@@ -259,6 +261,8 @@ class TCPTls13LurkClient( BaseTls13LurkClient ) :
       sock.sendall( bytes_req )
       return sock.recv(1024) 
 
+import selectors 
+
 class PersistentTCPTls13LurkClient( TCPTls13LurkClient ) :
  
   def __init__( self, conf:dict ):
@@ -270,23 +274,35 @@ class PersistentTCPTls13LurkClient( TCPTls13LurkClient ) :
     To do so would require a sort of Lurk resolver / proxy 
     that binds response received to queries.  
     """
-    super().__init__( conf=conf, cs=None ) 
-    self.socket = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
-    sock.connect( self.server_address )
+    super().__init__( conf=conf ) 
+    self.sock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
+    self.sock.connect( self.server_address )
+    self.selector = selectors.DefaultSelector()
+    ## registering the "accept" socket
+    self.selector.register(fileobj=self.sock, \
+                           events=selectors.EVENT_READ )
+
+#    self.serve_forever( )
     
   def bytes_resp( self, bytes_req:bytes ):
     ## this should work
-    ## return sock.recv(1024)
-    ## alternatively we may parse the exact response.
-    ## introducing some listening 
-    bytes_recv = b''
-    while len(bytes_recv) < HEADER_LEN:
-        rlist, wlist, xlist = select([self.sock], [], [])
-        if len(rlist) > 0:
-            bytes_recv = self.sock.recv(HEADER_LEN)
-    header = LURKHeader.parse(bytes_recv)
-    bytes_nbr = header['length']
+    self.sock.sendall( bytes_req )
+    return self.sock.recv(1024)
 
+
+    ## alternatively we may parse the exact response.
+    ## introducing some listening
+    ## we need thus to define two threads: one listening 
+    ## to the cs the other to stub clients.
+  def server_forever( self ):
+    bytes_recv = b''
+    while len(bytes_recv) < pylurk.cs.HEADER_SIZE + 4 :
+        rlist, wlist, xlist = select.select([self.sock], [], [])
+        if len(rlist) > 0:
+            bytes_recv = self.sock.recv( pylurk.cs.HEADER_SIZE + 4 )
+    header = LURKHeader.parse( bytes_recv )
+    bytes_nbr = header['length']
+    print( f"DEBUG: CS: bytes_nbr: {bytes_nbr}" )
     bytes_recv += self.sock.recv(min(bytes_nbr - len(bytes_recv), 4096))
     return bytes_recv
 

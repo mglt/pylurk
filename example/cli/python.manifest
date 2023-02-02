@@ -1,0 +1,121 @@
+[loader]
+entrypoint = "file:/usr/lib/x86_64-linux-gnu/gramine/libsysdb.so"
+log_level = "debug"
+insecure__use_cmdline_argv = true
+pal_internal_mem_size = "64M"
+
+[libos]
+entrypoint = "/usr/bin/python3.10"
+
+[sys]
+enable_sigterm_injection = true
+enable_extra_runtime_domain_names_conf = true
+
+[fs]
+[[fs.mounts]]
+path = "/lib"
+uri = "file:/usr/lib/x86_64-linux-gnu/gramine/runtime/glibc"
+
+[[fs.mounts]]
+path = "/lib/x86_64-linux-gnu"
+uri = "file:/lib/x86_64-linux-gnu"
+
+[[fs.mounts]]
+path = "/usr"
+uri = "file:/usr"
+
+[[fs.mounts]]
+path = "/usr/lib/python3.10"
+uri = "file:/usr/lib/python3.10"
+
+[[fs.mounts]]
+path = "/usr/lib/python3/dist-packages"
+uri = "file:/usr/lib/python3/dist-packages"
+
+[[fs.mounts]]
+path = "/home/mglt/gitlab"
+uri = "file:/home/mglt/gitlab/"
+
+[[fs.mounts]]
+path = "/home/mglt/.local/lib/python3.10/site-packages"
+uri = "file:/home/mglt/.local/lib/python3.10/site-packages"
+
+[[fs.mounts]]
+path = "/etc"
+uri = "file:/etc"
+
+[[fs.mounts]]
+type = "tmpfs"
+path = "/tmp"
+
+[sgx]
+debug = true
+nonpie_binary = true
+enclave_size = "512M"
+thread_num = 32
+remote_attestation = "none"
+ra_client_spid = ""
+ra_client_linkable = false
+allowed_files = [ "file:/etc/nsswitch.conf", "file:/etc/ethers", "file:/etc/hosts", "file:/etc/group", "file:/etc/passwd", "file:/etc/gai.conf", "file:/etc/host.conf",]
+isvprodid = 0
+isvsvn = 0
+require_avx = false
+require_avx512 = false
+require_mpx = false
+require_pkru = false
+require_amx = false
+support_exinfo = false
+enable_stats = false
+[[sgx.trusted_files]]
+uri = "file:/usr/lib/x86_64-linux-gnu/gramine/libsysdb.so"
+
+[[sgx.trusted_files]]
+uri = "file:/usr/bin/python3.10"
+
+[[sgx.trusted_files]]
+uri = "file:/usr/lib/x86_64-linux-gnu/gramine/runtime/glibc/"
+
+[[sgx.trusted_files]]
+uri = "file:/lib/x86_64-linux-gnu/"
+
+[[sgx.trusted_files]]
+uri = "file:/usr//lib/x86_64-linux-gnu/"
+
+[[sgx.trusted_files]]
+uri = "file:/usr/lib/python3.10/"
+
+[[sgx.trusted_files]]
+uri = "file:/usr/lib/python3/dist-packages/"
+
+[[sgx.trusted_files]]
+uri = "file:/home/mglt/gitlab/pytls13/src/pytls13/"
+
+[[sgx.trusted_files]]
+uri = "file:/home/mglt/gitlab/pylurk.git/src/pylurk/"
+
+[[sgx.trusted_files]]
+uri = "file:/home/mglt/.local/lib/python3.10/site-packages/"
+
+[[sgx.trusted_files]]
+uri = "file:start_cs.py"
+
+[[sgx.trusted_files]]
+uri = "file:sig_key_dir/"
+
+[[sgx.trusted_files]]
+uri = "file:./crypto_service.log"
+
+[[sgx.trusted_files]]
+uri = "file:illustrated_tls13.json"
+
+[[sgx.trusted_files]]
+uri = "file:/etc/mime.types"
+
+[[sgx.trusted_files]]
+uri = "file:/etc/default/apport"
+
+[loader.env]
+LD_LIBRARY_PATH = "/usr/lib/python3.10/lib:/lib:/lib/x86_64-linux-gnu:/usr/lib:/usr//lib/x86_64-linux-gnu"
+
+[sys.stack]
+size = "2M"

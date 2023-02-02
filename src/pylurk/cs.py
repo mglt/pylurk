@@ -1,6 +1,10 @@
 import logging
 import socketserver
 import selectors
+import time
+#import ssl
+#import ssl.SSLError
+
 from pylurk.struct_lurk import LURKMessage, LURKHeader 
 from pylurk.lurk.lurk_lurk   import LURKError, ImplementationError, ConfigurationError, LurkExt 
 ####import sys
@@ -199,13 +203,28 @@ class PersistentTCPServer( socketserver.TCPServer ):
 #        if self.connection_type == 'tcp+tls':
 #            context = self.conf.get_tls_context()
 #            self.socket = context.wrap_socket(self.socket, server_side=True)
+        ## selector listen to sockets available to the server. 
+        ## there are 2 kind of sockets. 
+        ## 1. The server socket ( self.socket ) that is contacted 
+        ##   by lurk client to establish a communication socket.
+        ##   This socket is designated as "accept" (see data value).
+        ## 2. sockets establsihed between each lurk client and the 
+        ##   server. These sockets are used to transmit the LURK 
+        ##   exchanges and are designated as "established".
+        ##
+        ## All these sockets are listen for the READ event. 
         self.selector = selectors.DefaultSelector()
+        ## registering the "accept" socket
         self.selector.register(fileobj=self.socket, \
                                events=selectors.EVENT_READ, \
-                               data="accept")
-        self.fd_timeout = 3600
+                               data="accept")\
+        ## the time after wich a socket is closed in case 
+        ## of non activity
+        self.fd_timeout = 30
+        ## inactivity time associated to each socket (file descriptor)
+        ## socket are identied by their file descriptor number 
         self.fd_time = {}
-
+        ## list of fd (sockets) being treated
         self.fd_busy = {}
 
 #    def byte_serve(self, data):
@@ -229,68 +248,107 @@ class PersistentTCPServer( socketserver.TCPServer ):
     def serve_forever(self, poll_interval=None):
         """ serves incoming request
 
-        This function listen to events on the listening socket
-        (self.socket) as well as other sockets associated to accepted
-        communications (sock = self.sock.accept()).
+        Handles requests until shutdown
 
-        The main difference with the original function is the original
-        function only listened to events on the main socket (self.socket).
-        As a result, even though (self.shutdown_request) does not close
-        or shutdown the socket used for the transaction (sock), further
-        communications using this socket are not possible. Events happening
-        on the socket - typically incoming packets - are just ignored.
-        The results in the situation where only the initial requests
-        provided at the creation of the socket are responded, other
-        are not treated.
+        The main difference with the original BaseServer function
+        is that the BaseServer function is using non persitent TCP
+        sessions which means that only the server socket is 
+        being monitored.  
+        In the Base server every incoming TCP session waits for:
+          1. the creation of a new socket (sock = self.sock.accept()).
+          2. the response to be sent on this newly established socket
+          3. that newly established socket being closed.
+
+        In our case we need to monitore all persistent session that 
+        is:
+          1. TCP session that are in an establishment 
+          2. Established TCP sessions
+        
+        An incoming TCP session message take sthe following path:
+          1. Identify which socket is associated to the message
+          2. If a new socket needs to be created creates it and 
+            monitor further actions.
+          3. For every socket on whic a message has been sent
+            Treat that message.
+
+        The main difference is that for any action, the socket 
+        needs to be specified. 
+          
         """
         print("staring serve_forever")
         self._BaseServer__is_shut_down.clear()
         previous_time = 0
         try:
-            while not self._BaseServer__shutdown_request:
-                events = self.selector.select(poll_interval)
-                for selector_key, event in events:
-                    if self._BaseServer__shutdown_request:
-                        break
-                    try:
-                        self.fd_busy[selector_key.fileobj.fileno()]
-                    except KeyError:
-                        self._handle_request_noblock(selector_key, event)
-                        self.service_actions()
-                current_time = time()
-                if current_time - previous_time > 1:
-                    previous_time = current_time
-                    for fd in self.selector.get_map():
-                        key = self.selector._fd_to_key[fd]
-                        try:
-                            delta_time = current_time - self.fd_time[fd]
-                            if delta_time > self.fd_timeout and key.data == 'establish':
-                                self.close_request(key.fileobj)
-                        except KeyError as e:
-                            ## time of self.socket is not monitored
-                            ## while it triggers events
-                            continue
+          while not self._BaseServer__shutdown_request:
+            ## listen to ready files and returns ( key, event )
+            ## with poll_intervall it block until a file is ready.
+            ## selector.select returns the following list:
+            ## [(SelectorKey(fileobj=<socket.socket fd=3, 
+            ##   family=AddressFamily.AF_INET, 
+            ##   type=SocketKind.SOCK_STREAM, proto=0, 
+            ##   laddr=('127.0.0.1', 9402)>, fd=3, events=1, 
+            ##   data='accept'), 1)]
+            events = self.selector.select( poll_interval )
+            for selector_key, event in events:
+              ## ensure the server can be shutdown
+              if self._BaseServer__shutdown_request:
+                break
+              ## check fd (socket) is already being treated
+              try:
+                self.fd_busy[ selector_key.fileobj.fileno() ]
+              except KeyError:
+                self._handle_request_noblock(selector_key, event)
+                self.service_actions() ## pass
+            ## closing sockets that have been opened for 
+            ## more than timeout  
+            current_time = time.time()
+            if current_time - previous_time > 1:
+                previous_time = current_time
+                ## 
+                for fd in self.selector.get_map():
+                  key = self.selector._fd_to_key[ fd ]
+                  try:
+                    delta_time = current_time - self.fd_time[ fd ]
+                    if delta_time > self.fd_timeout and\
+                       key.data == 'establish':
+                      self.close_request( key.fileobj )
+                  except KeyError as e:
+                    ## time of self.socket is not monitored
+                    ## while it triggers events
+                    continue
         finally:
-            self._BaseServer__shutdown_request = False
-            self._BaseServer__is_shut_down.set()
+          self._BaseServer__shutdown_request = False
+          self._BaseServer__is_shut_down.set()
 
     def _handle_request_noblock(self, selector_key, event):
+      """ Handle one request
+      
+      The only change from the original TCP is that we indicate 
+      the ( socket, event ) to be passes to get_request. 
 
-        try:
-            request, client_address = self.get_request(selector_key, event)
-        except OSError:
-            return
+      In the BaseServer, such information is inferred from the 
+      server_socket. In our case, server_socket is only one 
+      possibility and established socket MUST be considered.
+
+      """
+      try:
+        request, client_address = self.get_request(selector_key, event)
+#        print( f"DEBUG: request {request}" )
+      except ( TypeError, OSError ):
+        return
+      else:
         if self.verify_request(request, client_address):
-            try:
-                self.process_request(request, client_address)
-            except Exception:
-                self.handle_error(request, client_address)
-                self.shutdown_request(request)
-            except:
-                self.shutdown_request(request)
-                raise
-        else:
+          try:
+#            print( f"DEBUG: processing_request" )
+            self.process_request(request, client_address)
+          except Exception:
+            self.handle_error(request, client_address)
             self.shutdown_request(request)
+          except:
+            self.shutdown_request(request)
+            raise
+        else:
+          self.shutdown_request(request)
 
 
     def get_request(self, selector_key, event):
@@ -309,26 +367,33 @@ class PersistentTCPServer( socketserver.TCPServer ):
            event:
         """
         if selector_key.data == "accept":
-            request, client_address = self.socket.accept()
-            request.setblocking(False)
-            if self.connection_type == 'tcp+tls':
-                context = self.conf.get_tls_context()
-                request = context.wrap_socket(request, server_side=True,\
-                                              do_handshake_on_connect=False)
-            self.selector.register(fileobj=request, \
-                                   events=selectors.EVENT_READ,\
-                                   data="establish")
+          request, client_address = self.socket.accept()
+          ## the establishement does not indicate there is some data
+          ## to be received. As aresult, one needs to put the socket 
+          ## in a non blocking state to prevent the socket to block 
+          ## waiting to receive any data.
+          request.setblocking(False)
+#          if self.connection_type == 'tcp+tls':
+#              context = self.conf.get_tls_context()
+#              request = context.wrap_socket(request, server_side=True,\
+#                                            do_handshake_on_connect=False)
+          self.selector.register(fileobj=request, \
+                                 events=selectors.EVENT_READ,\
+                                 data="establish")
+#          ## registering the last tim eactivity o fthe socket    
+#          self.fd_time[request.fileno] = time.time()
         elif selector_key.data == "establish":
-            request = selector_key.fileobj
-            client_address = request.getpeername()
-        self.fd_time[request.fileno] = time()
+          request = selector_key.fileobj
+          client_address = request.getpeername()
+        ## registering the last time activity o fthe socket    
+        self.fd_time[request.fileno] = time.time()
         return request, client_address
 
     def close_request(self, request):
         self.selector.unregister(request)
         request.close()
 
-
+MAX_ATTEMPTS = 3
 class PersistentTCPHandler( socketserver.BaseRequestHandler):
     """
     """
@@ -349,56 +414,89 @@ class PersistentTCPHandler( socketserver.BaseRequestHandler):
 
 
         """
+#        print( f"DEBUG: handle: self.request {self.request}" )
+#        print( f"DEBUG: handle: self.server.fd_busy {self.server.fd_busy}" )
+        ## check the sicket is not being treated 
+        fileno = self.request.fileno()  
+        if fileno in self.server.fd_busy.keys():
+          return 
+        self.server.fd_busy[ fileno ] = time.time()
+        
+#        try:
+#          self.server.fd_busy[ self.request.fileno() ]
+##          return
+#        except KeyError:
+#          
+##          self.server.fd_busy[ self.request.fileno() ] = time.time()
         try:
-            self.server.fd_busy[self.request.fileno()]
+#          print( f"DEBUG: receiving bytes" )
+          ## we need to consider the additional len 
+          ## of the payload (4 bytes)
+          req_bytes = self.request.recv( HEADER_SIZE + 4 )
+#          print( f"DEBUG: handle : bytes_recv : {req_bytes}" )
+        ## BlockingIOError error 11 happens when a socket
+        ## in a non blocking mode does not have any data.
+        ## The reason we considered non blocking mode is when 
+        ## a client just connect, without sending requests.
+        ## We do not want the server be blocked until data 
+        ## is being sent. 
+        ## Maybe we could set a timer to recv. 
+        except BlockingIOError as e :
+#          print( f"DEBUG: Excpetion {type(e)} {e}" )
+          del self.server.fd_busy[ self.request.fileno() ]
+          return
+        else:
+          if req_bytes == b'':
             return
-        except KeyError:
-            self.server.fd_busy[self.request.fileno()] = time()
-
-        try:
-            bytes_recv = self.request.recv(HEADER_LEN)
-        except:
-            del self.server.fd_busy[self.request.fileno()]
-            return
-        if req_bytes == b'':
-            return
-        header = LURKHeader.parse( req_bytes )
-        bytes_nbr = header[ 'length' ]
-
-        while len( req_bytes ) < bytes_nbr:
+          ## the payload len defines teh remaining bytes to be receievd.
+          payload_len = int.from_bytes( req_bytes[ -4 : ], byteorder='big' )    
+#          header = LURKHeader.parse( req_bytes )
+#          print( f"DEBUG: CS: reading header HEADER_SIZE: {HEADER_SIZE} header : {header} len: {len( LURKHeader.build(header) )} {len( req_bytes[ -4 : ])} bytes_nbr: {bytes_nbr}" )
+          #bytes_nbr = header[ 'length' ]
+          attempt_nbr = 0 
+          while len( req_bytes ) < payload_len + HEADER_SIZE + 4:
             try:
-                req_bytes += self.request.recv( min( bytes_nbr - len( req_bytes ), 4096) )
-            except ssl.SSLError as err:
-                if err.args[0] == ssl.SSL_ERROR_WANT_READ:
-                    select([self.request], [], [])
-                elif err.args[0] == ssl.SSL_ERROR_WANT_WRITE:
-                    select([self.request], [], [])
-                else:
-                    raise
+              remaining_bytes = payload_len + HEADER_SIZE + 4 - len( req_bytes )
+              req_bytes += self.request.recv( min( remaining_bytes, 4096) )
+#            except ssl.SSLError as err:
+#              if err.args[0] == ssl.SSL_ERROR_WANT_READ:
+#                select([self.request], [], [])
+#              elif err.args[0] == ssl.SSL_ERROR_WANT_WRITE:
+#                select([self.request], [], [])
+#              else:
+#                raise
             except BlockingIOError:
-                select([ self.request ], [], [], 5)
-        attempt_nbr = 0
-        while attempt_nbr <= MAX_ATTEMPTS:
-            try:
-                resp = self.server.cs.serve( req_bytes ) 
-#                self.request.sendall(self.server.byte_serve(bytes_recv))
-                self.request.sendall( resp )
-                break
-            except ssl.SSLError as err:
-                if err.args[0] == ssl.SSL_ERROR_WANT_WRITE:
-                    select([], [ self.request ], [])
-                else:
-                    raise
-            except BlockingIOError:
-                select([], [ self.request ], [])
-            if attempt_nbr == MAX_ATTEMPTS:
+              attempt_nbr += 1
+              if attempt_nbr == MAX_ATTEMPTS:
                 return
-                raise ImplementationError(attempt_nbr, "Reading Header" +\
+              ## currently we just sleep for 1 sec, but we may 
+              ## also wait for the socket to raise a read event. 
+              time.sleep( 1 )
+             #   self.server.selector.select([ self.request ], [], [], 5)
+          attempt_nbr = 0
+#          print( f"DEBUG: CS: request bytes: {req_bytes}" )
+          while attempt_nbr <= MAX_ATTEMPTS:
+            try:
+              resp = self.server.cs.serve( req_bytes ) 
+##             self.request.sendall(self.server.byte_serve(bytes_recv))
+              self.request.sendall( resp )
+#              print( f"DEBUG: CS: resp: {resp}" )
+              break
+#            except ssl.SSLError as err:
+#              if err.args[0] == ssl.SSL_ERROR_WANT_WRITE:
+#                select([], [ self.request ], [])
+#              else:
+#                raise
+            except BlockingIOError:
+              select([], [ self.request ], [])
+            if attempt_nbr == MAX_ATTEMPTS:
+              return
+              raise ImplementationError(attempt_nbr, "Reading Header" +\
                       "attempts exceeds MAX_ATTEMPTS " +\
                       "= %s"%MAX_ATTEMPTS +\
                       "Lurk Header not read")
-        del self.server.fd_busy[self.request.fileno()]
-        return
+          del self.server.fd_busy[self.request.fileno()]
+          return
 
 class PersistentTCPCryptoService( PersistentTCPServer ):
 

@@ -2,6 +2,7 @@ import os
 import os.path
 from  os.path import join
 import pathlib
+import shutil
 #import pkg_resources
 import copy
 from copy import deepcopy
@@ -550,12 +551,12 @@ class CLI:
                       host='127.0.0.1', 
                       port=9400, 
                       sig_scheme='ed25519', 
-                      key='./_Ed25519PrivateKey-ed25519-pkcs8.der',
-                      cert='./_Ed25519PublicKey-ed25519-X509.der',
+                      key=None,
+                      cert=None,
                       ):
     """ generates conf file from comman line arguments 
 
-        Template can be manually generated. 
+    Template can be manually generated. 
     The template is expected to provide a single port 
     to each configuration.
 
@@ -582,9 +583,6 @@ class CLI:
     instantiation inside a sgx enclave. 
 
     """    
-    self.template = { 'connectivity' : {}, 
-                      "( 'tls13', 'v1' )" : {},
-                      }
     self.connectivity = connectivity
     self.debug = debug
     self.test_vector_mode = test_vector_mode
@@ -597,9 +595,17 @@ class CLI:
 
 
   def get_template( self ):
-    return { 'connectivity' : self.get_connectivity( ),
-             'log' : None, 
-             ( 'tls13', 'v1' ) : self.get_tls13( ) }
+     """ generates the template
+
+     Note that log is set to None and redirects the messages 
+     to the outputs.
+     We define such value as to prevent writing an external file 
+     when teh server runs in an SGX enclave. We shoudl define --log_level
+     --log_file and force these values when SGX is enabled. 
+     """
+     return { 'log' : None, 
+              'connectivity' : self.get_connectivity( ),
+              ( 'tls13', 'v1' ) : self.get_tls13( ) }
 
   def get_debug( self ):
     debug_template = { 'trace' : self.debug }
@@ -640,33 +646,7 @@ class CLI:
     return tls13_template
 
 
-##class CLI:
-
-##  def format_args( self, args ):
-##    """ format the arguments values as stored in args """
-##    for k in args.__dict__.keys():
-##      v = args.__dict__[ k ]  
-##      if isinstance( v, str ) :
-##        args.__dict__[ k ] = self.format_output( v )  
-##    return args
-##
-##  def format_output( self, parser_output ):
-##    """format the output of the parser  
-##  
-##    remove "'" that ends and finishes a string
-##  
-##    It happens that argparse takes the input string
-##    "toto" and store it as "'toto'"
-##    """
-##    if isinstance( parser_output, str ) is False:
-##      while parser_output[ 0 ] in [ "\"", "'" ]:
-##        parser_output = parser_output[ 1: ]
-##      while parser_output[ -1 ] == [ "\"", "'" ]:
-##        parser_output = parser_output[ : -1 ]
-##    return parser_output
-
-
-  def get_parser( self, cs_only:bool=False, conf_dir:str='./',
+  def get_parser( self, env:bool=True, conf_dir:str='./',
                   parser=None):
     """ This function returns a parser to start the CS
 
@@ -678,9 +658,9 @@ class CLI:
     but actually defines how the library is started.
 
     args:
-      cs_only (bool) when set to true indicates that only the
+      env (bool) when set to False indicates that only the
         library parameters are provided.
-        When set to False, this includes OS specific environement
+        When set to True, this includes OS specific environement
         configuration parameters.
       conf_dir (str): The path to the CS directory. It is 
         expected to contain the CS enclave as well as some 
@@ -688,10 +668,9 @@ class CLI:
 
     """
 
-#    print( f"cs_only - 1: {cs_only}" )
 
     if parser is None:
-      if cs_only is False:
+      if env is True:
         description = \
         """
         This scripts launches the Crypto Service in various modes.
@@ -747,22 +726,29 @@ class CLI:
     parser.add_argument( '-sig', '--sig_scheme', \
       type=ascii, default='ed25519', nargs='?', \
       help='Crypto Service  signature scheme  [ ed25519 ]')
-    #parser.add_argument( '-i', '--illustrated', default=False,  \
-    #  action='store_const', const=True, \
-    #  help='Crypto Service running test vector illustrated TLS 1.3')
     ## We mandate the CS to have a public / private key
     ## and currently do not consider the key not to be used.
     ## this may not represent the case of an unauthenticated 
-    ## TLS client. 
-    key_file = os.path.join( conf_dir, 'sig_key_dir', \
-                 '_Ed25519PrivateKey-ed25519-pkcs8.der' )
+    ## TLS client.
+    ##
+    ## With SGX the file needs to be local - as it is configured 
+    ## in the  python template.
+    ## There might need to take different path depending on 
+    ## whether crypto_service or strat_cs is used. 
+    ## currenlty We assume that one is in the local directory.
+#    key_file = os.path.join( './sig_key_dir', \
+#                 '_Ed25519PrivateKey-ed25519-pkcs8.der' )
+#    key_file = os.path.join( conf_dir, 'sig_key_dir', \
+#                 '_Ed25519PrivateKey-ed25519-pkcs8.der' )
     parser.add_argument( '-key', '--key', \
-      type=pathlib.Path, default=f"{key_file}", nargs='?', \
+      type=pathlib.Path, default=None, nargs='?', \
       help='Crypto Service  private key')
-    cert_file = os.path.join( conf_dir, 'sig_key_dir', \
-                  '_Ed25519PublicKey-ed25519-X509.der' )
+#    cert_file = os.path.join( conf_dir, 'sig_key_dir', \
+#                  '_Ed25519PublicKey-ed25519-X509.der' )
+#    cert_file = os.path.join(  './sig_key_dir', \
+#                  '_Ed25519PublicKey-ed25519-X509.der' )
     parser.add_argument( '-cert', '--cert', \
-      type=pathlib.Path, default=f"{cert_file}", nargs='?', \
+      type=pathlib.Path, default=None, nargs='?', \
       help='Crypto Service  public key')
     parser.add_argument( '-debug', '--debug', default=False,  \
       action='store_const', const=True, \
@@ -773,8 +759,8 @@ class CLI:
     parser.add_argument( '-tv_file', '--test_vector_file', \
       type=pathlib.Path, default=None, nargs='?', \
       help='Crypto Service  test vector file')
-#    print( f"cs_only - 2: {cs_only}" )
-    if cs_only is False:
+#    print( f"env - 2: {env}" )
+    if env is True:
       parser.add_argument( '-sgx', '--gramine_sgx', default=False,  \
         action='store_const', const=True, \
         help='Crypto Service is run into SGX (gramine)')
@@ -812,4 +798,23 @@ class CLI:
     self.sig_scheme=args.sig_scheme[1:-1]
     self.key=args.key
     self.cert=args.cert 
+   
+  def copy_and_update_file_path( self, origin_file_path, \
+      GRAMINE_DIR, sub_dir='' ):
+    """ copy and upadte the file paths so it can be used by gramine
+
+    Gramine requires all elements it trusts to be below the 
+    script strating Gramine.
+
+    When a key file is provided, the file is copy under the 
+    specific con_dir location and the new file path is returned.
+    The new file path is relative to the gramine directory.
+    """
+    try:
+      shutil.copy( origin_file_path, os.path.join( GRAMINE_DIR, sub_dir ) )
+    except shutil.SameFileError :
+      pass     
+    return os.path.join( './', sub_dir, \
+             os.path.basename( origin_file_path) )
+  
 

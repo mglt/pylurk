@@ -1,6 +1,48 @@
+# Quick Start Guide
+
+To ease running the cryptographic Service (CS) we defined the CLI commands `crypto_service` and `start_cs`.
+These commands are located in the example/cli directory and allows to start a CS in various configuration. 
+These configurations directly concern the configuration of the CS - as a service - as well as some environement specific parameters such as starting the service in an SGX environment. 
+It is recommended to only use the `crypto_service` which is in charge of:
+
+1. setting the environement (SGX or not)
+2. starting the CS in that environement -- using `start_cs`.
+
+The CS has some default parameters such as the IP address (127.0.0.1) the port (9400), the keys (automaticaly generated for ed25519 and stored in `sig_key_dir`), ...
+You can type `crypto_service --help` for more information  
+
+To start the default CS server running in a TCP server type:
+```
+./crypto_service
+```
+
+To start the default CS into an SGX enclave on port 4901:
+```
+/crypto_service --connectivity tcp --port 9401 --gramine_sgx
+```
+Of course the latests requires that the enclave has been previously build, which can be done as follows:
+```
+./crypto_service --connectivity tcp --port 9401 --gramine_sgx --gramine_build
+./crypto_service --connectivity tcp --port 9401 --gramine_sgx
+```
+ 
+Note1: currently it is important the command are used within the cli directory as as we are using a relative path to indicate the files that are trusted. 
+It is likely we will ALWAYS need to use a relative path, so we may to structure the data and perform some path manipulation in order to have `crypto_service` being used as a global command.  
+This also likely require some installation process. 
+
+Note2: to stop the server you may perform:
+```
+lsof -i :<port>
+```
+We may need to automate this with crypto_service stop.
+
 # TLS 1.3 extension
 
+
+
 ## Running the service in SGX
+
+
 
 To run the CS in a TEE SGX we use the gramine. 
 
