@@ -112,9 +112,12 @@ class SigScheme:
     if pad_name == 'pkcs1':
       pad = padding.PKCS1v15()
     elif pad_name == 'pss':
+#      pad = padding.PSS(
+#        mgf=padding.MGF1(self.hash),
+#       salt_length=padding.PSS.MAX_LENGTH)
       pad = padding.PSS(
         mgf=padding.MGF1(self.hash),
-       salt_length=padding.PSS.MAX_LENGTH)
+       salt_length=self.hash.digest_size )
     else:
       raise LURKError( 'invalid_signature_scheme', f"{pad_name} is not implemented" )
     return pad
@@ -326,7 +329,8 @@ class ECDHEKey():
         curve = SECP384R1()
       elif group ==  'secp521r1':
         curve = SECP521R1()
-      private_key = ec.generate_private_key( curve, default_backend())
+#      private_key = ec.generate_private_key( curve, default_backend())
+      private_key = ec.generate_private_key( curve )
 #      public_key = private_key.public_key()
     elif group  in [ 'x25519', 'x448' ]:
       if group == 'x25519':
@@ -380,12 +384,16 @@ class ECDHEKey():
     if self.group in [ 'secp256r1', 'secp384r1', 'secp521r1' ]:
       if self.group ==  'secp256r1':
         curve =  SECP256R1()
-      elif self.group ==  'secp394r1':
+      elif self.group ==  'secp384r1':
         curve = SECP384R1()
       elif self.group ==  'secp521r1':
         curve = SECP521R1()
-      self.public = EllipticCurvePublicNumbers( key_exchange[ 'x' ],\
+      else:
+        raise LURKError( 'invalid_ephemeral', f"unknown group {group}" )
+
+      public_number = EllipticCurvePublicNumbers( key_exchange[ 'x' ],\
                      key_exchange[ 'y' ], curve )
+      self.public = public_number.public_key()
     elif self.group  in [ 'x25519', 'x448' ]:
       if self.group == 'x25519':
         self.public = X25519PublicKey.from_public_bytes( key_exchange )
@@ -402,6 +410,9 @@ class ECDHEKey():
       private_key = self.private
       public_key = ecdhe_key.public
     if self.group in [ 'secp256r1', 'secp384r1', 'secp521r1' ]:
+      print( f"private key {type(private_key)}" )
+      print( f"public key {type(public_key)}" )
+      print( f"ECDHE {type(ECDH())}" )
       shared_secret = private_key.exchange( ECDH(), public_key )
     elif self.group  in [ 'x25519', 'x448' ]:
       shared_secret = private_key.exchange( public_key )

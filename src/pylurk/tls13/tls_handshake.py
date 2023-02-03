@@ -5,6 +5,7 @@ from copy import deepcopy
 
 from typing import Union, NoReturn, TypeVar, List  
 
+from cryptography.hazmat.primitives.asymmetric import utils
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from cryptography.hazmat.primitives.asymmetric.x448 import X448PrivateKey, X448PublicKey
 
@@ -548,7 +549,12 @@ class TlsHandshake:
                     ECDSA( sig_scheme.hash ) )
     ## rsa
     elif 'rsa' in sig_scheme.algo:
-      signature = self.private_key.sign( content, sig_scheme.pad, sig_scheme.hash )
+      print( f"--- update_certificate_verify: pad: {sig_scheme.pad}, h: {sig_scheme.hash}" )
+      # signature = self.private_key.sign( content, sig_scheme.pad, sig_scheme.hash )
+      hasher = Hash( sig_scheme.hash )
+      hasher.update( content ) 
+      digest = hasher.finalize( )
+      signature = self.private_key.sign( digest, sig_scheme.pad, utils.Prehashed(sig_scheme.hash) )
     else:
       raise LURKError( 'invalid_signature_scheme', f"unknown {sig_scheme.algo}" )
 
