@@ -229,12 +229,9 @@ class CipherSuite:
    
 
   def next_generation_application_traffic_secret( self, secret ):
-#    ks = pylurk.tls13.lurk_tls13.KeyScheduler( tls_hash=self.hash )
     return self.hkdf_expand_label( secret=secret, label=b'traffic upd', \
              context=b'', length=self.tls_hash.digest_size )
 
-## should we take the entire tls_msg objet or the recoord_layer_structure ????
-## we need to add fragment here. 
   def decrypt_old( self, msg, debug=False ):
     """ decrypt msg and return a plain text structure (equivalent)
 
@@ -270,11 +267,6 @@ class CipherSuite:
       clear_text_msg_len = len( clear_text ) - 1 - length_of_padding
       clear_text_struct = tls.TLSInnerPlaintext.parse( clear_text, type=ct_type, length_of_padding=length_of_padding, clear_text_msg_len=clear_text_msg_len )
     else:      
-##     ## here we need to be able to consider fragments
-##     ## 1) assembling the fragment BEFORE parsing when provided.
-##     ## 2) return the fragment as inner_text_fragnment_clear_text_bytes
-##     if fragment is not None:
-##       clear_text = fragment + clear_text
       clear_text_struct = tls.TLSInnerPlaintext.parse( clear_text, type=ct_type, length_of_padding=length_of_padding )
     self.sequence_number += 1
     if debug is True:
@@ -319,11 +311,6 @@ class CipherSuite:
     else:      
       clear_text_struct = tls.TLSInnerPlaintext.parse( clear_text, type=ct_type, length_of_padding=length_of_padding )
     self.sequence_number += 1
-
-#    if debug is not None :
-#      pylurk.debug.print_bin( f"fragment (decrypted) [type {ct_type}]",  clear_text )
-#      print( clear_text_struct )
-
     return  { 'type' : ct_type, \
               'content' : clear_text_struct[ 'content' ],\
               'zeros' : b'\x00' * length_of_padding }
@@ -344,23 +331,7 @@ class CipherSuite:
     else: # handshake
       clear_text_record_bytes = tls.TLSInnerPlaintext.build( inner_plain_text, type=content_type, length_of_padding=length_of_padding)
       
-#    if debug is True :
-#      if content_type == 'application_data' :
-#        clear_text_struct = tls.TLSInnerPlaintext.parse( clear_text_record_bytes, \
-#                type=content_type, length_of_padding=length_of_padding,\
-#                clear_text_msg_len=len(clear_text_msg) )
-#      else: # handshake
-#        clear_text_struct = tls.TLSInnerPlaintext.build( clear_text_record_bytes,\
-#                type=content_type, length_of_padding=length_of_padding)
-#      print( f"fragment (inner clear text) [type {ct_type}]" )   
-#      print( clear_text_struct ) 
-#      pylurk.debug.print_bin( f"fragment (inner clear text) [type {ct_type}]",  clear_text_record_bytes  )
-
-    ## encryption 
-#    print( f"  - inner clear_text : {tls.TLSInnerPlaintext.parse( clear_text_record_bytes, type=content_type, length_of_padding=length_of_padding, clear_text_msg_len=len(clear_text_msg) ) }" )
-#    pylurk.debug.print_bin( "inner_clear_text", clear_text_record_bytes ) 
     additional_data = b'\x17\x03\x03' + int( len( clear_text_record_bytes ) + self.tag_len ).to_bytes( 2, byteorder='big' )
-#    cipher_text = fragment[ : - self.tag_len ] 
     nonce = self.compute_nonce( self.sequence_number, self.write_iv )
     if 'GCM' in self.name:
       cipher = AESGCM( self.write_key )
@@ -379,8 +350,6 @@ class CipherSuite:
       pylurk.debug.print_bin( "additional_data", additional_data )
     
     self.sequence_number += 1 
-#    if debug is True:
-#      return encrypted_reccord, clear_text_record_bytes, inner_plain_text
     return encrypted_reccord
 
   def debug( self, debug, description="" ):
