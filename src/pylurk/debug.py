@@ -179,7 +179,8 @@ class Debug:
     if isinstance( value , bytes ) or isinstance( value, bytearray ):
       print( f"  - {key} [{len(value)} bytes]: {value}" )
     else: 
-      pprint.pprint( f"  - {key}: {value}", width=80, sort_dicts=False )
+#      pprint.pprint( f"  - {key}: {value}", width=80, sort_dicts=False )
+      print( f"  - {key}: {value}" )
 
   def handle_bin( self, key:str, value:bytes ):
     if self.check is True:

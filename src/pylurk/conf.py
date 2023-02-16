@@ -500,9 +500,9 @@ class Configuration:
       sig_scheme = self.conf[ ( 'tls13', 'v1' )  ] [ 'sig_scheme' ][ 0 ]
     except KeyError:
       sig_scheme = 'ed25519'
-    print( f"private_key_file: {private_key_file}" )
-    print( f"public_key_file: {public_key_file}" )
-    print( f"conf: {self.conf}" )
+#    print( f"private_key_file: {private_key_file}" )
+#    print( f"public_key_file: {public_key_file}" )
+#    print( f"conf: {self.conf}" )
     private_key_file, public_key_file = self.set_tls13_keys( \
                                           private_key_file=private_key_file, \
                                           public_key_file=public_key_file, \
