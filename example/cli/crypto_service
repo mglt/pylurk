@@ -25,10 +25,13 @@ if __name__ == '__main__' :
   args = parser.parse_args()
 
   print( f" --- Executing: {__file__} with {args}" )
-  if args.gramine_build is True:
-    subprocess.Popen( f"make clean && make SGX=1 DEBUG=1", shell=True )
-    os._exit( 0 )
-  
+ 
+  if args.key is None :
+    args.key = os.path.join( CS_GRAMINE_DIR, 'sig_key_dir' )    
+  if args.cert is None :
+    args.cert = os.path.join( CS_GRAMINE_DIR, 'sig_key_dir' )    
+
+
   ## updating value of of key_files to ./  so they can be 
   ## used with gramine. 
   ## Such a copy / update is only performed when gramine/sgx
@@ -43,6 +46,12 @@ if __name__ == '__main__' :
 #  shutil.copy( args.cert, sig_key_dir )
 #  args.key = os.path.join( './', os.path.basename( args.key ) )
 #  args.cert = os.path.join( './', os.path.basename( args.cert ) )
+  if args.gramine_build is True:
+    if args.debug is True:
+      subprocess.Popen( f"make clean && make SGX=1 DEBUG=1", shell=True )
+    else: 
+      subprocess.Popen( f"make clean && make SGX=1 DEBUG=0", shell=True )
+    os._exit( 0 )
 
 
   ## starting the CS

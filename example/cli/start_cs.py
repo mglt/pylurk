@@ -54,7 +54,6 @@ if __name__ == '__main__' :
   parser = cli.get_parser( env=True )
   args = parser.parse_args()
   print( f" --- Executing: {__file__} with {args}" )
-  print( f"--- 000 {args.cert}" )
   if args.cert == "'./sig_key_dir/_Ed25519PrivateKey-ed25519-pkcs8.der'":
     raise ValueError( "BAD cert" )
   ## Building the template (in general expected to 

@@ -12,6 +12,8 @@ ifeq ($(SGX),1)
 all: python.manifest.sgx python.sig python.token
 endif
 
+## remote attestation parameters
+## RA_TYPE can be epid, dcap, none
 RA_TYPE ?= none
 RA_CLIENT_SPID ?=
 RA_CLIENT_LINKABLE ?= 0

@@ -420,14 +420,29 @@ class Configuration:
     This function generates the appropriated cryptographic material when
     needed. 
     This includes when the material is not specified or when not coherent.
+
+    args:
+      private_key_file (str): the file path for the private_key. 
+        It can be a directory, in which case, the private key 
+        will be generated into that directoiry. When not 
+        provided a file is generated in the local directory.
+      public_key_file (str): the file path for the public_key 
+        (see private_key_file).
        
     """
+    
     ## Derive directory from the provided files (when possible).
     try:
-       conf_dir = os.path.dirname( private_key_file )
+      if os.path.isfile( private_key_file ) : 
+        conf_dir = os.path.dirname( private_key_file )
+      elif os.path.isdir( private_key_file ) : 
+        conf_dir = private_key_file
     except:
       try:
-        conf_dir = os.path.dirname( public_key_file )
+        if os.path.isfile( public_key_file ) : 
+          conf_dir = os.path.dirname( public_key_file )
+        elif os.path.isdir( public_key_file ) : 
+          conf_dir = public_key_file
       except:
         conf_dir = './'
     ## ensures that there is a private key
@@ -437,10 +452,14 @@ class Configuration:
       print( e.message )
       print( f"WARNING: Generating new keys")
       private_key, public_key = self.generate_keys( sig_scheme )
-      private_file, public_file = self.store_keys( private_key, key_format, conf_dir )
-      print( f"  - private_file: {private_file}" )
-      print( f"  - public_file: {private_file}" )
-
+      private_key_file, public_key_file = self.store_keys( private_key, key_format, conf_dir )
+      print( f"  - private_file: {private_key_file}" )
+      print( f"  - public_file: {public_key_file}" )
+      ## updating the configuration (only necessary when directory is provided)
+      self.conf[ ( 'tls13', 'v1' )  ] ['private_key'] = private_key_file 
+      self.conf[ ( 'tls13', 'v1' )  ] ['public_key'] = [ public_key_file ] 
+      
+#    finally: 
     private_key = self.load_private_key( private_key_file )
     sig_scheme = self.key_algo( private_key )
     

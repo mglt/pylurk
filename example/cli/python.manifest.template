@@ -71,8 +71,19 @@ fs.mounts = [
 sys.stack.size = "2M"
 sys.enable_extra_runtime_domain_names_conf = true
 
-sgx.debug = true
+## This sets the enclave debug mode
+## note it is differnet from the --debug option 
+## used by crypto_service
+sgx.debug = false
 sgx.nonpie_binary = true
+
+## isvprodid is an unsigned short 
+## >>> int.from_bytes( b'cs', byteorder='little' )
+## 29539
+sgx.isvprodid = 29539
+sgx.isvsvn = 0
+
+
 sgx.enclave_size = "512M"
 sgx.thread_num = 32
 

@@ -1,6 +1,6 @@
 [loader]
 entrypoint = "file:/usr/lib/x86_64-linux-gnu/gramine/libsysdb.so"
-log_level = "debug"
+log_level = "error"
 insecure__use_cmdline_argv = true
 pal_internal_mem_size = "64M"
 
@@ -49,16 +49,16 @@ type = "tmpfs"
 path = "/tmp"
 
 [sgx]
-debug = true
+debug = false
 nonpie_binary = true
+isvprodid = 29539
+isvsvn = 0
 enclave_size = "512M"
 thread_num = 32
-remote_attestation = "none"
-ra_client_spid = ""
+remote_attestation = "epid"
+ra_client_spid = "3A2053D125F7AB3642C3FAC6A22BABFD"
 ra_client_linkable = false
 allowed_files = [ "file:/etc/nsswitch.conf", "file:/etc/ethers", "file:/etc/hosts", "file:/etc/group", "file:/etc/passwd", "file:/etc/gai.conf", "file:/etc/host.conf",]
-isvprodid = 0
-isvsvn = 0
 require_avx = false
 require_avx512 = false
 require_mpx = false
