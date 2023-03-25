@@ -17,26 +17,14 @@
 
 #include "secret_prov.h"
 
-//#define PORT "4433"
-//static uint16_t PORT; 
 #define EXPECTED_STRING "MORE"
 #define FIRST_SECRET "FIRST_SECRET"
 #define SECOND_SECRET "42" /* answer to ultimate question of life, universe, and everything */
 
-// #define SRV_CRT_PATH "../ssl/server.crt"
-// #define SRV_KEY_PATH "../ssl/server.key"
-
-// #define SECRET_PATH "../ssl/_Ed25519PrivateKey-ed25519-pkcs8.der"
-//#define SECRET_SIZE_MAX 10000
-
 #define ENFORCE_VALIDATION  1
-//#define EXPECTED_MRENCLAVE "dac61ce6d1763f1875e5b486126ebe42ed7003f1c8e52938f18af508ee1b430a"
 static char EXPECTED_MRENCLAVE[ 65 ];
-//#define EXPECTED_MRSIGNER "e725999b742f47419e5a074b32d8c869711d68d20d059dc987e5c87424cb37a9"
 static char EXPECTED_MRSIGNER[ 65 ];
-//#define EXPECTED_ISV_PROD_ID 0
 static uint16_t EXPECTED_ISV_PROD_ID; 
-//#define EXPECTED_ISV_SVN 0
 static uint16_t EXPECTED_ISV_SVN; 
 
 
@@ -102,37 +90,37 @@ static int verify_measurements_callback(const char* mrenclave, const char* mrsig
 /* this callback is called in a new thread associated with a client; be careful to make this code
  * thread-local and/or thread-safe */
 static int communicate_with_client_callback(struct ra_tls_ctx* ctx) {
-    int ret;
+//    int ret;
 
     /* if we reached this callback, the first secret was sent successfully */
-    printf("--- Sent secret1 ---\n");
+    //printf("--- Sent secret1 ---\n");
 
-    /* let's send another secret (just to show communication with secret-awaiting client) */
-    uint8_t buf[sizeof(EXPECTED_STRING)] = {0};
-
-    ret = secret_provision_read(ctx, buf, sizeof(buf));
-    if (ret < 0) {
-        if (ret == -ECONNRESET) {
-            /* client doesn't want another secret, shutdown communication gracefully */
-            return 0;
-        }
-
-        fprintf(stderr, "[error] secret_provision_read() returned %d\n", ret);
-        return -EINVAL;
-    }
-
-    if (memcmp(buf, EXPECTED_STRING, sizeof(EXPECTED_STRING))) {
-        fprintf(stderr, "[error] client sent '%s' but expected '%s'\n", buf, EXPECTED_STRING);
-        return -EINVAL;
-    }
-
-    ret = secret_provision_write(ctx, (uint8_t*)SECOND_SECRET, sizeof(SECOND_SECRET));
-    if (ret < 0) {
-        fprintf(stderr, "[error] secret_provision_write() returned %d\n", ret);
-        return -EINVAL;
-    }
-
-    //printf("--- Sent secret2 = '%s' ---\n", SECOND_SECRET);
+//    /* let's send another secret (just to show communication with secret-awaiting client) */
+//    uint8_t buf[sizeof(EXPECTED_STRING)] = {0};
+//
+//    ret = secret_provision_read(ctx, buf, sizeof(buf));
+//    if (ret < 0) {
+//        if (ret == -ECONNRESET) {
+//            /* client doesn't want another secret, shutdown communication gracefully */
+//            return 0;
+//        }
+//
+//        fprintf(stderr, "[error] secret_provision_read() returned %d\n", ret);
+//        return -EINVAL;
+//    }
+//
+//    if (memcmp(buf, EXPECTED_STRING, sizeof(EXPECTED_STRING))) {
+//        fprintf(stderr, "[error] client sent '%s' but expected '%s'\n", buf, EXPECTED_STRING);
+//        return -EINVAL;
+//    }
+//
+//    ret = secret_provision_write(ctx, (uint8_t*)SECOND_SECRET, sizeof(SECOND_SECRET));
+//    if (ret < 0) {
+//        fprintf(stderr, "[error] secret_provision_write() returned %d\n", ret);
+//        return -EINVAL;
+//    }
+//
+//    //printf("--- Sent secret2 = '%s' ---\n", SECOND_SECRET);
     return 0;
 }
 
@@ -144,27 +132,19 @@ int secret_file_provisionning_server( /* The following variables are used to
 		                      char *mrsigner_str, 
 				      uint16_t isv_prod_id, 
 				      uint16_t isv_svn,
-				      //char *isv_prod_id, 
-				      //char *sv_svn,
 				      /* The following variables are only used within
 				         this function */
-				      char *PORT, 
-				      char *SRV_CRT_PATH, 
-				      char *SRV_KEY_PATH, 
-				      char *SECRET_PATH ){
+				      char *port, 
+				      char *srv_crt_path, 
+				      char *srv_key_path, 
+				      char *secret_path ){
 
     int ret = pthread_mutex_init(&g_print_lock, NULL);
     if (ret < 0)
         return ret;
-//    char *mrenclave_str = "dac61ce6d1763f1875e5b486126ebe42ed7003f1c8e52938f18af508ee1b430a";
-//    char *mrsigner_str = "e725999b742f47419e5a074b32d8c869711d68d20d059dc987e5c87424cb37a9";
-//#define PORT "4433"
-//    char *PORT = "4433";
     uint16_t SECRET_SIZE_MAX = 10000; 
     strcpy( EXPECTED_MRENCLAVE, mrenclave_str ); 
     strcpy( EXPECTED_MRSIGNER, mrsigner_str );
-//    strcpy( EXPECTED_ISV_PROD_ID, isv_prod_id );
-//    strcpy( EXPECTED_ISV_SVN, isv_svn );
     EXPECTED_ISV_PROD_ID = isv_prod_id;
     EXPECTED_ISV_SVN = isv_svn; 
 
@@ -174,7 +154,7 @@ int secret_file_provisionning_server( /* The following variables are used to
     char c;
     int i = 0;
     int secret_len = 0;
-    fptr1 = fopen(SECRET_PATH, "r");
+    fptr1 = fopen(secret_path, "r");
   
     if (fptr1 == NULL) {
         fprintf(stderr, "[error] unable to open secret path\n");
@@ -200,16 +180,15 @@ int secret_file_provisionning_server( /* The following variables are used to
     fclose(fptr1);
    
 
-    //puts("--- Starting the Secret Provisioning server on port " PORT " ---");
-    printf("--- Starting the Secret Provisioning server on port %s ---\n", PORT);
+    printf("--- Starting the Secret Provisioning server on port %s ---\n", port);
     /*ret = secret_provision_start_server((uint8_t*)FIRST_SECRET, 
               sizeof(FIRST_SECRET),
-              PORT, SRV_CRT_PATH, SRV_KEY_PATH,
+              port, srv_crt_path, srv_key_path,
               verify_measurements_callback,
               communicate_with_client_callback);*/
     ret = secret_provision_start_server(secret_bytes,
             secret_len,
-            PORT, SRV_CRT_PATH, SRV_KEY_PATH,
+            port, srv_crt_path, srv_key_path,
             verify_measurements_callback,
             communicate_with_client_callback);
     if (ret < 0) {
@@ -236,43 +215,23 @@ static bool str_to_uint16(const char *str, uint16_t *res)
 }
 
 int main( int argc, char** argv ) {
-  //char *mrenclave_str = "dac61ce6d1763f1875e5b486126ebe42ed7003f1c8e52938f18af508ee1b430a";
   char *mrenclave_str = argv[1];
-  //char *mrsigner_str = "e725999b742f47419e5a074b32d8c869711d68d20d059dc987e5c87424cb37a9";
   char *mrsigner_str = argv[2]; 
   uint16_t isv_prod_id;
   if (!str_to_uint16( argv[3], &isv_prod_id)) {
     fprintf(stderr, "conversion error\n");
     exit(1);
   }  
-  //char *isv_prod_id_str = argv[3]; 
-  //uint16_t isv_svn = 0; 
-  //char *isv_svn_str = argv[4]; 
   uint16_t isv_svn;
   if (!str_to_uint16( argv[4], &isv_svn)) {
     fprintf(stderr, "conversion error\n");
     exit(2);
   }  
-  //char *PORT = "4433";
-  char *PORT = argv[ 5 ];
-  //char *SRV_CRT_PATH = "../ssl/server.crt"; 
-  char *SRV_CRT_PATH = argv[ 6 ]; 
-  //char *SRV_KEY_PATH = "../ssl/server.key";
-  char *SRV_KEY_PATH = argv[ 7 ];
-  //char *SECRET_PATH = "../ssl/_Ed25519PrivateKey-ed25519-pkcs8.der"; 
-  char *SECRET_PATH = argv[ 8 ]; 
-//  strcpy( mrenclave_str, argv[1] ); 
-
-//#define SRV_CRT_PATH "../ssl/server.crt"
-//#define SRV_KEY_PATH "../ssl/server.key"
-
-//#define SECRET_PATH "../ssl/_Ed25519PrivateKey-ed25519-pkcs8.der"
-//#define SECRET_SIZE_MAX 10000
-//#define PORT "4433"
-
-
-
-   secret_file_provisionning_server( /* The following variables are used to 
+  char *port = argv[ 5 ];
+  char *srv_crt_path = argv[ 6 ]; 
+  char *srv_key_path = argv[ 7 ];
+  char *secret_path = argv[ 8 ]; 
+  secret_file_provisionning_server( /* The following variables are used to 
 					 initiates static global variables */
 	                              mrenclave_str, 
 		                      mrsigner_str, 
@@ -280,9 +239,9 @@ int main( int argc, char** argv ) {
 				      isv_svn,
 				      /* The following variables are only used within
 				         this function */
-				      PORT, 
-				      SRV_CRT_PATH, 
-				      SRV_KEY_PATH, 
-				      SECRET_PATH );
+				      port, 
+				      srv_crt_path, 
+				      srv_key_path, 
+				      secret_path );
 
 }	

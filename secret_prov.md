@@ -219,11 +219,88 @@ This section details how to use the secret provisionning service provided by pyl
 These are largely inspired by those provided by the Gramine project. 
 
 It contains the following steps:
-1. Building the enclave EINITTOKEN
-2. Statrting the secret provisionning service
-3. Initializing the enclave 
+1. On first time make sure service proviosioning has been properly compiled to enable attestation. As the client part will be embeded into the cryptographic service, the client MUST be build before the CS enclave is built. As these are just executable software, there is not a need to build them unless you expect to execute `gramine-sgx client` in which case the templates needs to be built with attestation information. 
+ 
+2. Building the enclave EINITTOKEN that is in in our case the `python.sig` file.
 
-## 1. Building the Enclave
+3. Starting the secret provisionning service
+4. Starting the enclave 
+
+## 1. Building/Compiling Provisioning Client / Server 
+
+```
+$ cd ~/gitlab/pylurk.git/example/cli
+$ make -f Makefile_server_prov clean && make -f Makefile_server_prov app epid RA_TYPE=epid RA_CLIENT_SPID=3A2053D125F7AB3642C3FAC6A22BABFD RA_CLIENT_LINKABLE=0 GRAMINEDIR=/home/mglt/gramine
+rm -f OUTPUT
+cd secret_prov;         rm -f client server_* *.token *.sig *.manifest.sgx *.manifest
+cd secret_prov && \
+gramine-manifest \
+        -Dlog_level=error \
+        -Darch_libdir=/lib/x86_64-linux-gnu \
+        -Dra_type=epid \
+        -Dra_client_spid=3A2053D125F7AB3642C3FAC6A22BABFD \
+        -Dra_client_linkable=0 \
+        client.manifest.template > client.manifest
+cc secret_prov/client.c -O2 -fPIE -Wall -std=c11 -I/home/mglt/gramine/tools/sgx/ra-tls -pie -Wl,--enable-new-dtags -lsgx_util -Wl,-rpath,/usr/lib/x86_64-linux-gnu -lsecret_prov_attest -o secret_prov/client
+secret_prov/client.c: In function ‘main’:
+secret_prov/client.c:42:13: warning: unused variable ‘c’ [-Wunused-variable]
+   42 |     uint8_t c;
+      |             ^
+secret_prov/client.c:33:9: warning: variable ‘ret2’ set but not used [-Wunused-but-set-variable]
+   33 |     int ret2;
+      |         ^~~~
+cd secret_prov && \
+gramine-sgx-sign \
+        --manifest client.manifest \
+        --output client.manifest.sgx
+Attributes:
+    size:        0x20000000
+    thread_num:  4
+    isv_prod_id: 0
+    isv_svn:     0
+    attr.flags:  0x6
+    attr.xfrm:   0x3
+    misc_select: 0x0
+SGX remote attestation:
+    EPID (spid = `3A2053D125F7AB3642C3FAC6A22BABFD`, linkable = False)
+Memory:
+    000000003fd19000-0000000040000000 [REG:R--] (manifest) measured
+    000000003fcf9000-000000003fd19000 [REG:RW-] (ssa) measured
+    000000003fcf5000-000000003fcf9000 [TCS:---] (tcs) measured
+    000000003fcf1000-000000003fcf5000 [REG:RW-] (tls) measured
+    000000003fcb1000-000000003fcf1000 [REG:RW-] (stack) measured
+    000000003fc71000-000000003fcb1000 [REG:RW-] (stack) measured
+    000000003fc31000-000000003fc71000 [REG:RW-] (stack) measured
+    000000003fbf1000-000000003fc31000 [REG:RW-] (stack) measured
+    000000003fbe1000-000000003fbf1000 [REG:RW-] (sig_stack) measured
+    000000003fbd1000-000000003fbe1000 [REG:RW-] (sig_stack) measured
+    000000003fbc1000-000000003fbd1000 [REG:RW-] (sig_stack) measured
+    000000003fbb1000-000000003fbc1000 [REG:RW-] (sig_stack) measured
+    000000003f794000-000000003f7d8000 [REG:R-X] (code) measured
+    000000003f7d9000-000000003fbb1000 [REG:RW-] (data) measured
+    0000000020000000-000000003f794000 [REG:RWX] (free)
+Measurement:
+    59cf9766eecf45ffa8b12d85c1b9e872ce8df95ffc121a09f7828ae9438c5193
+gramine-sgx-get-token --output secret_prov/client.token --sig secret_prov/client.sig
+Attributes:
+    mr_enclave:  59cf9766eecf45ffa8b12d85c1b9e872ce8df95ffc121a09f7828ae9438c5193
+    mr_signer:   e725999b742f47419e5a074b32d8c869711d68d20d059dc987e5c87424cb37a9
+    isv_prod_id: 0
+    isv_svn:     0
+    attr.flags:  0000000000000006
+    attr.xfrm:   0000000000000003
+    mask.flags:  ffffffffffffffff
+    mask.xfrm:   fffffffffff9ff1b
+    misc_select: 00000000
+    misc_mask:   ffffffff
+    modulus:     f19f15a643fbadc6714cbe9e8d670a8a...
+    exponent:    3
+    signature:   1779c023d5f8ca3e1e777cf8d12ddf74...
+    date:        2023-03-24
+cc secret_prov/server.c -O2 -fPIE -Wall -std=c11 -I/home/mglt/gramine/tools/sgx/ra-tls -pie -Wl,--enable-new-dtags -lsgx_util -Wl,-rpath,/usr/lib/x86_64-linux-gnu -lsecret_prov_verify_epid -pthread -o secret_prov/server_epid
+```
+
+## 2. Building or initializing the Cryptographic Service
 
 ```
 $ cd ~/gitlab/pylurk.git/example/cli
@@ -343,79 +420,8 @@ Attributes:
     date:        2023-03-24
 ```
 
-## Building / Strating the Secret Provisioning Service 
+## 3. Starting the secret provisionning service
 
-```
-$ cd ~/gitlab/pylurk.git/example/cli
-$ make -f Makefile_server_prov clean && make -f Makefile_server_prov app epid RA_TYPE=epid RA_CLIENT_SPID=3A2053D125F7AB3642C3FAC6A22BABFD RA_CLIENT_LINKABLE=0 GRAMINEDIR=/home/mglt/gramine
-rm -f OUTPUT
-cd secret_prov;         rm -f client server_* *.token *.sig *.manifest.sgx *.manifest
-cd secret_prov && \
-gramine-manifest \
-        -Dlog_level=error \
-        -Darch_libdir=/lib/x86_64-linux-gnu \
-        -Dra_type=epid \
-        -Dra_client_spid=3A2053D125F7AB3642C3FAC6A22BABFD \
-        -Dra_client_linkable=0 \
-        client.manifest.template > client.manifest
-cc secret_prov/client.c -O2 -fPIE -Wall -std=c11 -I/home/mglt/gramine/tools/sgx/ra-tls -pie -Wl,--enable-new-dtags -lsgx_util -Wl,-rpath,/usr/lib/x86_64-linux-gnu -lsecret_prov_attest -o secret_prov/client
-secret_prov/client.c: In function ‘main’:
-secret_prov/client.c:42:13: warning: unused variable ‘c’ [-Wunused-variable]
-   42 |     uint8_t c;
-      |             ^
-secret_prov/client.c:33:9: warning: variable ‘ret2’ set but not used [-Wunused-but-set-variable]
-   33 |     int ret2;
-      |         ^~~~
-cd secret_prov && \
-gramine-sgx-sign \
-        --manifest client.manifest \
-        --output client.manifest.sgx
-Attributes:
-    size:        0x20000000
-    thread_num:  4
-    isv_prod_id: 0
-    isv_svn:     0
-    attr.flags:  0x6
-    attr.xfrm:   0x3
-    misc_select: 0x0
-SGX remote attestation:
-    EPID (spid = `3A2053D125F7AB3642C3FAC6A22BABFD`, linkable = False)
-Memory:
-    000000003fd19000-0000000040000000 [REG:R--] (manifest) measured
-    000000003fcf9000-000000003fd19000 [REG:RW-] (ssa) measured
-    000000003fcf5000-000000003fcf9000 [TCS:---] (tcs) measured
-    000000003fcf1000-000000003fcf5000 [REG:RW-] (tls) measured
-    000000003fcb1000-000000003fcf1000 [REG:RW-] (stack) measured
-    000000003fc71000-000000003fcb1000 [REG:RW-] (stack) measured
-    000000003fc31000-000000003fc71000 [REG:RW-] (stack) measured
-    000000003fbf1000-000000003fc31000 [REG:RW-] (stack) measured
-    000000003fbe1000-000000003fbf1000 [REG:RW-] (sig_stack) measured
-    000000003fbd1000-000000003fbe1000 [REG:RW-] (sig_stack) measured
-    000000003fbc1000-000000003fbd1000 [REG:RW-] (sig_stack) measured
-    000000003fbb1000-000000003fbc1000 [REG:RW-] (sig_stack) measured
-    000000003f794000-000000003f7d8000 [REG:R-X] (code) measured
-    000000003f7d9000-000000003fbb1000 [REG:RW-] (data) measured
-    0000000020000000-000000003f794000 [REG:RWX] (free)
-Measurement:
-    59cf9766eecf45ffa8b12d85c1b9e872ce8df95ffc121a09f7828ae9438c5193
-gramine-sgx-get-token --output secret_prov/client.token --sig secret_prov/client.sig
-Attributes:
-    mr_enclave:  59cf9766eecf45ffa8b12d85c1b9e872ce8df95ffc121a09f7828ae9438c5193
-    mr_signer:   e725999b742f47419e5a074b32d8c869711d68d20d059dc987e5c87424cb37a9
-    isv_prod_id: 0
-    isv_svn:     0
-    attr.flags:  0000000000000006
-    attr.xfrm:   0000000000000003
-    mask.flags:  ffffffffffffffff
-    mask.xfrm:   fffffffffff9ff1b
-    misc_select: 00000000
-    misc_mask:   ffffffff
-    modulus:     f19f15a643fbadc6714cbe9e8d670a8a...
-    exponent:    3
-    signature:   1779c023d5f8ca3e1e777cf8d12ddf74...
-    date:        2023-03-24
-cc secret_prov/server.c -O2 -fPIE -Wall -std=c11 -I/home/mglt/gramine/tools/sgx/ra-tls -pie -Wl,--enable-new-dtags -lsgx_util -Wl,-rpath,/usr/lib/x86_64-linux-gnu -lsecret_prov_verify_epid -pthread -o secret_prov/server_epid
-```
 
 By default, the parameters are read from the python.sig file
 
@@ -436,7 +442,7 @@ secret_key [48 bytes]:
 
 ```
 
-## Initializing the Crypto Service with attestation
+## 4. Initializing the Crypto Service with attestation
 
 $ cd ~/gitlab/pylurk.git/example/cli
 $ $ ./crypto_service --connectivity tcp --port 9401 --cert sig_key_dir/_Ed25519PublicKey-ed25519-X509.der --gramine_sgx --secret_provisioning 
