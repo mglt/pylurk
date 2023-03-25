@@ -17,7 +17,7 @@
 
 int store_bin_secret ( uint8_t* secret, int secret_size ){
   FILE *fptr;
-  if ((fptr = fopen("/secret.bin","wb")) == NULL){
+  if ((fptr = fopen("secret.bin","wb")) == NULL){
     printf("Error: Cannot open file");
     // Program exits if the file pointer returns NULL.
     exit(1);

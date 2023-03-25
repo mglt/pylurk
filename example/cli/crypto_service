@@ -15,31 +15,52 @@ import pylurk.conf
 ## This directory MUST contain the necessary files to build the enclave
 ## This is also the directory from which the enclave MUST be started.
 CS_GRAMINE_DIR = '/home/mglt/gitlab/pylurk.git/example/cli'
+CS_GRAMINE_KEY_DIR = os.path.join( CS_GRAMINE_DIR, 'sig_key_dir' )
 
 
 if __name__ == '__main__' :
   os.chdir( CS_GRAMINE_DIR )
-  cli = pylurk.conf.CLI( ) 
+  cli = pylurk.conf.CLI( )
+
 #  parser = cli.get_parser( conf_dir=CS_GRAMINE_DIR )
   parser = cli.get_parser( )
   args = parser.parse_args()
 
   print( f" --- Executing: {__file__} with {args}" )
- 
+
+  ## the default values 
   if args.key is None :
-    args.key = os.path.join( CS_GRAMINE_DIR, 'sig_key_dir' )    
+    args.key = CS_GRAMINE_KEY_DIR
+    print( f"key file not provided. New key will be generated in {args.key}")
   if args.cert is None :
-    args.cert = os.path.join( CS_GRAMINE_DIR, 'sig_key_dir' )    
+    args.cert = CS_GRAMINE_KEY_DIR 
+    print( f"certificate file not provided. New certificate will be stored in {args.cert}")
 
 
   ## updating value of of key_files to ./  so they can be 
   ## used with gramine. 
   ## Such a copy / update is only performed when gramine/sgx
   ## is enabled
+  ##
+  ## When a directory is provided, with gramine that directory 
+  ## MUST be sig_key as it is the only directory read by the TEE. 
   if args.gramine_build is True or args.gramine_sgx is True:
-    args.cert = cli.copy_and_update_file_path( args.cert, \
+    if os.path.isdir( args.key ) :
+      if args.key != CS_GRAMINE_KEY_DIR :
+        print( "New key will be generated in {args.key}")
+        ## we only consider the relative path in that case
+      args.key = 'sig_key_dir'
+    else: 
+      args.cert = cli.copy_and_update_file_path( args.cert, \
         CS_GRAMINE_DIR, 'sig_key_dir' )
-    args.key = cli.copy_and_update_file_path( args.key, \
+    if os.path.isdir( args.cert ) :
+      if args.cert != CS_GRAMINE_KEY_DIR :
+        args.cert = CS_GRAMINE_KEY_DIR
+        print( "New key will be generated in {args.cert}") 
+        ## we only consider the relative path in that case
+      args.cert = 'sig_key_dir'
+    else: 
+      args.cert = cli.copy_and_update_file_path( args.cert, \
         CS_GRAMINE_DIR, 'sig_key_dir' )
 #  sig_key_dir = os.path.join( CS_GRAMINE_DIR, 'sig_key_dir') 
 #  shutil.copy( args.key, sig_key_dir )
@@ -61,7 +82,7 @@ if __name__ == '__main__' :
   cmd = f"./start_cs.py --connectivity {args.connectivity[1:-1]} "\
           f"--host {args.host[1:-1]} --port {args.port} "\
           f"--sig_scheme {args.sig_scheme[1:-1]} --key {args.key} "\
-          f"--cert {args.cert} "\
+          f"--cert {args.cert}"\
   ## for arguments that takes a None default when omited
   ## the command line MUST omit these options as one cannot 
   ## mention them as 'None'
@@ -73,7 +94,9 @@ if __name__ == '__main__' :
   ## when there value is True as abscence mens False   
   if args.debug is True:
     cmd += " --debug"
- 
+  if args.secret_provisioning is True:
+    cmd += " --secret_provisioning"
+
   print( f"cmd: {cmd}" ) 
   if args.gramine_sgx is False and args.gramine_direct is False:
   ##  with pylurk.cs.get_cs_instance( cs_conf.conf ) as cs:

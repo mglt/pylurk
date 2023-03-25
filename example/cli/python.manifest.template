@@ -63,6 +63,10 @@ fs.mounts = [
   ## adding our specific paths
   { path = "/home/mglt/gitlab", uri = "file:/home/mglt/gitlab/" },
   { path = "/home/mglt/.local/lib/python3.10/site-packages", uri = "file:/home/mglt/.local/lib/python3.10/site-packages" },
+  ## ca.crt is mounted to be in the same directory as /client.c
+  ## as ./client.c takes the file ca.crt in its own directory 
+  { path = "/secret_prov/client", uri = "file:secret_prov/client" },
+  { path = "/secret_prov/ca.crt", uri = "file:tls_secret_prov/ca.crt" },
   { path = "/etc", uri = "file:/etc" },
 
   { type = "tmpfs", path = "/tmp" },
@@ -99,17 +103,36 @@ sgx.trusted_files = [
   "file:/usr/{{ arch_libdir }}/",
   "file:{{ python.stdlib }}/",
   "file:{{ python.distlib }}/", ## /usr/lib/python3/dist-packages
-  ## adding our specific paths
+  ## python modules being used by pylurk 
   "file:/home/mglt/gitlab/pytls13/src/pytls13/",
   "file:/home/mglt/gitlab/pylurk.git/src/pylurk/",
   "file:/home/mglt/.local/lib/python3.10/site-packages/",
 #  "file:scripts/",
+  ## scripts launching the cryptographic service (cs)
   "file:start_cs.py",
-  "file:sig_key_dir/",
-  "file:./crypto_service.log",
+  ## sig_key contains the key files
+  ## having the key files considered as trusted 
+  ## prevents these files to be changed.
+  ## This could be useful to ensure that the exact
+  ## same key is being used. 
+  ## On the other hand it also force the key to be 
+  ## stored into an untrusted environement.
+  ## and for example prevent the key to be generated
+  ## or provisionned with the "secret_provisionning" 
+  ## service.
+  ## for that reason we moved the sig_key_dir nto the 
+  ## allowed_files section.   
+  #"file:sig_key_dir/",
+  ## illustrated_tls is not expected to be modified
+  ## unless we are willing to re-generate it, so we
+  ## though that it might fall under the trusted file
+  ## section  
   "file:illustrated_tls13.json",
   "file:/etc/mime.types",
   "file:/etc/default/apport",
+  ## files related to the secret provisionning
+  "file:secret_prov/client",
+  "file:tls_secret_prov/ca.crt",
 ]
 
 sgx.allowed_files = [
@@ -120,4 +143,25 @@ sgx.allowed_files = [
   "file:/etc/passwd",
   "file:/etc/gai.conf",
   "file:/etc/host.conf",
+  "file:./crypto_service.log",
+  ## sig_key_dir contains the key files. These files may 
+  ## be overwritten by the application - for example when
+  ## the files need to be generated for example-, or when 
+  ## the key sare provisionned via the provisioning service.   
+  ##
+  ## To be overwritten, files needs to be provided individually.
+  ## We put all possibilities provided by the pylurk, but if 
+  ## a specific naming is considered, we need to add it.  
+  "file:sig_key_dir/_Ed25519PrivateKey-ed25519-pkcs8.der",
+  "file:sig_key_dir/_Ed25519PublicKey-ed25519-X509.der",
+  "file:sig_key_dir/_Ed448PrivateKey-ed448-pkcs8.der",
+  "file:sig_key_dir/_Ed448PublicKey-ed448-X509.der",
+  "file:sig_key_dir/_EllipticCurvePrivateKey-ecdsa_secp256r1-pkcs8.der",
+  "file:sig_key_dir/_EllipticCurvePrivateKey-ecdsa_secp384r1-pkcs8.der",
+  "file:sig_key_dir/_EllipticCurvePublicKey-ecdsa_secp256r1-X509.der",
+  "file:sig_key_dir/_EllipticCurvePublicKey-ecdsa_secp384r1-X509.der",
+  "file:sig_key_dir/_RSAPrivateKey-rsa-pkcs8.der",
+  "file:sig_key_dir/_RSAPublicKey-rsa-X509.der",
+  "file:secret.bin", ## looks this is where the key is written
+  "file:secret_prov/secret.bin",
 ]

@@ -799,6 +799,10 @@ class CLI:
       parser.add_argument( '-b', '--gramine_build', default=False,  \
         action='store_const', const=True, \
         help='Build the Crypto Service into the enclave')
+      parser.add_argument( '-sec_prov', '--secret_provisioning',\
+        default=False,  action='store_const', const=True, \
+        help='Enable Secret Provisioning')
+
 
     return parser
   

@@ -12,6 +12,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <inttypes.h> /* strtoumax */
+#include <stdbool.h>
 
 #include "secret_prov.h"
 
@@ -81,7 +83,7 @@ static int verify_measurements_callback(const char* mrenclave, const char* mrsig
         ret = 1;	
       }
       if( EXPECTED_ISV_PROD_ID != *((uint16_t*)isv_prod_id) ){
-        printf( "  - ERROR Expecting ISV_PROD_ID:   %hu\n", (uint16_t) EXPECTED_ISV_PROD_ID );
+        printf( "  - ERROR Expecting ISV_PROD_ID:   %u\n", (uint16_t) EXPECTED_ISV_PROD_ID );
         ret = 1;	
       }
       if( EXPECTED_ISV_SVN != *((uint16_t*)isv_svn) ){
@@ -130,7 +132,7 @@ static int communicate_with_client_callback(struct ra_tls_ctx* ctx) {
         return -EINVAL;
     }
 
-    printf("--- Sent secret2 = '%s' ---\n", SECOND_SECRET);
+    //printf("--- Sent secret2 = '%s' ---\n", SECOND_SECRET);
     return 0;
 }
 
@@ -142,6 +144,8 @@ int secret_file_provisionning_server( /* The following variables are used to
 		                      char *mrsigner_str, 
 				      uint16_t isv_prod_id, 
 				      uint16_t isv_svn,
+				      //char *isv_prod_id, 
+				      //char *sv_svn,
 				      /* The following variables are only used within
 				         this function */
 				      char *PORT, 
@@ -159,8 +163,10 @@ int secret_file_provisionning_server( /* The following variables are used to
     uint16_t SECRET_SIZE_MAX = 10000; 
     strcpy( EXPECTED_MRENCLAVE, mrenclave_str ); 
     strcpy( EXPECTED_MRSIGNER, mrsigner_str );
-    EXPECTED_ISV_PROD_ID = 0;
-    EXPECTED_ISV_SVN = 0; 
+//    strcpy( EXPECTED_ISV_PROD_ID, isv_prod_id );
+//    strcpy( EXPECTED_ISV_SVN, isv_svn );
+    EXPECTED_ISV_PROD_ID = isv_prod_id;
+    EXPECTED_ISV_SVN = isv_svn; 
 
     /* reading FIRST_SECRET from file */
     FILE* fptr1;
@@ -183,9 +189,10 @@ int secret_file_provisionning_server( /* The following variables are used to
         c = fgetc(fptr1);
 	secret_len += 1;
     }
+    secret_len -= 1;
     // Print the bytes as string
     printf("secret_key [%d bytes]:\n", secret_len);
-    for (i = 0; i <= secret_len; i++) {
+    for (i = 0; i <= secret_len - 1; i++) {
         printf("%X ", secret_bytes[ i ]  );
     }
     printf("\n" );
@@ -215,15 +222,37 @@ int secret_file_provisionning_server( /* The following variables are used to
 }
 
 
+// from https://gist.github.com/deltheil/7502883
+
+static bool str_to_uint16(const char *str, uint16_t *res)
+{
+  char *end;
+  errno = 0;
+  intmax_t val = strtoimax(str, &end, 10);
+  if (errno == ERANGE || val < 0 || val > UINT16_MAX || end == str || *end != '\0')
+    return false;
+  *res = (uint16_t) val;
+  return true;
+}
+
 int main( int argc, char** argv ) {
   //char *mrenclave_str = "dac61ce6d1763f1875e5b486126ebe42ed7003f1c8e52938f18af508ee1b430a";
   char *mrenclave_str = argv[1];
   //char *mrsigner_str = "e725999b742f47419e5a074b32d8c869711d68d20d059dc987e5c87424cb37a9";
   char *mrsigner_str = argv[2]; 
-  //uint16_t isv_prod_id = 0; 
-  uint16_t isv_prod_id = *argv[3]; 
+  uint16_t isv_prod_id;
+  if (!str_to_uint16( argv[3], &isv_prod_id)) {
+    fprintf(stderr, "conversion error\n");
+    exit(1);
+  }  
+  //char *isv_prod_id_str = argv[3]; 
   //uint16_t isv_svn = 0; 
-  uint16_t isv_svn = *argv[4]; 
+  //char *isv_svn_str = argv[4]; 
+  uint16_t isv_svn;
+  if (!str_to_uint16( argv[4], &isv_svn)) {
+    fprintf(stderr, "conversion error\n");
+    exit(2);
+  }  
   //char *PORT = "4433";
   char *PORT = argv[ 5 ];
   //char *SRV_CRT_PATH = "../ssl/server.crt"; 
