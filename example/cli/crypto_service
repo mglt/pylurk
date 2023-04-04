@@ -16,7 +16,7 @@ import pylurk.conf
 ## This is also the directory from which the enclave MUST be started.
 CS_GRAMINE_DIR = '/home/mglt/gitlab/pylurk.git/example/cli'
 CS_GRAMINE_KEY_DIR = os.path.join( CS_GRAMINE_DIR, 'sig_key_dir' )
-
+GRAMINE_DIR = '/home/mglt/gramine'
 
 if __name__ == '__main__' :
   os.chdir( CS_GRAMINE_DIR )
@@ -68,10 +68,39 @@ if __name__ == '__main__' :
 #  args.key = os.path.join( './', os.path.basename( args.key ) )
 #  args.cert = os.path.join( './', os.path.basename( args.cert ) )
   if args.gramine_build is True:
+    cmd = f"make clean && make SGX=1"
+    ## for secret provisioning, only the client is necessary
+    ## however, we also compile the server as it is included in the
+    ## enclave by Gramine.
+    ## TODO:
+    ## - split client and server
+    ## cmd_client_srv_prov = "make -f Makefile_server_prov clean && make -f Makefile_server_prov clients"
+    cmd_client_srv_prov = "make -f Makefile_server_prov clean && make -f Makefile_server_prov app epid"
     if args.debug is True:
-      subprocess.Popen( f"make clean && make SGX=1 DEBUG=1", shell=True )
+      cmd = f"{cmd} DEBUG=1"
     else: 
-      subprocess.Popen( f"make clean && make SGX=1 DEBUG=0", shell=True )
+      cmd = f"{cmd} DEBUG=0"
+    if args.ra_type != "'None'":
+        cmd = f"{cmd} RA_TYPE={args.ra_type[1:-1]}"
+    if args.ra_spid != "'None'":
+        cmd = f"{cmd} RA_CLIENT_SPID={args.ra_spid[1:-1]}"
+    if args.ra_linkable != "'None'":
+        cmd = f"{cmd} RA_CLIENT_LINKABLE={args.ra_linkable[1:-1]}"
+    if args.gramine_dir != "'None'":
+        cmd = f"{cmd} GRAMINEDIR={args.gramine_dir[1:-1]}"
+        cmd_client_srv_prov =  f"{cmd_client_srv_prov} GRAMINEDIR={args.gramine_dir[1:-1]}"
+    else: 
+        cmd = f"{cmd} GRAMINEDIR={GRAMINE_DIR}"
+        cmd_client_srv_prov =  f"{cmd_client_srv_prov} GRAMINEDIR={GRAMINE_DIR}"
+
+    ## compiling the clients in C
+    print( f"Building Service Provisioning: {cmd_client_srv_prov}")
+    subprocess.Popen( f"{cmd_client_srv_prov}", shell=True )
+    print( f"Building the CS enclave: {cmd_client_srv_prov}")
+    subprocess.Popen( f"{cmd}", shell=True )
+#      subprocess.Popen( f"make clean && make SGX=1 DEBUG=1", shell=True )
+#    else: 
+#      subprocess.Popen( f"make clean && make SGX=1 DEBUG=0", shell=True )
     os._exit( 0 )
 
 

@@ -802,7 +802,17 @@ class CLI:
       parser.add_argument( '-sec_prov', '--secret_provisioning',\
         default=False,  action='store_const', const=True, \
         help='Enable Secret Provisioning')
-
+      parser.add_argument( '-ra_type', '--ra_type', type=ascii, \
+        default='None', nargs='?', help='type of remote attestation')
+      parser.add_argument( '-ra_spid', '--ra_spid', type=ascii, \
+        default='None', nargs='?', \
+        help='Service Provider ID for remote attestation ')
+      parser.add_argument( '-ra_linkable', '--ra_linkable', \
+        type=ascii, default='None', nargs='?', \
+        help='Specify whether EPID attestation is linkable or not.')
+      parser.add_argument( '-gramine_dir', '--gramine_dir',\
+        type=ascii, default='None', nargs='?', \
+        help='Specify whether EPID attestation is linkable or not.')
 
     return parser
   
