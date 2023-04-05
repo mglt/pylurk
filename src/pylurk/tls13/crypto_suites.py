@@ -1,53 +1,64 @@
-import binascii
+#import binascii
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from cryptography.hazmat.primitives.asymmetric.x448 import X448PrivateKey, X448PublicKey
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
-from cryptography.hazmat.primitives.asymmetric.ed448 import Ed448PrivateKey, Ed448PublicKey
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+#, Ed25519PublicKey
+from cryptography.hazmat.primitives.asymmetric.ed448 import Ed448PrivateKey
+#, Ed448PublicKey
+#from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+#, RSAPublicKey
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.asymmetric.ec import SECP256R1, SECP384R1, SECP521R1, ECDSA, EllipticCurvePublicNumbers, ECDH, EllipticCurvePrivateKey, EllipticCurvePublicKey
-from cryptography.hazmat.primitives.hashes import Hash, SHA256, SHA384, SHA512
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.serialization import load_der_private_key, load_pem_private_key, NoEncryption, Encoding, PrivateFormat, PublicFormat 
-from cryptography import x509
-from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives.asymmetric.ec import \
+  SECP256R1, SECP384R1, SECP521R1, ECDSA, \
+  EllipticCurvePublicNumbers, ECDH, EllipticCurvePrivateKey
+#, EllipticCurvePublicKey
+from cryptography.hazmat.primitives.hashes import SHA256, SHA384, SHA512
+#Hash,
+from cryptography.hazmat.primitives import serialization 
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+# load_der_private_key, load_pem_private_key, NoEncryption, \
+#PrivateFormat,
+#from cryptography import x509
+#from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+#from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305, AESGCM, AESCCM
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF, HKDFExpand
+from cryptography.hazmat.primitives.kdf.hkdf import HKDFExpand
+#HKDF,
 
-from pylurk.lurk.lurk_lurk import LURKError, ImplementationError, ConfigurationError
+from pylurk.lurk.lurk_lurk import LURKError, ImplementationError
+#, ConfigurationError
 import pylurk.tls13.struct_tls13 as lurk
-import pytls13.struct_tls13 as tls
 import pylurk.debug
+import pytls13.struct_tls13 as tls
 
 def hash_sanity_check( tls_hash ):
-    """ enables to provide tls_hash as a string
+  """ enables to provide tls_hash as a string
 
-    This is especially useful when psk_metadata structure or tickets
-    are carried as structure as opposed to objects.
-    """
-    if isinstance( tls_hash, ( SHA256, SHA384, SHA512 ) ): # or \
-#       isinstance( tls_hash, SHA384() ) or \
-#       isinstance( tls_hash, SHA512() ):
-      return tls_hash
+  This is especially useful when psk_metadata structure or tickets
+  are carried as structure as opposed to objects.
+  """
+  if isinstance( tls_hash, ( SHA256, SHA384, SHA512 ) ): # or \
+#     isinstance( tls_hash, SHA384() ) or \
+#     isinstance( tls_hash, SHA512() ):
+    return tls_hash
 
-    if isinstance( tls_hash, str ) :
-      if tls_hash == 'sha256' :
-        tls_hash = SHA256()
-      elif tls_hash == 'sha384' :
-        tls_hash = SHA384()
-      elif tls_hash == 'sha384' :
-        tls_hash = SHA512()
-      else :
-        raise ImplementationError( f"unknown tls_hash {tls_hash}" )
+  if isinstance( tls_hash, str ) :
+    if tls_hash == 'sha256' :
+      tls_hash = SHA256()
+    elif tls_hash == 'sha384' :
+      tls_hash = SHA384()
+    elif tls_hash == 'sha384' :
+      tls_hash = SHA512()
     else :
       raise ImplementationError( f"unknown tls_hash {tls_hash}" )
-    return tls_hash
+  else :
+    raise ImplementationError( f"unknown tls_hash {tls_hash}" )
+  return tls_hash
 
 
 ### we may need to change this to SigScheme
@@ -75,7 +86,7 @@ class SigScheme:
     if self.algo in [ 'ed25519', 'ed448' ]:
       return None
     hash_algo = self.name.split( '_' )[-1].lower()
-    try: 
+    try:
       return hash_sanity_check( hash_algo )
     except :
 ##    if hash_algo == 'sha256':
@@ -132,10 +143,10 @@ class SigScheme:
        ( self.algo == 'rsa' and not \
           isinstance( key, RSAPrivateKey ) ):
       raise LURKError( 'invalid_signature_scheme', \
-              f"{self.name}, {type( private_key)} ,"\
+              f"{self.name}, {type(key)} ,"\
               f"incompatible private key and signature algorithm" )
     if isinstance( key, EllipticCurvePrivateKey ):
-      if isinstance( key.curve, type( self.curve ) ) == False:
+      if isinstance( key.curve, type( self.curve ) ) is False:
         raise LURKError( 'invalid_signature_scheme', \
               f"{self.name}, {self.curve}, {key.curve} ,"\
               f"incompatible curve and signature algorithm" )
@@ -144,7 +155,7 @@ class SigScheme:
 
 class CipherSuite:
   def __init__( self, name:str, secret=None ) :
-    """ Handle the cipher suite string  
+    """ Handle the cipher suite string
     """
     self.name = name
     self.hash = self.get_hash()
@@ -153,8 +164,8 @@ class CipherSuite:
     self.nonce_len = self.nonce_length( )
 
     if secret is not None:
-     self.traffic_key( secret )
-       
+      self.traffic_key( secret )
+
 
   def get_hash( self ):
     return SigScheme( self.name ).get_hash( )
@@ -175,7 +186,7 @@ class CipherSuite:
       tag_length = 8
     else:
       raise LURKError( 'invalid_cipher_suite', f"{self.name} is not implemented" )
-    return tag_length     
+    return tag_length
 
   def key_length( self ):
     if self.name == 'TLS_CHACHA20_POLY1305_SHA256':
@@ -218,7 +229,7 @@ class CipherSuite:
                          length=length,\
                          info=hkdf_label,\
                          backend=backend ).derive( secret )
-  
+
   def traffic_key( self, secret ):
 #    ks = pylurk.tls13.lurk_tls13.KeyScheduler( tls_hash=self.hash )
     self.write_key = self.hkdf_expand_label( secret=secret, label=b'key', \
@@ -226,11 +237,11 @@ class CipherSuite:
     self.write_iv = self.hkdf_expand_label( secret=secret, label=b'iv', \
             context=b'', length=self.nonce_len )
     self.sequence_number = 0
-   
+
 
   def next_generation_application_traffic_secret( self, secret ):
     return self.hkdf_expand_label( secret=secret, label=b'traffic upd', \
-             context=b'', length=self.tls_hash.digest_size )
+             context=b'', length=self.hash.digest_size )
 
   def decrypt_old( self, msg, debug=False ):
     """ decrypt msg and return a plain text structure (equivalent)
@@ -251,26 +262,29 @@ class CipherSuite:
     elif self.name == 'TLS_CHACHA20_POLY1305_SHA256':
       cipher = ChaCha20Poly1305( self.write_key )
     else:
-       raise LURKError( 'invalid_cipher_suite', f"{self.name} is not implemented" )
+      raise LURKError( 'invalid_cipher_suite', f"{self.name} is not implemented" )
     clear_text = cipher.decrypt( nonce, msg, additional_data )
     ## this probably can be handled by construct itself
     length_of_padding = 0
     for i in range( len( clear_text ) ):
       if clear_text[ -1 - i ] != b'\x00':
         break
-      else: 
+      else:
         length_of_padding += 1
     type_byte = ( clear_text[ -1 - length_of_padding ]).to_bytes( 1, byteorder='big' )
     ct_type = tls.ContentType.parse( type_byte )
     pylurk.debug.print_bin( f"fragment (decrypted) [type {ct_type}]",  clear_text )
     if ct_type in [ 'application_data', 'handshake' ] :
       clear_text_msg_len = len( clear_text ) - 1 - length_of_padding
-      clear_text_struct = tls.TLSInnerPlaintext.parse( clear_text, type=ct_type, length_of_padding=length_of_padding, clear_text_msg_len=clear_text_msg_len )
-    else:      
-      clear_text_struct = tls.TLSInnerPlaintext.parse( clear_text, type=ct_type, length_of_padding=length_of_padding )
+      clear_text_struct = tls.TLSInnerPlaintext.parse( clear_text, \
+              type=ct_type, length_of_padding=length_of_padding, \
+              clear_text_msg_len=clear_text_msg_len )
+    else:
+      clear_text_struct = tls.TLSInnerPlaintext.parse( clear_text, \
+              type=ct_type, length_of_padding=length_of_padding )
     self.sequence_number += 1
     if debug is True:
-      return clear_text_struct, clear_text  
+      return clear_text_struct, clear_text
     return  { 'type' : ct_type, 'content' : clear_text_struct[ 'content' ] }
 
 
@@ -294,22 +308,27 @@ class CipherSuite:
     elif self.name == 'TLS_CHACHA20_POLY1305_SHA256':
       cipher = ChaCha20Poly1305( self.write_key )
     else:
-       raise LURKError( 'invalid_cipher_suite', f"{self.name} is not implemented" )
+      raise LURKError( 'invalid_cipher_suite', f"{self.name} is not implemented" )
     clear_text = cipher.decrypt( nonce, msg, additional_data )
     ## this probably can be handled by construct itself
     length_of_padding = 0
     for i in range( len( clear_text ) ):
       if clear_text[ -1 - i ] != b'\x00':
         break
-      else: 
+      else:
         length_of_padding += 1
     type_byte = ( clear_text[ -1 - length_of_padding ]).to_bytes( 1, byteorder='big' )
     ct_type = tls.ContentType.parse( type_byte )
     if ct_type in [ 'application_data', 'handshake' ] :
       clear_text_msg_len = len( clear_text ) - 1 - length_of_padding
-      clear_text_struct = tls.FragmentTLSInnerPlaintext.parse( clear_text, type=ct_type, length_of_padding=length_of_padding, clear_text_msg_len=clear_text_msg_len )
-    else:      
-      clear_text_struct = tls.TLSInnerPlaintext.parse( clear_text, type=ct_type, length_of_padding=length_of_padding )
+      clear_text_struct = tls.FragmentTLSInnerPlaintext.parse( \
+              clear_text, type=ct_type, \
+              length_of_padding=length_of_padding, \
+              clear_text_msg_len=clear_text_msg_len )
+    else:
+      clear_text_struct = tls.TLSInnerPlaintext.parse( \
+              clear_text, type=ct_type, \
+              length_of_padding=length_of_padding )
     self.sequence_number += 1
     return  { 'type' : ct_type, \
               'content' : clear_text_struct[ 'content' ],\
@@ -319,19 +338,26 @@ class CipherSuite:
   def encrypt( self, clear_text_msg, content_type,\
                length_of_padding=0, debug=None ):
     """ builds and encrypts the clear_text_msg as inner_text message """
-    
+
     ## building the inner message
     zeros = b'\x00' * length_of_padding
     inner_plain_text = { \
-      'content' : clear_text_msg, 
+      'content' : clear_text_msg,
       'type' : content_type,
       'zeros' : zeros }
     if content_type == 'application_data' :
-      clear_text_record_bytes = tls.TLSInnerPlaintext.build( inner_plain_text, type=content_type, length_of_padding=length_of_padding, clear_text_msg_len=len(clear_text_msg) )
+      clear_text_record_bytes = tls.TLSInnerPlaintext.build( \
+              inner_plain_text, type=content_type, \
+              length_of_padding=length_of_padding, \
+              clear_text_msg_len=len(clear_text_msg) )
     else: # handshake
-      clear_text_record_bytes = tls.TLSInnerPlaintext.build( inner_plain_text, type=content_type, length_of_padding=length_of_padding)
-      
-    additional_data = b'\x17\x03\x03' + int( len( clear_text_record_bytes ) + self.tag_len ).to_bytes( 2, byteorder='big' )
+      clear_text_record_bytes = tls.TLSInnerPlaintext.build( \
+              inner_plain_text, type=content_type, \
+              length_of_padding=length_of_padding)
+
+    additional_data = b'\x17\x03\x03' + \
+            int( len( clear_text_record_bytes ) +\
+            self.tag_len ).to_bytes( 2, byteorder='big' )
     nonce = self.compute_nonce( self.sequence_number, self.write_iv )
     if 'GCM' in self.name:
       cipher = AESGCM( self.write_key )
@@ -340,7 +366,7 @@ class CipherSuite:
     elif self.name == 'TLS_CHACHA20_POLY1305_SHA256':
       cipher = ChaCha20Poly1305( self.write_key )
     else:
-       raise LURKError( 'invalid_cipher_suite', f"{self.name} is not implemented" )
+      raise LURKError( 'invalid_cipher_suite', f"{self.name} is not implemented" )
     encrypted_reccord =  cipher.encrypt( nonce, clear_text_record_bytes, additional_data )
     if debug is True :
       pylurk.debug.print_bin( "write_key", self.write_key )
@@ -348,8 +374,8 @@ class CipherSuite:
       print( f"  - sequence_number : {self.sequence_number}" )
       pylurk.debug.print_bin( "nonce", nonce )
       pylurk.debug.print_bin( "additional_data", additional_data )
-    
-    self.sequence_number += 1 
+
+    self.sequence_number += 1
     return encrypted_reccord
 
   def debug( self, debug, description="" ):
@@ -382,46 +408,51 @@ class ECDHEKey():
         private_key = X25519PrivateKey.generate()
       elif group == 'x448':
         private_key = X448PrivateKey.generate()
-    self.private = private_key 
-    self.public = private_key.public_key() 
+    self.private = private_key
+    self.public = private_key.public_key()
 
   def ks_entry( self ) -> dict:
     """ returns the ks_entry (TLS) associated to the ECDHE key
 
-    Note that only the public part is in the ks entry 
+    Note that only the public part is in the ks entry
     """
     if self.group in [ 'secp256r1', 'secp384r1', 'secp521r1' ]:
       public_numbers = self.public.public_numbers()
-      key_exchange = { 'legacy_form' : 4, 
-                       'x' : public_numbers.x, 
-                       'y' : public_numbers.y }    
+      key_exchange = { 'legacy_form' : 4,
+                       'x' : public_numbers.x,
+                       'y' : public_numbers.y }
     elif self.group  in [ 'x25519', 'x448' ]:
       key_exchange = self.public.public_bytes(
         encoding=Encoding.Raw, format=PublicFormat.Raw)
-    return { 'group' : self.group, 
+    return { 'group' : self.group,
              'key_exchange' : key_exchange }
 
   def generate_from_pem( self, pem_bytes:bytes ):
-##          private_key = serialization.load_pem_private_key(\
-## b'-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VuBCIEICAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/\n-----END PRIVATE KEY-----', None)
+## private_key = serialization.load_pem_private_key(\
+## b'-----BEGIN PRIVATE KEY-----\n\
+## MC4CAQAwBQYDK2VuBCIEICAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4/\n\
+## -----END PRIVATE KEY-----', None)
     self.private = serialization.load_pem_private_key( pem_bytes, None)
     self.public = self.private.public_key()
 
-  def pkcs8( self ): 
-    if self.private != None:
+  def pkcs8( self ):
+    if self.private is not None:
       private_bytes = self.private.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption() )
-    else: 
+    else:
       private_bytes = b''
     return private_bytes
 
   def generate_from_ks_entry( self, ks_entry:dict ):
-    """ generates the ECHDE key from a ks_entry structure 
+    """ generates the ECHDE key from a ks_entry structure
 
-    Note that only the public part is in the ks entry. ks_entry is a dictionary { 'group' : 'x25519', 'key_exchange' : kx_bytes }
+    Note that only the public part is in the ks entry. 
+    ks_entry is a dictionary { 'group' : 'x25519', 
+                               'key_exchange' : kx_bytes }
     """
+
     self.group = ks_entry[ 'group' ]
     key_exchange = ks_entry[ 'key_exchange' ]
 ##    if group not in self.conf[ 'authorized_ecdhe_group' ]:
@@ -434,7 +465,7 @@ class ECDHEKey():
       elif self.group ==  'secp521r1':
         curve = SECP521R1()
       else:
-        raise LURKError( 'invalid_ephemeral', f"unknown group {group}" )
+        raise LURKError( 'invalid_ephemeral', f"unknown group {self.group}" )
 
       public_number = EllipticCurvePublicNumbers( key_exchange[ 'x' ],\
                      key_exchange[ 'y' ], curve )
@@ -445,13 +476,13 @@ class ECDHEKey():
       elif self.group == 'x448':
         self.public = X448PublicKey.from_public_bytes( key_exchange )
     else:
-      raise LURKError( 'invalid_ephemeral', f"unknown group {group}" )
+      raise LURKError( 'invalid_ephemeral', f"unknown group {self.group}" )
 
   def shared_secret( self, ecdhe_key ):
-    if self.private is None: 
+    if self.private is None:
       private_key = ecdhe_key.private
       public_key = self.public
-    else: 
+    else:
       private_key = self.private
       public_key = ecdhe_key.public
     if self.group in [ 'secp256r1', 'secp384r1', 'secp521r1' ]:
@@ -462,8 +493,8 @@ class ECDHEKey():
     elif self.group  in [ 'x25519', 'x448' ]:
       shared_secret = private_key.exchange( public_key )
     else:
-      raise LURKError( 'invalid_ephemeral', f"Unexpected group {group}" )
+      raise LURKError( 'invalid_ephemeral', f"Unexpected group {self.group}" )
     return shared_secret
-    
+
 
 
