@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives.hashes import Hash, SHA256
 
 
 class LURKError(Exception):
-  def __init__(self, status:str,  message:str ):
+  def __init__(self, status:str,  message:str="" ):
     """ Generic Error class
 
     Args:
