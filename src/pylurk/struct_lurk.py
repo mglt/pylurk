@@ -1,12 +1,12 @@
 from construct.core import *
-from construct.lib import * 
+from construct.lib import *
 
 ## Extensions are added here
 ## It may be discussed whether LURK is an extension or not.
-## we considered it as an extension to make sure we scale to 
-## additional extension as well as for readability. 
-## This is not fully achieved as LURKCapabilitiesResponse 
-## is defined here as it needs the knowledge of all existing 
+## we considered it as an extension to make sure we scale to
+## additional extension as well as for readability.
+## This is not fully achieved as LURKCapabilitiesResponse
+## is defined here as it needs the knowledge of all existing
 ## extensions.
 from pylurk.lurk.struct_lurk_lurk import LURKVersion, LURKType, LURKStatus, ErrorPayload, EmptyPayload
 from pylurk.tls13.struct_lurk_tls13 import TLS13Version, TLS13Type, TLS13Status, TLS13Payload
@@ -22,10 +22,10 @@ Designation = Enum( BytesInteger( 1 ),
 
 
 ## building generic variables across extensions
-## The format of a packet may take any value 
-## The only valid case is that these unexpected 
+## The format of a packet may take any value
+## The only valid case is that these unexpected
 ## values are associated to an ErrorResponse
-## 
+##
 ## default is set to Byte so any value can be returned.
 Version = Switch( this.designation,
   { 'lurk' : LURKVersion,
@@ -37,16 +37,16 @@ Type = Switch( this.designation,
     'tls13' : TLS13Type,
   }, default=Byte)
 
-## The default is set to LURKStatus so an error with a 
+## The default is set to LURKStatus so an error with a
 ## bad designation can be returned with a effective error message.
 ## when the parsing occurs, number is returned.
-Status = Switch( this.designation, 
-     { 'lurk' : LURKStatus, 
+Status = Switch( this.designation,
+     { 'lurk' : LURKStatus,
        'tls13' : TLS13Status,
-     }, default=LURKStatus ) 
+     }, default=LURKStatus )
 
 
-## LURK Capability needs global information - that is not 
+## LURK Capability needs global information - that is not
 ## restricted to the lurk lurk extension:
 ############# LURKCapabilitiesResponse
 
@@ -82,34 +82,34 @@ LURKPayload = Switch(this._type,
 ### generic structure for LURK Messages
 LURKHeader = Struct (
   '_name' / Computed('LURK message'),
-  'designation' / Designation, 
-  'version' / Version, 
-  'type' / Type, 
-  'status' / Status, 
-  'id' / BytesInteger(8), 
+  'designation' / Designation,
+  'version' / Version,
+  'type' / Type,
+  'status' / Status,
+  'id' / BytesInteger(8),
 )
 
-LURKMessage = Struct ( 
+LURKMessage = Struct (
   '_name' / Computed('LURK message'),
-  'designation' / Designation, 
-  'version' / Version, 
-  'type' / Type, 
-  'status' / Status, 
-  'id' / BytesInteger(8), 
-  ## these values are used by Payloads 
+  'designation' / Designation,
+  'version' / Version,
+  'type' / Type,
+  'status' / Status,
+  'id' / BytesInteger(8),
+  ## these values are used by Payloads
   '_type' / Computed(this.type),
   '_status' / Computed(this.status),
   ## default parameters for TLS13
   '_certificate_type' / Computed( 'X509' ),
-  'payload' / Prefixed( BytesInteger(4), 
-#     IfThenElse( this.status in [ 'request', 'success' ], 
+  'payload' / Prefixed( BytesInteger(4),
+#     IfThenElse( this.status in [ 'request', 'success' ],
        Switch( this.designation,
-         { 'lurk' : LURKPayload, 
+         { 'lurk' : LURKPayload,
            'tls13' : TLS13Payload,
-         }, default=ErrorPayload ), # other designation are 
+         }, default=ErrorPayload ), # other designation are
                                      # associated to ErrorResponse
 #       ErrorPayload) # other status are associated to ErrorResponse
-  ) # end of prefix  
+  ) # end of prefix
 )
 
 LURKMessageList = GreedyRange( LURKMessage )
