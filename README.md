@@ -72,14 +72,15 @@ Currently there is no pip3 package, so one need to install it manually.
 
 * Build a proper packages that we can install using `pip3 install pylurk`. Thi s includes:
   * integrating the example/cli in the package and having the `crypto_service`, `lurk_ping`, `sercret_prov_service`  installed in a ./local/bin directory.
-  * ensuring ther eis a directory that contains the keys - which can be read by gramine. 
-* Innclude the `client` and `secret_prov_service` into a pytlurk.gramine module. This consists in integrating a compile c code into a Python module as well as providing an python binding.
+  * ensuring there is a directory that contains the keys - which can be read by gramine. 
+  * REMOVE the source/pytls13 directory that contains a version of pytls13 - that version is only used to generate the documentation.  
+* Include the `client` and `secret_prov_service` into a `pylurk.gramine` module. This consists in integrating a compile c code into a Python module as well as providing an python binding.
 * Refine the `python.template`. Currently this file is designed to be unmodified. 
-  * We should try first limiting the python packages to be embeded. Maybe these coudl be defined by the pipreqs packages.
-  * The key file is currenlty below the gramine directory, there is probably some means to make that directory more flexible and dynamically configure the template with it. 
+  * We should try first limiting the python packages to be embedded. Maybe these could be defined by the `pipreqs` package.
+  * The key file is currently below the gramine directory, there is probably some means to make that directory more flexible and dynamically configure the template with it. 
   * Define  a class that generates the template 
-* The public key is currenlty configured via a list of files. We may consider having a single file with all certificate chain.
+* The public key is currently configured via a list of files. We may consider having a single file with all certificate chain.
 * Logging may be configured via the CLI and we may introduce a log_level
 * ECDHE keys have their own ECDHE class in the crypto_suite module while signature keys are handled in the conf module. We may consider harmonizing the API between ECDHE and SIG keys and have them in a single place. 
-* lurk_tls13 is a bit too long, so we may consider spliting the TLS client and TLS server messages in distinct modules.  
+* lurk_tls13 is a bit too long, so we may consider splitting the TLS client and TLS server messages in distinct modules.  
 
