@@ -15,7 +15,7 @@ release = '0.0.4'
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 import os
 import sys
-# sys.path.insert( 0, os.path.abspath( '/home/mglt/gitlab/pylurk.git/src' ))
+#sys.path.insert( 0, os.path.abspath( '/home/mglt/gitlab/pylurk.git/src' ))
 sys.path.insert( 0, os.path.abspath( '../../src' ))
 #sys.path.insert( 0, os.path.abspath( '/home/mglt/gitlab/pytls13/src' ))
 sys.path.insert( 0, os.path.abspath( 'pytls13/src' ))
@@ -24,7 +24,7 @@ extensions = [ 'sphinx.ext.autodoc', 'sphinx.ext.napoleon' ]
 #Napoleon settings
 napoleon_google_docstring = True
 napoleon_numpy_docstring = True
-napoleon_include_init_with_doc = False
+napoleon_include_init_with_doc = True
 napoleon_include_private_with_doc = False
 napoleon_include_special_with_doc = True
 napoleon_use_admonition_for_examples = False

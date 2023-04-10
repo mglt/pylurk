@@ -639,31 +639,32 @@ class Configuration:
 
 
 class CLI:
-  """ generates conf file from command line arguments
+  """ Generates conf file from command line arguments.
 
   Template can be manually generated.
   The template is expected to provide a single port
   to each configuration.
-
   The template for a CS is expected to look this way:
 
   ..  code-block:: python
 
-      cs_conf_template = {
-      'connectivity' : {
-         'type': 'tcp',
-         'ip' : '127.0.0.1',
-         'port' : 9402
-        },
-        ## logs are redirected to stdout especially when
-        ## the cs is running in the enclave.
-        'log' : None,
-        ( 'tls13', 'v1' ) : {
-          'public_key' : [ os.path.join( conf_dir, '_Ed25519PublicKey-ed25519-X509.der' ) ],
-          'private_key': os.path.join( conf_dir, '_Ed25519PrivateKey-ed25519-pkcs8.der' ) ,
-          'sig_scheme': ['ed25519']
-        }
+    cs_conf_template = {
+    'connectivity' : {
+       'type': 'tcp',
+       'ip' : '127.0.0.1',
+       'port' : 9402
+      },
+      ## logs are redirected to stdout especially when
+      ## the cs is running in the enclave.
+      'log' : None,
+      ( 'tls13', 'v1' ) : {
+        'public_key' : [ os.path.join( conf_dir, 
+                         '_Ed25519PublicKey-ed25519-X509.der' ) ],
+        'private_key': os.path.join( conf_dir, 
+                         '_Ed25519PrivateKey-ed25519-pkcs8.der' ) ,
+        'sig_scheme': ['ed25519']
       }
+    }
 
   The reason we define a class is to be able to manage the
   various configuration of the CS with which also includes
@@ -694,6 +695,7 @@ class CLI:
       to None and the key is generated at the instantiation of the CS.
     cert: The public key or certificate.
   """
+
 
   def __init__( self, connectivity:str='lib_cs',
                       debug:bool=False,
