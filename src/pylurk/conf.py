@@ -648,6 +648,7 @@ class CLI:
   The template for a CS is expected to look this way:
 
   ..  code-block:: python
+
       cs_conf_template = {
       'connectivity' : {
          'type': 'tcp',

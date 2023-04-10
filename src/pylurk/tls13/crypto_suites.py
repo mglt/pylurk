@@ -449,7 +449,9 @@ class ECDHEKey():
     """ generates the ECHDE key from a ks_entry structure
 
     Note that only the public part is in the ks entry.
+
     .. code-block:: python
+
        ks_entry is a dictionary { 'group' : 'x25519', 
                                   'key_exchange' : kx_bytes }
 
