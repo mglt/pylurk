@@ -120,7 +120,7 @@ class NonPersistentTCPHandler( socketserver.BaseRequestHandler):
 class NonPersistentTCPCryptoService( socketserver.TCPServer):
 
   def __init__( self, conf  ):
-    """
+    """ Non Persistent TCP service
 
     The non persistent TCP Crypto Service handles one TCP session per
     packet.
@@ -188,8 +188,8 @@ class PersistentTCPServer( socketserver.TCPServer ):
     (self.accept()). The latest are used when further requests are
     sent over the established TCP session. 3) sockets needs to be
     managed and eventually closed when timeout occurs.
-
     """
+
     self.allow_reuse_address = True
     super().__init__( server_address, RequestHandlerClass,\
                       bind_and_activate )
@@ -245,26 +245,29 @@ class PersistentTCPServer( socketserver.TCPServer ):
     sessions which means that only the server socket is
     being monitored.
     In the Base server every incoming TCP session waits for:
-      1. the creation of a new socket (sock = self.sock.accept()).
-      2. the response to be sent on this newly established socket
-      3. that newly established socket being closed.
+
+    1. the creation of a new socket (sock = self.sock.accept()).
+    2. the response to be sent on this newly established socket
+    3. that newly established socket being closed.
 
     In our case we need to monitore all persistent session that
     is:
-      1. TCP session that are in an establishment
-      2. Established TCP sessions
+
+    1. TCP session that are in an establishment
+    2. Established TCP sessions
 
     An incoming TCP session message take sthe following path:
-      1. Identify which socket is associated to the message
-      2. If a new socket needs to be created creates it and
-        monitor further actions.
-      3. For every socket on whic a message has been sent
-        Treat that message.
+
+    1. Identify which socket is associated to the message
+    2. If a new socket needs to be created creates it and
+      monitor further actions.
+    3. For every socket on whic a message has been sent
+      Treat that message.
 
     The main difference is that for any action, the socket
     needs to be specified.
-
     """
+
     print("staring serve_forever")
     self._BaseServer__is_shut_down.clear()
     previous_time = 0
