@@ -9,7 +9,8 @@ Welcome to pylurk's documentation!
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
-
+   
+   README
    mypages/notes_secret_prov
    modules
 
