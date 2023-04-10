@@ -11,7 +11,7 @@ Welcome to pylurk's documentation!
    :caption: Contents:
 
    mypages/notes_secret_prov
-   modules
+#   modules
 
 Indices and tables
 ==================
