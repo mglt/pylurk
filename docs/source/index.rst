@@ -10,7 +10,7 @@ Welcome to pylurk's documentation!
    :maxdepth: 2
    :caption: Contents:
    
-   README
+   mypages/README
    mypages/notes_secret_prov
    modules
 
