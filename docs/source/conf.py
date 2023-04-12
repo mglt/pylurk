@@ -17,17 +17,14 @@ import os
 import sys
 ## Read The Doc and running SPhinx locally does not use the same path.
 #sys.path.insert( 0, os.path.abspath( '/home/mglt/gitlab/pylurk.git/src' ))
+
 ## for local construction
+## 1. expressed as full path
+# sys.path.insert( 0, os.path.abspath( '/home/mglt/gitlab/pylurk.git/src' ))
+# sys.path.insert( 0, os.path.abspath( '/home/mglt/gitlab/pytls13/src' ))
+## 2. expressed with relative path (relative from one leve below source)
 sys.path.insert( 0, os.path.abspath( '../../../src' ))
-sys.path.insert( 0, os.path.abspath( '../../../src/pylurk' ))
-sys.path.insert( 0, os.path.abspath( '../../../src/pylurk/lurk' ))
-sys.path.insert( 0, os.path.abspath( '../../../src/pylurk/tls13' ))
-#sys.path.insert( 0, os.path.abspath( '/home/mglt/gitlab/pytls13/src' ))
-#sys.path.insert( 0, os.path.abspath( 'pytls13/src' ))
-sys.path.insert( 0, os.path.abspath( '../../src' ))
-sys.path.insert( 0, os.path.abspath( '../../src/pylurk' ))
-sys.path.insert( 0, os.path.abspath( '../../src/pylurk/lurk' ))
-sys.path.insert( 0, os.path.abspath( '../../src/pylurk/tls13' ))
+sys.path.insert( 0, os.path.abspath( './' ))
 
 extensions = [ 'sphinx.ext.autodoc', 'sphinx.ext.napoleon' ]
 
