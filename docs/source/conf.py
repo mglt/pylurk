@@ -27,10 +27,10 @@ import sys
 #sys.path.insert( 0, os.path.abspath( './' ))
 
 ## for RTD
-sys.path.insert( 0, os.path.abspath( '../../../src' ))
-sys.path.insert( 0, os.path.abspath( '../../../src/pylurk' ))
-sys.path.insert( 0, os.path.abspath( '../../../src/pylurk/tls13' ))
-sys.path.insert( 0, os.path.abspath( './' ))
+sys.path.insert( 0, os.path.abspath( '../../src' ))
+#sys.path.insert( 0, os.path.abspath( '../../../src/pylurk' ))
+#sys.path.insert( 0, os.path.abspath( '../../../src/pylurk/tls13' ))
+sys.path.insert( 0, os.path.abspath( './source' ))
 
 
 extensions = [ 'sphinx.ext.autodoc', 'sphinx.ext.napoleon' ]
