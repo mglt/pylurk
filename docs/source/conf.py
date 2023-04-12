@@ -23,8 +23,14 @@ import sys
 # sys.path.insert( 0, os.path.abspath( '/home/mglt/gitlab/pylurk.git/src' ))
 # sys.path.insert( 0, os.path.abspath( '/home/mglt/gitlab/pytls13/src' ))
 ## 2. expressed with relative path (relative from one leve below source)
+#sys.path.insert( 0, os.path.abspath( '../../../src' ))
+#sys.path.insert( 0, os.path.abspath( './' ))
+
+## for RTD
 sys.path.insert( 0, os.path.abspath( '../../../src' ))
-sys.path.insert( 0, os.path.abspath( './' ))
+sys.path.insert( 0, os.path.abspath( '../../../src/pylurk' ))
+sys.path.insert( 0, os.path.abspath( '../../../src/pylurk/tls13' ))
+
 
 extensions = [ 'sphinx.ext.autodoc', 'sphinx.ext.napoleon' ]
 
