@@ -4,7 +4,7 @@ LURK is a generic protocol whose purpose is to support specific interactions wit
 This module provides a framework for LURK as well as defines the CS for TLS 1.3 - including both a TLS client and a TLS server. 
 The current module doesn't integrate the LURK extension that was defined for TLS 1.2 and while the two LURK framework do share a number of lines of codes, this version of LURK has undergone a major rewrite. 
 
-More documentation on pylurk can be found in [https://pylurk.readthedocs.io/en/latest/index.html](https://pylurk.readthedocs.io/en/latest/index.html).
+More documentation on pylurk can be found on [readthedoc](https://pylurk.readthedocs.io/en/latest/index.html).
 This module implements the specifications detailed in  [draft-mglt-lurk-lurk](https://datatracker.ietf.org/doc/draft-mglt-lurk-lurk/) for LURK as well as in [draft-mglt-lurk-tls13](https://datatracker.ietf.org/doc/draft-mglt-lurk-tls13/) for its TLS 1.3 extension.
 
 It has been proven that splitting the TLS 1.3 into to sub services namely a TLS Engine (E) and a CS interacting via LURK does not weaken the TLS 1.3 security.
