@@ -1,0 +1,139 @@
+#!/usr/bin/python3
+
+import argparse
+import subprocess
+import os
+import sys
+import shutil
+sys.path.insert(0, '/home/mglt/gitlab/pylurk.git/src')
+sys.path.insert(0, '/home/mglt/gitlab/pytls13/src')
+import pylurk.cs
+import pylurk.conf
+
+
+## The directoiry that contains the SGX enclave 
+## This directory MUST contain the necessary files to build the enclave
+## This is also the directory from which the enclave MUST be started.
+CS_GRAMINE_DIR = '/home/mglt/gitlab/pylurk.git/example/cli'
+CS_GRAMINE_KEY_DIR = os.path.join( CS_GRAMINE_DIR, 'sig_key_dir' )
+GRAMINE_DIR = '/home/mglt/gramine'
+
+if __name__ == '__main__' :
+  os.chdir( CS_GRAMINE_DIR )
+  cli = pylurk.conf.CLI( )
+
+#  parser = cli.get_parser( conf_dir=CS_GRAMINE_DIR )
+  parser = cli.get_parser( )
+  args = parser.parse_args()
+
+  print( f" --- Executing: {__file__} with {args}" )
+
+  ## the default values 
+  if args.key is None :
+    args.key = CS_GRAMINE_KEY_DIR
+    print( f"key file not provided. New key will be generated in {args.key}")
+  if args.cert is None :
+    args.cert = CS_GRAMINE_KEY_DIR 
+    print( f"certificate file not provided. New certificate will be stored in {args.cert}")
+
+
+  ## updating value of of key_files to ./  so they can be 
+  ## used with gramine. 
+  ## Such a copy / update is only performed when gramine/sgx
+  ## is enabled
+  ##
+  ## When a directory is provided, with gramine that directory 
+  ## MUST be sig_key as it is the only directory read by the TEE. 
+  if args.gramine_build is True or args.gramine_sgx is True:
+    if os.path.isdir( args.key ) :
+      if args.key != CS_GRAMINE_KEY_DIR :
+        print( "New key will be generated in {args.key}")
+        ## we only consider the relative path in that case
+      args.key = 'sig_key_dir'
+    else: 
+      args.cert = cli.copy_and_update_file_path( args.cert, \
+        CS_GRAMINE_DIR, 'sig_key_dir' )
+    if os.path.isdir( args.cert ) :
+      if args.cert != CS_GRAMINE_KEY_DIR :
+        args.cert = CS_GRAMINE_KEY_DIR
+        print( "New key will be generated in {args.cert}") 
+        ## we only consider the relative path in that case
+      args.cert = 'sig_key_dir'
+    else: 
+      args.cert = cli.copy_and_update_file_path( args.cert, \
+        CS_GRAMINE_DIR, 'sig_key_dir' )
+#  sig_key_dir = os.path.join( CS_GRAMINE_DIR, 'sig_key_dir') 
+#  shutil.copy( args.key, sig_key_dir )
+#  shutil.copy( args.cert, sig_key_dir )
+#  args.key = os.path.join( './', os.path.basename( args.key ) )
+#  args.cert = os.path.join( './', os.path.basename( args.cert ) )
+  if args.gramine_build is True:
+    cmd = f"make clean && make SGX=1"
+    ## for secret provisioning, only the client is necessary
+    ## however, we also compile the server as it is included in the
+    ## enclave by Gramine.
+    ## TODO:
+    ## - split client and server
+    ## cmd_client_srv_prov = "make -f Makefile_server_prov clean && make -f Makefile_server_prov clients"
+    cmd_client_srv_prov = "make -f Makefile_server_prov clean && make -f Makefile_server_prov app epid"
+    if args.debug is True:
+      cmd = f"{cmd} DEBUG=1"
+    else: 
+      cmd = f"{cmd} DEBUG=0"
+    if args.ra_type != "'None'":
+        cmd = f"{cmd} RA_TYPE={args.ra_type[1:-1]}"
+    if args.ra_spid != "'None'":
+        cmd = f"{cmd} RA_CLIENT_SPID={args.ra_spid[1:-1]}"
+    if args.ra_linkable != "'None'":
+        cmd = f"{cmd} RA_CLIENT_LINKABLE={args.ra_linkable[1:-1]}"
+    if args.gramine_dir != "'None'":
+        cmd = f"{cmd} GRAMINEDIR={args.gramine_dir[1:-1]}"
+        cmd_client_srv_prov =  f"{cmd_client_srv_prov} GRAMINEDIR={args.gramine_dir[1:-1]}"
+    else: 
+        cmd = f"{cmd} GRAMINEDIR={GRAMINE_DIR}"
+        cmd_client_srv_prov =  f"{cmd_client_srv_prov} GRAMINEDIR={GRAMINE_DIR}"
+
+    ## compiling the clients in C
+    print( f"Building Service Provisioning: {cmd_client_srv_prov}")
+    subprocess.Popen( f"{cmd_client_srv_prov}", shell=True )
+    print( f"Building the CS enclave: {cmd_client_srv_prov}")
+    subprocess.Popen( f"{cmd}", shell=True )
+#      subprocess.Popen( f"make clean && make SGX=1 DEBUG=1", shell=True )
+#    else: 
+#      subprocess.Popen( f"make clean && make SGX=1 DEBUG=0", shell=True )
+    os._exit( 0 )
+
+
+  ## starting the CS
+  if args.connectivity == 'lib_cs':
+    os._exit( 0 )
+
+  cmd = f"./start_cs.py --connectivity {args.connectivity[1:-1]} "\
+          f"--host {args.host[1:-1]} --port {args.port} "\
+          f"--sig_scheme {args.sig_scheme[1:-1]} --key {args.key} "\
+          f"--cert {args.cert}"\
+  ## for arguments that takes a None default when omited
+  ## the command line MUST omit these options as one cannot 
+  ## mention them as 'None'
+  if args.test_vector_file is not None :
+    cmd += f"--test_vector_file {args.test_vector_file[1:-1]}"
+  if args.test_vector_mode is not None :
+    cmd += f"--test_vector_mode {args.test_vector_mode[1:-1]}"
+  ## for arguments that are boolean, this MUST only be added 
+  ## when there value is True as abscence mens False   
+  if args.debug is True:
+    cmd += " --debug"
+  if args.secret_provisioning is True:
+    cmd += " --secret_provisioning"
+
+  print( f"cmd: {cmd}" ) 
+  if args.gramine_sgx is False and args.gramine_direct is False:
+  ##  with pylurk.cs.get_cs_instance( cs_conf.conf ) as cs:
+  ##    cs.serve_forever()
+    subprocess.Popen( f"{cmd}", shell=True)
+  elif args.gramine_sgx is True :
+    subprocess.Popen( f"gramine-sgx python {cmd}", shell=True)
+  elif args.gramine_direct is True :
+    subprocess.Popen( f"gramine-direct python {cmd}", shell=True)
+
+
